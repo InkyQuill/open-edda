@@ -76,14 +76,46 @@ type ProviderConfig struct {
 }
 
 type ModelVariant struct {
-	ID               string  `json:"id"`
-	ProviderConfigID string  `json:"providerConfigId"`
-	Name             string  `json:"name"`
-	Model            string  `json:"model"`
-	Temperature      float64 `json:"temperature"`
-	MaxOutputTokens  int64   `json:"maxOutputTokens"`
-	CreatedAt        string  `json:"createdAt"`
-	UpdatedAt        string  `json:"updatedAt"`
+	ID                        string  `json:"id"`
+	ProviderConfigID          string  `json:"providerConfigId"`
+	Name                      string  `json:"name"`
+	Model                     string  `json:"model"`
+	Temperature               float64 `json:"temperature"`
+	MaxOutputTokens           int64   `json:"maxOutputTokens"`
+	ContextWindowTokens       int64   `json:"contextWindowTokens"`
+	InputPricePerMillion      float64 `json:"inputPricePerMillion"`
+	OutputPricePerMillion     float64 `json:"outputPricePerMillion"`
+	CacheReadPricePerMillion  float64 `json:"cacheReadPricePerMillion"`
+	CacheWritePricePerMillion float64 `json:"cacheWritePricePerMillion"`
+	RequestTokenField         string  `json:"requestTokenField"`
+	ReasoningFormat           string  `json:"reasoningFormat"`
+	CompatibilityJSON         string  `json:"compatibilityJson"`
+	CreatedAt                 string  `json:"createdAt"`
+	UpdatedAt                 string  `json:"updatedAt"`
+}
+
+type CreateProviderConfigInput struct {
+	AuthorID string
+	Name     string
+	BaseURL  string
+	APIKey   string
+}
+
+type CreateModelVariantInput struct {
+	AuthorID                  string
+	ProviderConfigID          string
+	Name                      string
+	Model                     string
+	Temperature               float64
+	MaxOutputTokens           int64
+	ContextWindowTokens       int64
+	InputPricePerMillion      float64
+	OutputPricePerMillion     float64
+	CacheReadPricePerMillion  float64
+	CacheWritePricePerMillion float64
+	RequestTokenField         string
+	ReasoningFormat           string
+	CompatibilityJSON         string
 }
 
 type PromptProfile struct {
@@ -129,10 +161,16 @@ type PromptRecord struct {
 }
 
 type Usage struct {
-	InputTokens  int64   `json:"inputTokens"`
-	OutputTokens int64   `json:"outputTokens"`
-	TotalTokens  int64   `json:"totalTokens"`
-	TotalCost    float64 `json:"totalCost"`
+	InputTokens      int64   `json:"inputTokens"`
+	OutputTokens     int64   `json:"outputTokens"`
+	CacheReadTokens  int64   `json:"cacheReadTokens"`
+	CacheWriteTokens int64   `json:"cacheWriteTokens"`
+	TotalTokens      int64   `json:"totalTokens"`
+	InputCost        float64 `json:"inputCost"`
+	OutputCost       float64 `json:"outputCost"`
+	CacheReadCost    float64 `json:"cacheReadCost"`
+	CacheWriteCost   float64 `json:"cacheWriteCost"`
+	TotalCost        float64 `json:"totalCost"`
 }
 
 type ContextSnapshot struct {

@@ -11,10 +11,6 @@ import (
 	"git.inkyquill.net/inky/writer/store"
 )
 
-type Provider interface {
-	Name() string
-}
-
 type Service struct {
 	db             *sql.DB
 	queries        *store.Queries
@@ -169,6 +165,157 @@ func (s *Service) ListMessages(ctx context.Context, projectID, sessionID string)
 	return result, nil
 }
 
+func (s *Service) CreateProviderConfig(ctx context.Context, input CreateProviderConfigInput) (ProviderConfig, error) {
+	now := nowString()
+	provider := ProviderConfig{
+		ID:        newID("provider"),
+		AuthorID:  input.AuthorID,
+		Name:      input.Name,
+		BaseURL:   input.BaseURL,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	// Encryption is handled in the later auth/security milestone.
+	if err := s.queries.CreateProviderConfig(ctx, store.CreateProviderConfigParams{
+		ID:              provider.ID,
+		AuthorID:        provider.AuthorID,
+		Name:            provider.Name,
+		BaseUrl:         provider.BaseURL,
+		ApiKeyEncrypted: input.APIKey,
+		CreatedAt:       provider.CreatedAt,
+		UpdatedAt:       provider.UpdatedAt,
+	}); err != nil {
+		return ProviderConfig{}, fmt.Errorf("create provider config: %w", err)
+	}
+
+	return provider, nil
+}
+
+func (s *Service) ListProviderConfigs(ctx context.Context, authorID string) ([]ProviderConfig, error) {
+	providers, err := s.queries.ListProviderConfigs(ctx, authorID)
+	if err != nil {
+		return nil, fmt.Errorf("list provider configs: %w", err)
+	}
+
+	result := make([]ProviderConfig, 0, len(providers))
+	for _, provider := range providers {
+		result = append(result, providerConfigFromStore(provider))
+	}
+	return result, nil
+}
+
+func (s *Service) GetProviderConfig(ctx context.Context, authorID, providerID string) (ProviderConfig, error) {
+	provider, err := s.queries.GetProviderConfig(ctx, store.GetProviderConfigParams{
+		ID:       providerID,
+		AuthorID: authorID,
+	})
+	if err != nil {
+		return ProviderConfig{}, fmt.Errorf("get provider config: %w", err)
+	}
+	return providerConfigFromStore(provider), nil
+}
+
+func (s *Service) CreateModelVariant(ctx context.Context, input CreateModelVariantInput) (ModelVariant, error) {
+	if _, err := s.GetProviderConfig(ctx, input.AuthorID, input.ProviderConfigID); err != nil {
+		return ModelVariant{}, err
+	}
+
+	now := nowString()
+	model := ModelVariant{
+		ID:                        newID("model"),
+		ProviderConfigID:          input.ProviderConfigID,
+		Name:                      input.Name,
+		Model:                     input.Model,
+		Temperature:               input.Temperature,
+		MaxOutputTokens:           input.MaxOutputTokens,
+		ContextWindowTokens:       input.ContextWindowTokens,
+		InputPricePerMillion:      input.InputPricePerMillion,
+		OutputPricePerMillion:     input.OutputPricePerMillion,
+		CacheReadPricePerMillion:  input.CacheReadPricePerMillion,
+		CacheWritePricePerMillion: input.CacheWritePricePerMillion,
+		RequestTokenField:         defaultRequestTokenField(input.RequestTokenField),
+		ReasoningFormat:           input.ReasoningFormat,
+		CompatibilityJSON:         defaultJSON(input.CompatibilityJSON),
+		CreatedAt:                 now,
+		UpdatedAt:                 now,
+	}
+
+	if err := s.queries.CreateModelVariant(ctx, store.CreateModelVariantParams{
+		ID:                        model.ID,
+		ProviderConfigID:          model.ProviderConfigID,
+		Name:                      model.Name,
+		Model:                     model.Model,
+		Temperature:               model.Temperature,
+		MaxOutputTokens:           model.MaxOutputTokens,
+		ContextWindowTokens:       model.ContextWindowTokens,
+		InputPricePerMillion:      model.InputPricePerMillion,
+		OutputPricePerMillion:     model.OutputPricePerMillion,
+		CacheReadPricePerMillion:  model.CacheReadPricePerMillion,
+		CacheWritePricePerMillion: model.CacheWritePricePerMillion,
+		RequestTokenField:         model.RequestTokenField,
+		ReasoningFormat:           model.ReasoningFormat,
+		CompatibilityJson:         model.CompatibilityJSON,
+		CreatedAt:                 model.CreatedAt,
+		UpdatedAt:                 model.UpdatedAt,
+	}); err != nil {
+		return ModelVariant{}, fmt.Errorf("create model variant: %w", err)
+	}
+
+	return model, nil
+}
+
+func (s *Service) ListModelVariantsByProvider(ctx context.Context, authorID, providerID string) ([]ModelVariant, error) {
+	models, err := s.queries.ListModelVariantsByProvider(ctx, store.ListModelVariantsByProviderParams{
+		ProviderConfigID: providerID,
+		AuthorID:         authorID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list model variants by provider: %w", err)
+	}
+
+	result := make([]ModelVariant, 0, len(models))
+	for _, model := range models {
+		result = append(result, modelVariantFromStore(model))
+	}
+	return result, nil
+}
+
+func (s *Service) ListModelVariants(ctx context.Context, authorID string) ([]ModelVariant, error) {
+	models, err := s.queries.ListModelVariantsByAuthor(ctx, authorID)
+	if err != nil {
+		return nil, fmt.Errorf("list model variants: %w", err)
+	}
+
+	result := make([]ModelVariant, 0, len(models))
+	for _, model := range models {
+		result = append(result, modelVariantFromStore(model))
+	}
+	return result, nil
+}
+
+func (s *Service) GetModelVariant(ctx context.Context, authorID, modelID string) (ModelVariant, error) {
+	model, err := s.queries.GetModelVariant(ctx, store.GetModelVariantParams{
+		ID:       modelID,
+		AuthorID: authorID,
+	})
+	if err != nil {
+		return ModelVariant{}, fmt.Errorf("get model variant: %w", err)
+	}
+	return modelVariantFromStore(model), nil
+}
+
+func (s *Service) GetModelVariantForProject(ctx context.Context, projectID, modelID string) (ModelVariant, error) {
+	model, err := s.queries.GetModelVariantForProject(ctx, store.GetModelVariantForProjectParams{
+		ProjectID:      projectID,
+		ModelVariantID: modelID,
+	})
+	if err != nil {
+		return ModelVariant{}, fmt.Errorf("get model variant for project: %w", err)
+	}
+	return modelVariantFromStore(model), nil
+}
+
 func sessionFromStore(session store.AgentSession) Session {
 	return Session{
 		ID:             session.ID,
@@ -190,6 +337,38 @@ func messageFromStore(message store.AgentMessage) Message {
 		BodyMarkdown: message.BodyMarkdown,
 		MetadataJSON: message.MetadataJson,
 		CreatedAt:    message.CreatedAt,
+	}
+}
+
+func providerConfigFromStore(provider store.ProviderConfig) ProviderConfig {
+	return ProviderConfig{
+		ID:        provider.ID,
+		AuthorID:  provider.AuthorID,
+		Name:      provider.Name,
+		BaseURL:   provider.BaseUrl,
+		CreatedAt: provider.CreatedAt,
+		UpdatedAt: provider.UpdatedAt,
+	}
+}
+
+func modelVariantFromStore(model store.ModelVariant) ModelVariant {
+	return ModelVariant{
+		ID:                        model.ID,
+		ProviderConfigID:          model.ProviderConfigID,
+		Name:                      model.Name,
+		Model:                     model.Model,
+		Temperature:               model.Temperature,
+		MaxOutputTokens:           model.MaxOutputTokens,
+		ContextWindowTokens:       model.ContextWindowTokens,
+		InputPricePerMillion:      model.InputPricePerMillion,
+		OutputPricePerMillion:     model.OutputPricePerMillion,
+		CacheReadPricePerMillion:  model.CacheReadPricePerMillion,
+		CacheWritePricePerMillion: model.CacheWritePricePerMillion,
+		RequestTokenField:         model.RequestTokenField,
+		ReasoningFormat:           model.ReasoningFormat,
+		CompatibilityJSON:         model.CompatibilityJson,
+		CreatedAt:                 model.CreatedAt,
+		UpdatedAt:                 model.UpdatedAt,
 	}
 }
 
@@ -234,6 +413,13 @@ func valueString(value sql.NullString) string {
 func defaultJSON(value string) string {
 	if value == "" {
 		return "{}"
+	}
+	return value
+}
+
+func defaultRequestTokenField(value string) string {
+	if value == "" {
+		return "max_tokens"
 	}
 	return value
 }

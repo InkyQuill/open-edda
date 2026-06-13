@@ -206,6 +206,160 @@ func TestCreateSessionRejectsCrossAuthorModelVariant(t *testing.T) {
 	}
 }
 
+func TestProviderConfigServiceSavesConfigsWithoutReturningAPIKey(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	service := NewService(db, project.NewService(db), nil)
+
+	provider, err := service.CreateProviderConfig(ctx, CreateProviderConfigInput{
+		AuthorID: "author-1",
+		Name:     "DeepSeek",
+		BaseURL:  "https://api.deepseek.com",
+		APIKey:   "secret-key",
+	})
+	if err != nil {
+		t.Fatalf("CreateProviderConfig() error = %v", err)
+	}
+
+	if provider.Name != "DeepSeek" {
+		t.Fatalf("provider name = %q, want DeepSeek", provider.Name)
+	}
+	if provider.BaseURL != "https://api.deepseek.com" {
+		t.Fatalf("provider base URL = %q", provider.BaseURL)
+	}
+
+	providers, err := service.ListProviderConfigs(ctx, "author-1")
+	if err != nil {
+		t.Fatalf("ListProviderConfigs() error = %v", err)
+	}
+	if len(providers) != 1 {
+		t.Fatalf("provider count = %d, want 1", len(providers))
+	}
+	if providers[0] != provider {
+		t.Fatalf("listed provider = %#v, want %#v", providers[0], provider)
+	}
+
+	got, err := service.GetProviderConfig(ctx, "author-1", provider.ID)
+	if err != nil {
+		t.Fatalf("GetProviderConfig() error = %v", err)
+	}
+	if got != provider {
+		t.Fatalf("got provider = %#v, want %#v", got, provider)
+	}
+
+	var storedKey string
+	if err := db.QueryRowContext(ctx, `SELECT api_key_encrypted FROM provider_configs WHERE id = ?`, provider.ID).Scan(&storedKey); err != nil {
+		t.Fatalf("read stored key: %v", err)
+	}
+	if storedKey != "secret-key" {
+		t.Fatalf("stored key = %q, want plaintext key for this milestone", storedKey)
+	}
+}
+
+func TestModelVariantServiceSavesPricingCompatibilityAndProjectSelection(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Provider Project")
+	service := NewService(db, projectService, nil)
+
+	provider, err := service.CreateProviderConfig(ctx, CreateProviderConfigInput{
+		AuthorID: "author-1",
+		Name:     "DeepSeek",
+		BaseURL:  "https://api.deepseek.com",
+		APIKey:   "secret-key",
+	})
+	if err != nil {
+		t.Fatalf("CreateProviderConfig() error = %v", err)
+	}
+
+	chat, err := service.CreateModelVariant(ctx, CreateModelVariantInput{
+		AuthorID:                  "author-1",
+		ProviderConfigID:          provider.ID,
+		Name:                      "DeepSeek Chat",
+		Model:                     "deepseek-chat",
+		Temperature:               0.5,
+		MaxOutputTokens:           4096,
+		ContextWindowTokens:       64000,
+		InputPricePerMillion:      0.27,
+		OutputPricePerMillion:     1.10,
+		CacheReadPricePerMillion:  0.07,
+		CacheWritePricePerMillion: 0.27,
+		RequestTokenField:         "max_tokens",
+		ReasoningFormat:           "deepseek",
+		CompatibilityJSON:         `{"supportsTools":true}`,
+	})
+	if err != nil {
+		t.Fatalf("CreateModelVariant(chat) error = %v", err)
+	}
+	coder, err := service.CreateModelVariant(ctx, CreateModelVariantInput{
+		AuthorID:                  "author-1",
+		ProviderConfigID:          provider.ID,
+		Name:                      "DeepSeek Coder",
+		Model:                     "deepseek-coder",
+		Temperature:               0.2,
+		MaxOutputTokens:           2048,
+		ContextWindowTokens:       32000,
+		InputPricePerMillion:      0.14,
+		OutputPricePerMillion:     0.28,
+		CacheReadPricePerMillion:  0.014,
+		CacheWritePricePerMillion: 0.14,
+		RequestTokenField:         "max_tokens",
+		CompatibilityJSON:         "{}",
+	})
+	if err != nil {
+		t.Fatalf("CreateModelVariant(coder) error = %v", err)
+	}
+
+	variants, err := service.ListModelVariantsByProvider(ctx, "author-1", provider.ID)
+	if err != nil {
+		t.Fatalf("ListModelVariantsByProvider() error = %v", err)
+	}
+	if len(variants) != 2 {
+		t.Fatalf("variant count = %d, want 2", len(variants))
+	}
+
+	got, err := service.GetModelVariant(ctx, "author-1", chat.ID)
+	if err != nil {
+		t.Fatalf("GetModelVariant() error = %v", err)
+	}
+	if got.InputPricePerMillion != 0.27 ||
+		got.OutputPricePerMillion != 1.10 ||
+		got.CacheReadPricePerMillion != 0.07 ||
+		got.CacheWritePricePerMillion != 0.27 {
+		t.Fatalf("pricing fields not preserved: %#v", got)
+	}
+	if got.RequestTokenField != "max_tokens" {
+		t.Fatalf("request token field = %q, want max_tokens", got.RequestTokenField)
+	}
+	if got.ReasoningFormat != "deepseek" {
+		t.Fatalf("reasoning format = %q, want deepseek", got.ReasoningFormat)
+	}
+	if got.ContextWindowTokens != 64000 {
+		t.Fatalf("context window tokens = %d, want 64000", got.ContextWindowTokens)
+	}
+	if got.MaxOutputTokens != 4096 {
+		t.Fatalf("max output tokens = %d, want 4096", got.MaxOutputTokens)
+	}
+
+	selected, err := service.GetModelVariantForProject(ctx, storyProject.ID, chat.ID)
+	if err != nil {
+		t.Fatalf("GetModelVariantForProject() owner error = %v", err)
+	}
+	if selected.ID != chat.ID {
+		t.Fatalf("selected variant ID = %q, want %q", selected.ID, chat.ID)
+	}
+
+	otherModelID := seedOtherAuthorModelVariant(t, db)
+	if _, err := service.GetModelVariantForProject(ctx, storyProject.ID, otherModelID); err == nil {
+		t.Fatal("GetModelVariantForProject() with cross-author model error = nil, want error")
+	}
+
+	if coder.ID == chat.ID {
+		t.Fatal("two created variants have the same ID")
+	}
+}
+
 func openMigratedTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 
