@@ -135,18 +135,53 @@ func splitTitle(path, content string) (title string, rest string) {
 }
 
 func splitFrontmatter(content string) (frontmatter string, body string) {
-	line, rest, ok := strings.Cut(content, "\n")
-	if !ok || strings.TrimSpace(line) != "---" {
+	lines := strings.Split(content, "\n")
+	if len(lines) < 2 || strings.TrimSpace(lines[0]) != "---" {
 		return "", strings.Trim(content, "\n")
 	}
 
-	frontmatter, body, ok = strings.Cut(rest, "\n---")
-	if !ok {
-		return "", strings.Trim(content, "\n")
+	for index := 1; index < len(lines); index++ {
+		if strings.TrimSpace(lines[index]) != "---" {
+			continue
+		}
+
+		frontmatter = strings.Join(lines[1:index], "\n")
+		body = strings.Join(lines[index+1:], "\n")
+		return frontmatter, strings.Trim(body, "\n")
 	}
 
-	body = strings.TrimPrefix(body, "\n")
-	return frontmatter, strings.Trim(body, "\n")
+	return "", strings.Trim(content, "\n")
+}
+
+type pendingFrontmatterList struct {
+	key   string
+	items []string
+}
+
+func (list *pendingFrontmatterList) flush(metadata map[string]any) {
+	if list.key == "" {
+		return
+	}
+	if len(list.items) > 0 {
+		metadata[list.key] = list.items
+	} else {
+		metadata[list.key] = ""
+	}
+	list.key = ""
+	list.items = nil
+}
+
+func (list *pendingFrontmatterList) start(key string) {
+	list.key = key
+	list.items = nil
+}
+
+func (list *pendingFrontmatterList) append(item string) {
+	list.items = append(list.items, item)
+}
+
+func (list *pendingFrontmatterList) active() bool {
+	return list.key != ""
 }
 
 func parseFrontmatter(frontmatter string) (map[string]any, error) {
@@ -155,16 +190,18 @@ func parseFrontmatter(frontmatter string) (map[string]any, error) {
 		return metadata, nil
 	}
 
-	var listKey string
+	var list pendingFrontmatterList
 	for _, line := range strings.Split(frontmatter, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			continue
 		}
-		if listKey != "" && strings.HasPrefix(trimmed, "- ") {
-			metadata[listKey] = appendString(metadata[listKey], strings.TrimSpace(strings.TrimPrefix(trimmed, "- ")))
+		if list.active() && strings.HasPrefix(trimmed, "- ") {
+			list.append(strings.TrimSpace(strings.TrimPrefix(trimmed, "- ")))
 			continue
 		}
+
+		list.flush(metadata)
 
 		key, value, ok := strings.Cut(trimmed, ":")
 		if !ok {
@@ -177,24 +214,15 @@ func parseFrontmatter(frontmatter string) (map[string]any, error) {
 			return nil, fmt.Errorf("invalid empty frontmatter key in line %q", line)
 		}
 		if value == "" {
-			listKey = key
-			metadata[key] = []string{}
+			list.start(key)
 			continue
 		}
 
-		listKey = ""
 		metadata[key] = value
 	}
+	list.flush(metadata)
 
 	return metadata, nil
-}
-
-func appendString(value any, item string) []string {
-	items, ok := value.([]string)
-	if !ok {
-		return []string{item}
-	}
-	return append(items, item)
 }
 
 func parseSections(body string) (string, []ImportedSection) {

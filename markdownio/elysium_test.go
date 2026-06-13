@@ -2,6 +2,7 @@ package markdownio
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -92,6 +93,80 @@ func TestImportElysiumLayout(t *testing.T) {
 	}
 	if dwarves.Relations[0] != (ImportedRelation{TargetTitle: "Species", RelationType: "related"}) {
 		t.Fatalf("dwarves relation = %#v, want Species related", dwarves.Relations[0])
+	}
+}
+
+func TestImportElysiumLayoutParserEdges(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "story/No H1.md", "Opening line.\r\n\r\nSecond line.\r\n")
+	writeFile(t, root, "characters/Empty Scalar.md", "# Empty Scalar\n---\npronouns:\nrelated:\n  - Hugh\n---   \nCharacter body.\n")
+	writeFile(t, root, "worldbuilding/Dashes.md", "# Dashes\n---\nstatus: canon\nupdated: 2026-06-13\n---   \n--- not frontmatter\nBody after frontmatter.\n")
+	writeFile(t, root, "unknown/Ignored.md", "# Ignored\n\nThis should not import.\n")
+
+	items, err := ImportElysiumLayout(root)
+	if err != nil {
+		t.Fatalf("ImportElysiumLayout() error = %v", err)
+	}
+
+	byPath := make(map[string]ImportedItem, len(items))
+	for _, item := range items {
+		byPath[item.Path] = item
+	}
+	if len(byPath) != 3 {
+		t.Fatalf("imported items = %d, want 3: %#v", len(byPath), byPath)
+	}
+	if _, ok := byPath["unknown/Ignored.md"]; ok {
+		t.Fatal("unknown markdown path was imported")
+	}
+
+	noH1 := byPath["story/No H1.md"]
+	if noH1.Title != "No H1" {
+		t.Fatalf("fallback title = %q, want No H1", noH1.Title)
+	}
+	if noH1.BodyMarkdown != "Opening line.\n\nSecond line." {
+		t.Fatalf("CRLF-normalized body = %q", noH1.BodyMarkdown)
+	}
+
+	emptyScalar := byPath["characters/Empty Scalar.md"]
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(emptyScalar.MetadataJSON), &metadata); err != nil {
+		t.Fatalf("metadata json = %q: %v", emptyScalar.MetadataJSON, err)
+	}
+	if metadata["pronouns"] != "" {
+		t.Fatalf("empty scalar metadata = %#v, want empty string", metadata["pronouns"])
+	}
+	if len(emptyScalar.Relations) != 1 || emptyScalar.Relations[0].TargetTitle != "Hugh" {
+		t.Fatalf("relations = %#v, want Hugh related", emptyScalar.Relations)
+	}
+	if emptyScalar.BodyMarkdown != "Character body." {
+		t.Fatalf("body with delimiter trailing spaces = %q", emptyScalar.BodyMarkdown)
+	}
+
+	dashes := byPath["worldbuilding/Dashes.md"]
+	assertMetadataString(t, dashes.MetadataJSON, "updated", "2026-06-13")
+	if dashes.BodyMarkdown != "--- not frontmatter\nBody after frontmatter." {
+		t.Fatalf("line-exact delimiter body = %q", dashes.BodyMarkdown)
+	}
+}
+
+func TestImportElysiumLayoutRejectsMalformedFrontmatter(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "characters/Broken.md", "# Broken\n---\ninvalid\n---\nBody.\n")
+
+	if _, err := ImportElysiumLayout(root); err == nil {
+		t.Fatal("ImportElysiumLayout() error = nil, want malformed frontmatter error")
+	}
+}
+
+func writeFile(t *testing.T, root string, rel string, content string) {
+	t.Helper()
+
+	path := filepath.Join(root, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir fixture dir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write fixture %q: %v", rel, err)
 	}
 }
 
