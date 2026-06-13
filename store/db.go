@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -34,22 +35,19 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 }
 
 func Open(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", path)
+	db, err := sql.Open("sqlite3", sqliteDSN(path))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
 
-	pragmas := []string{
-		"PRAGMA foreign_keys = ON",
-		"PRAGMA journal_mode = WAL",
-		"PRAGMA busy_timeout = 5000",
-	}
-	for _, pragma := range pragmas {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("apply %s: %w", pragma, err)
-		}
+	return db, nil
+}
+
+func sqliteDSN(path string) string {
+	separator := "?"
+	if strings.Contains(path, "?") {
+		separator = "&"
 	}
 
-	return db, nil
+	return path + separator + "_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000"
 }

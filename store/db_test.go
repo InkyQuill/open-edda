@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -27,6 +28,51 @@ func TestOpenEnablesForeignKeys(t *testing.T) {
 	}
 }
 
+func TestOpenEnforcesForeignKeysAcrossConnections(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db, err := Open(filepath.Join(t.TempDir(), "writer.db"))
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(4)
+
+	if _, err := db.ExecContext(ctx, `
+		CREATE TABLE parents (
+			id TEXT PRIMARY KEY
+		);
+		CREATE TABLE children (
+			id TEXT PRIMARY KEY,
+			parent_id TEXT NOT NULL REFERENCES parents(id)
+		);
+	`); err != nil {
+		t.Fatalf("create foreign key tables: %v", err)
+	}
+
+	for i := 0; i < 4; i++ {
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			t.Fatalf("open connection %d: %v", i, err)
+		}
+
+		_, execErr := conn.ExecContext(ctx,
+			"INSERT INTO children (id, parent_id) VALUES (?, ?)",
+			"child-"+strconv.Itoa(i),
+			"missing-parent",
+		)
+		closeErr := conn.Close()
+
+		if execErr == nil {
+			t.Fatalf("connection %d allowed child row with missing parent", i)
+		}
+		if closeErr != nil {
+			t.Fatalf("close connection %d: %v", i, closeErr)
+		}
+	}
+}
+
 func TestProjectCoreMigrationCreatesStoryProjects(t *testing.T) {
 	db, err := Open(filepath.Join(t.TempDir(), "writer.db"))
 	if err != nil {
@@ -38,9 +84,7 @@ func TestProjectCoreMigrationCreatesStoryProjects(t *testing.T) {
 		t.Fatalf("set goose dialect: %v", err)
 	}
 	if err := goose.Up(db, filepath.Join("..", "migrations")); err != nil {
-		if strings.Contains(err.Error(), "no such module: fts5") {
-			t.Skip("sqlite3 driver was built without FTS5 support")
-		}
+		requireFTS5(t, err)
 		t.Fatalf("apply migrations: %v", err)
 	}
 
@@ -66,9 +110,7 @@ func TestSearchContentUsesFTSIndex(t *testing.T) {
 		t.Fatalf("set goose dialect: %v", err)
 	}
 	if err := goose.Up(db, filepath.Join("..", "migrations")); err != nil {
-		if strings.Contains(err.Error(), "no such module: fts5") {
-			t.Skip("sqlite3 driver was built without FTS5 support")
-		}
+		requireFTS5(t, err)
 		t.Fatalf("apply migrations: %v", err)
 	}
 
@@ -100,5 +142,13 @@ func TestSearchContentUsesFTSIndex(t *testing.T) {
 	}
 	if items[0].ID != "item-1" {
 		t.Fatalf("SearchContent() item ID = %q, want item-1", items[0].ID)
+	}
+}
+
+func requireFTS5(t *testing.T, err error) {
+	t.Helper()
+
+	if strings.Contains(err.Error(), "no such module: fts5") {
+		t.Fatalf("sqlite FTS5 support is required; run tests with: go test -tags sqlite_fts5 ./...: %v", err)
 	}
 }

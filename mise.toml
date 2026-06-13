@@ -1,4 +1,10 @@
 [tools]
-go = "1.26"
+go = "1.26.4"
 node = "26"
 bun = "latest"
+
+[tasks.test]
+run = "go test -tags sqlite_fts5 ./..."
+
+[tasks.vet]
+run = "go vet -tags sqlite_fts5 ./..."
