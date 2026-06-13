@@ -339,13 +339,21 @@ func (q *Queries) ListEntrySections(ctx context.Context, contentItemID string) (
 }
 
 const listRevisions = `-- name: ListRevisions :many
-SELECT id, content_item_id, revision_number, body_markdown, metadata_json, reason, created_by, created_at FROM revisions
-WHERE content_item_id = ?
+SELECT revisions.id, revisions.content_item_id, revisions.revision_number, revisions.body_markdown, revisions.metadata_json, revisions.reason, revisions.created_by, revisions.created_at
+FROM revisions
+JOIN content_items ON content_items.id = revisions.content_item_id
+WHERE revisions.content_item_id = ?1
+  AND content_items.project_id = ?2
 ORDER BY revision_number DESC
 `
 
-func (q *Queries) ListRevisions(ctx context.Context, contentItemID string) ([]Revision, error) {
-	rows, err := q.db.QueryContext(ctx, listRevisions, contentItemID)
+type ListRevisionsParams struct {
+	ContentItemID string `json:"content_item_id"`
+	ProjectID     string `json:"project_id"`
+}
+
+func (q *Queries) ListRevisions(ctx context.Context, arg ListRevisionsParams) ([]Revision, error) {
+	rows, err := q.db.QueryContext(ctx, listRevisions, arg.ContentItemID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}

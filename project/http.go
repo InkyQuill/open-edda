@@ -162,7 +162,7 @@ func (h httpHandler) updateContent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h httpHandler) listRevisions(w http.ResponseWriter, r *http.Request) {
-	revisions, err := h.service.ListRevisions(r.Context(), chi.URLParam(r, "contentID"))
+	revisions, err := h.service.ListRevisions(r.Context(), chi.URLParam(r, "projectID"), chi.URLParam(r, "contentID"))
 	if err != nil {
 		writeError(w, err)
 		return

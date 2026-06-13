@@ -116,6 +116,44 @@ func TestListProjectContentByKind(t *testing.T) {
 	}
 }
 
+func TestListRevisionsDoesNotCrossProjectBoundary(t *testing.T) {
+	handler := newTestApp(t)
+	content := createTestContent(t, handler, "project-1", "Chapter 1")
+	req := httptest.NewRequest(http.MethodGet, "/api/projects/project-2/content/"+content.ID+"/revisions", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusNotFound, rec.Body.String())
+	}
+}
+
+func createTestContent(t *testing.T, handler http.Handler, projectID string, title string) project.ContentItem {
+	t.Helper()
+
+	body := bytes.NewBufferString(`{
+		"kind": "chapter",
+		"title": "` + title + `",
+		"bodyMarkdown": "# ` + title + `\n\nOpening text.",
+		"metadataJson": "{}",
+		"sortOrder": 1
+	}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/"+projectID+"/content", body)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d; body = %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+
+	var content project.ContentItem
+	if err := json.NewDecoder(rec.Body).Decode(&content); err != nil {
+		t.Fatalf("decode content response: %v", err)
+	}
+	return content
+}
+
 func newTestApp(t *testing.T) http.Handler {
 	t.Helper()
 
@@ -142,11 +180,13 @@ func openMigratedTestDB(t *testing.T) *sql.DB {
 	}
 
 	_, err = db.Exec(`
-		INSERT INTO authors (id, email, password_hash, created_at)
-		VALUES ('author-1', 'author@example.com', 'hash', '2026-06-13T00:00:00Z');
-		INSERT INTO story_projects (id, author_id, title, slug, language, created_at, updated_at)
-		VALUES ('project-1', 'author-1', 'Test', 'test', 'en', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z');
-	`)
+			INSERT INTO authors (id, email, password_hash, created_at)
+			VALUES ('author-1', 'author@example.com', 'hash', '2026-06-13T00:00:00Z');
+			INSERT INTO story_projects (id, author_id, title, slug, language, created_at, updated_at)
+			VALUES
+				('project-1', 'author-1', 'Test', 'test', 'en', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z'),
+				('project-2', 'author-1', 'Other', 'other', 'en', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z');
+		`)
 	if err != nil {
 		t.Fatalf("seed project: %v", err)
 	}

@@ -217,8 +217,15 @@ func (s *Service) UpdateContent(ctx context.Context, input UpdateContentInput) (
 	return updated, nil
 }
 
-func (s *Service) ListRevisions(ctx context.Context, contentID string) ([]Revision, error) {
-	revisions, err := s.queries.ListRevisions(ctx, contentID)
+func (s *Service) ListRevisions(ctx context.Context, projectID, contentID string) ([]Revision, error) {
+	if _, err := s.GetContent(ctx, projectID, contentID); err != nil {
+		return nil, err
+	}
+
+	revisions, err := s.queries.ListRevisions(ctx, store.ListRevisionsParams{
+		ContentItemID: contentID,
+		ProjectID:     projectID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list revisions: %w", err)
 	}

@@ -43,8 +43,11 @@ INSERT INTO revisions (
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: ListRevisions :many
-SELECT * FROM revisions
-WHERE content_item_id = ?
+SELECT revisions.*
+FROM revisions
+JOIN content_items ON content_items.id = revisions.content_item_id
+WHERE revisions.content_item_id = sqlc.arg(content_item_id)
+  AND content_items.project_id = sqlc.arg(project_id)
 ORDER BY revision_number DESC;
 
 -- name: CreateEntrySection :exec
