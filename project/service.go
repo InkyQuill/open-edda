@@ -434,10 +434,10 @@ func (s *Service) UpdateContent(ctx context.Context, input UpdateContentInput) (
 			Reason:         emptyDefault(input.Reason, "content update"),
 			CreatedBy:      createdBy,
 			CreatedAt:      now,
-			AgentSessionID: sql.NullString{},
-			ActionKind:     "",
-			ModelVariantID: sql.NullString{},
-			SkillID:        "",
+			AgentSessionID: nullString(input.AgentSessionID),
+			ActionKind:     input.ActionKind,
+			ModelVariantID: nullString(input.ModelVariantID),
+			SkillID:        input.SkillID,
 		}); err != nil {
 			return fmt.Errorf("create revision: %w", err)
 		}
@@ -461,6 +461,62 @@ func (s *Service) UpdateContent(ctx context.Context, input UpdateContentInput) (
 	return updated, nil
 }
 
+func (s *Service) AppendToContent(ctx context.Context, input StructuredWriteInput) (ContentItem, error) {
+	item, err := s.GetContent(ctx, input.ProjectID, input.ContentID)
+	if err != nil {
+		return ContentItem{}, err
+	}
+	input.InsertPosition = int64(len(item.BodyMarkdown))
+	return s.writeContent(ctx, input, item.BodyMarkdown+input.GeneratedMarkdown)
+}
+
+func (s *Service) InsertIntoContent(ctx context.Context, input StructuredWriteInput) (ContentItem, error) {
+	item, err := s.GetContent(ctx, input.ProjectID, input.ContentID)
+	if err != nil {
+		return ContentItem{}, err
+	}
+	if input.InsertPosition < 0 || input.InsertPosition > int64(len(item.BodyMarkdown)) {
+		return ContentItem{}, fmt.Errorf("insert position out of range")
+	}
+	position := int(input.InsertPosition)
+	body := item.BodyMarkdown[:position] + input.GeneratedMarkdown + item.BodyMarkdown[position:]
+	return s.writeContent(ctx, input, body)
+}
+
+func (s *Service) ReplaceContentRange(ctx context.Context, input StructuredWriteInput) (ContentItem, error) {
+	item, err := s.GetContent(ctx, input.ProjectID, input.ContentID)
+	if err != nil {
+		return ContentItem{}, err
+	}
+	if input.SelectionStart < 0 || input.SelectionEnd < input.SelectionStart || input.SelectionEnd > int64(len(item.BodyMarkdown)) {
+		return ContentItem{}, fmt.Errorf("selection range out of range")
+	}
+	start := int(input.SelectionStart)
+	end := int(input.SelectionEnd)
+	body := item.BodyMarkdown[:start] + input.GeneratedMarkdown + item.BodyMarkdown[end:]
+	return s.writeContent(ctx, input, body)
+}
+
+func (s *Service) writeContent(ctx context.Context, input StructuredWriteInput, bodyMarkdown string) (ContentItem, error) {
+	item, err := s.GetContent(ctx, input.ProjectID, input.ContentID)
+	if err != nil {
+		return ContentItem{}, err
+	}
+	return s.UpdateContent(ctx, UpdateContentInput{
+		ProjectID:        input.ProjectID,
+		ContentID:        input.ContentID,
+		ExpectedRevision: input.ExpectedRevision,
+		BodyMarkdown:     bodyMarkdown,
+		MetadataJSON:     item.MetadataJSON,
+		Reason:           input.Reason,
+		CreatedBy:        "agent",
+		AgentSessionID:   input.AgentSessionID,
+		ActionKind:       input.ActionKind,
+		ModelVariantID:   input.ModelVariantID,
+		SkillID:          input.SkillID,
+	})
+}
+
 func (s *Service) CreateEntrySection(ctx context.Context, input CreateEntrySectionInput) error {
 	if _, err := s.queries.GetContentItem(ctx, store.GetContentItemParams{
 		ID:        input.ContentItemID,
@@ -478,6 +534,68 @@ func (s *Service) CreateEntrySection(ctx context.Context, input CreateEntrySecti
 		return fmt.Errorf("create entry section: %w", err)
 	}
 	return nil
+}
+
+func (s *Service) UpdateEntrySectionBody(ctx context.Context, input UpdateEntrySectionInput) (EntrySection, error) {
+	var updated EntrySection
+	if err := s.inTx(ctx, func(queries *store.Queries) error {
+		item, err := queries.GetContentItem(ctx, store.GetContentItemParams{
+			ID:        input.ContentID,
+			ProjectID: input.ProjectID,
+		})
+		if err != nil {
+			return fmt.Errorf("get content item: %w", err)
+		}
+		if ContentKind(item.Kind) != KindStoryBibleEntry {
+			return fmt.Errorf("content %q kind = %q, want %q", input.ContentID, item.Kind, KindStoryBibleEntry)
+		}
+
+		affected, err := queries.UpdateEntrySectionBody(ctx, store.UpdateEntrySectionBodyParams{
+			BodyMarkdown:  input.BodyMarkdown,
+			ContentItemID: input.ContentID,
+			Heading:       input.Heading,
+			ProjectID:     input.ProjectID,
+		})
+		if err != nil {
+			return fmt.Errorf("update entry section: %w", err)
+		}
+		if affected == 0 {
+			return fmt.Errorf("entry section %q not found", input.Heading)
+		}
+
+		metadataJSON, err := json.Marshal(map[string]any{
+			"targetContentId": input.ContentID,
+			"operationKind":   "update_entry_section",
+			"heading":         input.Heading,
+			"actionKind":      input.ActionKind,
+			"modelVariantId":  input.ModelVariantID,
+			"agentSessionId":  input.AgentSessionID,
+			"skillId":         input.SkillID,
+		})
+		if err != nil {
+			return fmt.Errorf("marshal activity metadata: %w", err)
+		}
+		if err := queries.CreateActivityEvent(ctx, store.CreateActivityEventParams{
+			ID:           newID("event"),
+			ProjectID:    input.ProjectID,
+			SessionID:    nullString(input.AgentSessionID),
+			EventType:    "agent_entry_section_updated",
+			Summary:      fmt.Sprintf("Updated %s section %q", item.Title, input.Heading),
+			MetadataJson: string(metadataJSON),
+			CreatedAt:    nowString(),
+		}); err != nil {
+			return fmt.Errorf("create activity event: %w", err)
+		}
+
+		updated = EntrySection{
+			Heading:      input.Heading,
+			BodyMarkdown: input.BodyMarkdown,
+		}
+		return nil
+	}); err != nil {
+		return EntrySection{}, err
+	}
+	return updated, nil
 }
 
 func (s *Service) ListEntrySections(ctx context.Context, projectID, contentID string) ([]EntrySection, error) {
@@ -658,6 +776,10 @@ func revisionFromStore(revision store.Revision) Revision {
 		Reason:         revision.Reason,
 		CreatedBy:      revision.CreatedBy,
 		CreatedAt:      revision.CreatedAt,
+		AgentSessionID: revision.AgentSessionID.String,
+		ActionKind:     revision.ActionKind,
+		ModelVariantID: revision.ModelVariantID.String,
+		SkillID:        revision.SkillID,
 	}
 }
 

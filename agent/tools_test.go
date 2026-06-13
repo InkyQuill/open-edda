@@ -26,6 +26,11 @@ func TestContextToolDefinitionsExposeExplicitSchemas(t *testing.T) {
 		"read_story_bible_entry",
 		"read_entry_section",
 		"list_revisions",
+		"append_to_chapter",
+		"insert_into_chapter",
+		"replace_selection",
+		"update_story_bible_entry",
+		"update_entry_section",
 	} {
 		tool, ok := names[name]
 		if !ok {
@@ -47,6 +52,198 @@ func TestContextToolDefinitionsExposeExplicitSchemas(t *testing.T) {
 		if _, ok := searchProps[prop]; !ok {
 			t.Fatalf("search_content schema missing %q", prop)
 		}
+	}
+}
+
+func TestExecuteWriteToolsRecordRevisionActivityAndArtifact(t *testing.T) {
+	tests := []struct {
+		name         string
+		toolName     string
+		arguments    func(seed toolSeed) string
+		wantContent  func(seed toolSeed) (contentID string, body string, revision int64)
+		wantMetadata map[string]any
+	}{
+		{
+			name:     "append_to_chapter",
+			toolName: "append_to_chapter",
+			arguments: func(seed toolSeed) string {
+				return `{"contentId":"` + seed.Chapter.ID + `","expectedRevision":2,"generatedMarkdown":"\nThe glass city answered.","reason":"continue scene"}`
+			},
+			wantContent: func(seed toolSeed) (string, string, int64) {
+				return seed.Chapter.ID, "The lantern burned blue.\nMira listened.\nThe glass city answered.", 3
+			},
+			wantMetadata: map[string]any{
+				"operationKind":    "append_to_chapter",
+				"previousRevision": float64(2),
+				"nextRevision":     float64(3),
+			},
+		},
+		{
+			name:     "insert_into_chapter",
+			toolName: "insert_into_chapter",
+			arguments: func(seed toolSeed) string {
+				return `{"contentId":"` + seed.Chapter.ID + `","expectedRevision":2,"insertPosition":11,"generatedMarkdown":" quietly","reason":"insert adverb"}`
+			},
+			wantContent: func(seed toolSeed) (string, string, int64) {
+				return seed.Chapter.ID, "The lantern quietly burned blue.\nMira listened.", 3
+			},
+			wantMetadata: map[string]any{
+				"operationKind":    "insert_into_chapter",
+				"previousRevision": float64(2),
+				"nextRevision":     float64(3),
+			},
+		},
+		{
+			name:     "replace_selection",
+			toolName: "replace_selection",
+			arguments: func(seed toolSeed) string {
+				return `{"contentId":"` + seed.Chapter.ID + `","expectedRevision":2,"selectionStart":12,"selectionEnd":23,"generatedMarkdown":"glowed green","reason":"replace image"}`
+			},
+			wantContent: func(seed toolSeed) (string, string, int64) {
+				return seed.Chapter.ID, "The lantern glowed green.\nMira listened.", 3
+			},
+			wantMetadata: map[string]any{
+				"operationKind":    "replace_selection",
+				"previousRevision": float64(2),
+				"nextRevision":     float64(3),
+			},
+		},
+		{
+			name:     "update_story_bible_entry",
+			toolName: "update_story_bible_entry",
+			arguments: func(seed toolSeed) string {
+				return `{"contentId":"` + seed.Character.ID + `","expectedRevision":1,"generatedMarkdown":"Mira keeps precise notes about impossible lanterns.","reason":"update character entry"}`
+			},
+			wantContent: func(seed toolSeed) (string, string, int64) {
+				return seed.Character.ID, "Mira keeps precise notes about impossible lanterns.", 2
+			},
+			wantMetadata: map[string]any{
+				"operationKind":    "update_story_bible_entry",
+				"previousRevision": float64(1),
+				"nextRevision":     float64(2),
+			},
+		},
+		{
+			name:     "update_entry_section",
+			toolName: "update_entry_section",
+			arguments: func(seed toolSeed) string {
+				return `{"contentId":"` + seed.Character.ID + `","heading":"Motivation","generatedMarkdown":"Protect the glass city.","reason":"update motivation"}`
+			},
+			wantContent: func(seed toolSeed) (string, string, int64) {
+				return seed.Character.ID, "Alchemy notes mention the lantern.", 1
+			},
+			wantMetadata: map[string]any{
+				"operationKind": "update_entry_section",
+				"heading":       "Motivation",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := openMigratedTestDB(t)
+			ctx := context.Background()
+			projectService := project.NewService(db)
+			storyProject := createTestProject(t, ctx, projectService, "author-1", "Write Tool Project")
+			service := NewService(db, projectService, nil)
+			modelID := seedToolModelVariant(t, db, "author-1")
+			session := createTestSessionWithModel(t, ctx, service, storyProject.ID, ActionKindRewrite, modelID)
+			seed := seedToolContent(t, ctx, projectService, storyProject.ID)
+
+			result, err := service.ExecuteTool(ctx, ToolCallInput{
+				ProjectID:     storyProject.ID,
+				SessionID:     session.ID,
+				ToolCallID:    "call-" + tt.name,
+				ToolName:      tt.toolName,
+				ArgumentsJSON: tt.arguments(seed),
+			})
+			if err != nil {
+				t.Fatalf("ExecuteTool(%s) error = %v", tt.toolName, err)
+			}
+
+			contentID, wantBody, wantRevision := tt.wantContent(seed)
+			item, err := projectService.GetContent(ctx, storyProject.ID, contentID)
+			if err != nil {
+				t.Fatalf("GetContent() error = %v", err)
+			}
+			if item.BodyMarkdown != wantBody {
+				t.Fatalf("body = %q, want %q", item.BodyMarkdown, wantBody)
+			}
+			if item.CurrentRevision != wantRevision {
+				t.Fatalf("revision = %d, want %d", item.CurrentRevision, wantRevision)
+			}
+			if tt.toolName == "update_entry_section" {
+				sections, err := projectService.ListEntrySections(ctx, storyProject.ID, seed.Character.ID)
+				if err != nil {
+					t.Fatalf("ListEntrySections() error = %v", err)
+				}
+				if len(sections) != 1 || sections[0].BodyMarkdown != "Protect the glass city." {
+					t.Fatalf("sections = %#v", sections)
+				}
+			}
+
+			assertWriteToolActivityAndArtifact(t, ctx, db, storyProject.ID, session, tt.toolName, contentID, result, tt.wantMetadata)
+		})
+	}
+}
+
+func TestExecuteWriteToolRequiresSession(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Write Session Project")
+	service := NewService(db, projectService, nil)
+	seed := seedToolContent(t, ctx, projectService, storyProject.ID)
+
+	_, err := service.ExecuteTool(ctx, ToolCallInput{
+		ProjectID:     storyProject.ID,
+		ToolCallID:    "call-no-session",
+		ToolName:      "append_to_chapter",
+		ArgumentsJSON: `{"contentId":"` + seed.Chapter.ID + `","expectedRevision":2,"generatedMarkdown":"\nNo session.","reason":"append without session"}`,
+	})
+	if err == nil {
+		t.Fatal("ExecuteTool(write without session) error = nil, want validation error")
+	}
+}
+
+func TestExecuteWriteToolValidatesTargetKind(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Write Kind Project")
+	service := NewService(db, projectService, nil)
+	session := createTestSession(t, ctx, service, storyProject.ID)
+	seed := seedToolContent(t, ctx, projectService, storyProject.ID)
+
+	tests := []struct {
+		name      string
+		toolName  string
+		arguments string
+	}{
+		{
+			name:      "append rejects story bible entry",
+			toolName:  "append_to_chapter",
+			arguments: `{"contentId":"` + seed.Character.ID + `","expectedRevision":1,"generatedMarkdown":"\nWrong kind.","reason":"bad append"}`,
+		},
+		{
+			name:      "entry update rejects chapter",
+			toolName:  "update_story_bible_entry",
+			arguments: `{"contentId":"` + seed.Chapter.ID + `","expectedRevision":2,"generatedMarkdown":"Wrong kind.","reason":"bad entry update"}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := service.ExecuteTool(ctx, ToolCallInput{
+				ProjectID:     storyProject.ID,
+				SessionID:     session.ID,
+				ToolCallID:    "call-" + strings.ReplaceAll(tt.name, " ", "-"),
+				ToolName:      tt.toolName,
+				ArgumentsJSON: tt.arguments,
+			})
+			if err == nil {
+				t.Fatal("ExecuteTool() error = nil, want target kind validation error")
+			}
+		})
 	}
 }
 
@@ -632,6 +829,117 @@ func assertToolActivityAndArtifact(t *testing.T, ctx context.Context, db *sql.DB
 	if artifact.FullResultBytes != int64(len([]byte(result.FullResultJSON))) {
 		t.Fatalf("artifact full bytes = %d, want %d", artifact.FullResultBytes, len([]byte(result.FullResultJSON)))
 	}
+}
+
+func assertWriteToolActivityAndArtifact(t *testing.T, ctx context.Context, db *sql.DB, projectID string, session Session, toolName string, targetContentID string, result ToolResult, want map[string]any) {
+	t.Helper()
+
+	queries := store.New(db)
+	events, err := queries.ListActivityEvents(ctx, store.ListActivityEventsParams{
+		ProjectID: projectID,
+		Limit:     10,
+	})
+	if err != nil {
+		t.Fatalf("ListActivityEvents() error = %v", err)
+	}
+	var event store.ActivityEvent
+	for _, candidate := range events {
+		var metadata map[string]any
+		if err := json.Unmarshal([]byte(candidate.MetadataJson), &metadata); err != nil {
+			t.Fatalf("unmarshal activity metadata: %v", err)
+		}
+		if metadata["toolName"] == toolName && metadata["toolCallId"] == result.ToolCallID {
+			event = candidate
+			break
+		}
+	}
+	if event.ID == "" {
+		t.Fatalf("write tool activity for %s not found in %#v", toolName, events)
+	}
+	if !event.SessionID.Valid || event.SessionID.String != session.ID {
+		t.Fatalf("activity session = %#v, want %q", event.SessionID, session.ID)
+	}
+
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(event.MetadataJson), &metadata); err != nil {
+		t.Fatalf("unmarshal selected activity metadata: %v", err)
+	}
+	if metadata["targetContentId"] != targetContentID {
+		t.Fatalf("targetContentId = %#v, want %q", metadata["targetContentId"], targetContentID)
+	}
+	if metadata["actionKind"] != string(session.ActionKind) {
+		t.Fatalf("actionKind = %#v, want %q", metadata["actionKind"], session.ActionKind)
+	}
+	if metadata["modelVariantId"] != session.ModelVariantID {
+		t.Fatalf("modelVariantId = %#v, want %q", metadata["modelVariantId"], session.ModelVariantID)
+	}
+	if metadata["agentSessionId"] != session.ID {
+		t.Fatalf("agentSessionId = %#v, want %q", metadata["agentSessionId"], session.ID)
+	}
+	for key, value := range want {
+		if metadata[key] != value {
+			t.Fatalf("metadata[%s] = %#v, want %#v", key, metadata[key], value)
+		}
+	}
+
+	artifacts, err := queries.ListToolResultArtifacts(ctx, store.ListToolResultArtifactsParams{
+		ProjectID: projectID,
+		SessionID: sql.NullString{String: session.ID, Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("ListToolResultArtifacts() error = %v", err)
+	}
+	var artifact store.ToolResultArtifact
+	for _, candidate := range artifacts {
+		if candidate.ToolName == toolName && candidate.ToolCallID == result.ToolCallID {
+			artifact = candidate
+			break
+		}
+	}
+	if artifact.ID == "" {
+		t.Fatalf("artifact for %s not found in %#v", toolName, artifacts)
+	}
+	if artifact.FullResultJson != result.FullResultJSON {
+		t.Fatal("artifact full JSON differs from returned full JSON")
+	}
+}
+
+func seedToolModelVariant(t *testing.T, db *sql.DB, authorID string) string {
+	t.Helper()
+
+	_, err := db.Exec(`
+		INSERT INTO provider_configs (id, author_id, name, base_url, api_key_encrypted, created_at, updated_at)
+		VALUES ('tool-provider-1', ?, 'Tool Provider', 'http://example.test', 'encrypted', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z');
+		INSERT INTO model_variants (
+			id, provider_config_id, name, model, temperature, max_output_tokens,
+			context_window_tokens, input_price_per_million, output_price_per_million,
+			cache_read_price_per_million, cache_write_price_per_million,
+			request_token_field, reasoning_format, compatibility_json, created_at, updated_at
+		) VALUES (
+			'tool-model-1', 'tool-provider-1', 'Tool Model', 'tool-model', 0.7, 2048,
+			8192, 0, 0, 0, 0, 'max_tokens', '', '{}', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z'
+		);
+	`, authorID)
+	if err != nil {
+		t.Fatalf("seed tool model variant: %v", err)
+	}
+	return "tool-model-1"
+}
+
+func createTestSessionWithModel(t *testing.T, ctx context.Context, service *Service, projectID string, actionKind ActionKind, modelID string) Session {
+	t.Helper()
+
+	session, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:      projectID,
+		Title:          "Write session",
+		ActionKind:     actionKind,
+		ModelVariantID: modelID,
+		ApplyMode:      ApplyModeDirectApply,
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	return session
 }
 
 func assertFullJSONContains(t *testing.T, value string, needles ...string) {

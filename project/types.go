@@ -59,6 +59,10 @@ type Revision struct {
 	Reason         string `json:"reason"`
 	CreatedBy      string `json:"createdBy"`
 	CreatedAt      string `json:"createdAt"`
+	AgentSessionID string `json:"agentSessionId,omitempty"`
+	ActionKind     string `json:"actionKind,omitempty"`
+	ModelVariantID string `json:"modelVariantId,omitempty"`
+	SkillID        string `json:"skillId,omitempty"`
 }
 
 type AttachedNote struct {
@@ -133,4 +137,34 @@ type UpdateContentInput struct {
 	MetadataJSON     string
 	Reason           string
 	CreatedBy        string
+	AgentSessionID   string
+	ActionKind       string
+	ModelVariantID   string
+	SkillID          string
+}
+
+type StructuredWriteInput struct {
+	ProjectID         string
+	ContentID         string
+	ExpectedRevision  int64
+	GeneratedMarkdown string
+	InsertPosition    int64
+	SelectionStart    int64
+	SelectionEnd      int64
+	Reason            string
+	AgentSessionID    string
+	ActionKind        string
+	ModelVariantID    string
+	SkillID           string
+}
+
+type UpdateEntrySectionInput struct {
+	ProjectID      string
+	ContentID      string
+	Heading        string
+	BodyMarkdown   string
+	AgentSessionID string
+	ActionKind     string
+	ModelVariantID string
+	SkillID        string
 }

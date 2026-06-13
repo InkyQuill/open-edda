@@ -41,6 +41,21 @@ func ContextToolDefinitions() []CompletionTool {
 			"heading":   map[string]any{"type": "string"},
 		}, "contentId", "heading")),
 		contextTool("list_revisions", "List revisions for one content item.", contentIDSchema()),
+		contextTool("append_to_chapter", "Append generated Markdown to the end of a chapter.", structuredWriteSchema(nil)),
+		contextTool("insert_into_chapter", "Insert generated Markdown into a chapter at an absolute position.", structuredWriteSchema(map[string]any{
+			"insertPosition": map[string]any{"type": "integer", "minimum": 0},
+		}, "insertPosition")),
+		contextTool("replace_selection", "Replace a selected chapter range with generated Markdown.", structuredWriteSchema(map[string]any{
+			"selectionStart": map[string]any{"type": "integer", "minimum": 0},
+			"selectionEnd":   map[string]any{"type": "integer", "minimum": 0},
+		}, "selectionStart", "selectionEnd")),
+		contextTool("update_story_bible_entry", "Replace a story bible entry body with generated Markdown.", structuredWriteSchema(nil)),
+		contextTool("update_entry_section", "Update a story bible entry section body.", objectSchema(map[string]any{
+			"contentId":         map[string]any{"type": "string"},
+			"heading":           map[string]any{"type": "string"},
+			"generatedMarkdown": map[string]any{"type": "string"},
+			"reason":            map[string]any{"type": "string"},
+		}, "contentId", "heading", "generatedMarkdown", "reason")),
 	}
 }
 
@@ -48,18 +63,24 @@ func (s *Service) ExecuteTool(ctx context.Context, input ToolCallInput) (ToolRes
 	if input.ProjectID == "" {
 		return ToolResult{}, fmt.Errorf("project ID is required")
 	}
+	var session Session
 	if input.SessionID != "" {
-		if _, err := s.GetSession(ctx, input.ProjectID, input.SessionID); err != nil {
+		got, err := s.GetSession(ctx, input.ProjectID, input.SessionID)
+		if err != nil {
 			return ToolResult{}, err
 		}
+		session = got
 	} else if _, err := s.queries.GetStoryProjectByID(ctx, input.ProjectID); err != nil {
 		return ToolResult{}, fmt.Errorf("get story project: %w", err)
+	}
+	if isWriteTool(input.ToolName) && input.SessionID == "" {
+		return ToolResult{}, fmt.Errorf("session ID is required for write tools")
 	}
 	if input.ToolCallID == "" {
 		return ToolResult{}, fmt.Errorf("tool call ID is required")
 	}
 
-	payload, directRead, err := s.executeContextTool(ctx, input)
+	payload, directRead, activityMetadata, err := s.executeContextTool(ctx, input, session)
 	if err != nil {
 		return ToolResult{}, err
 	}
@@ -79,12 +100,16 @@ func (s *Service) ExecuteTool(ctx context.Context, input ToolCallInput) (ToolRes
 	}
 
 	now := nowString()
-	metadataJSON, err := json.Marshal(map[string]any{
+	metadata := map[string]any{
 		"toolName":    input.ToolName,
 		"toolCallId":  input.ToolCallID,
 		"truncated":   truncated,
 		"resultBytes": len(fullJSONBytes),
-	})
+	}
+	for key, value := range activityMetadata {
+		metadata[key] = value
+	}
+	metadataJSON, err := json.Marshal(metadata)
 	if err != nil {
 		return ToolResult{}, fmt.Errorf("marshal activity metadata: %w", err)
 	}
@@ -133,15 +158,15 @@ func (s *Service) ExecuteTool(ctx context.Context, input ToolCallInput) (ToolRes
 	return result, nil
 }
 
-func (s *Service) executeContextTool(ctx context.Context, input ToolCallInput) (any, bool, error) {
+func (s *Service) executeContextTool(ctx context.Context, input ToolCallInput, session Session) (any, bool, map[string]any, error) {
 	switch input.ToolName {
 	case "project_map":
 		var args struct{}
 		if err := decodeToolArgs(input.ArgumentsJSON, &args); err != nil {
-			return nil, false, err
+			return nil, false, nil, err
 		}
 		projectMap, err := s.projectService.ProjectMap(ctx, input.ProjectID)
-		return projectMap, false, err
+		return projectMap, false, nil, err
 	case "search_content":
 		var args struct {
 			Query           string              `json:"query"`
@@ -151,15 +176,15 @@ func (s *Service) executeContextTool(ctx context.Context, input ToolCallInput) (
 			Limit           *int64              `json:"limit"`
 		}
 		if err := decodeToolArgs(input.ArgumentsJSON, &args); err != nil {
-			return nil, false, err
+			return nil, false, nil, err
 		}
 		if args.Kind != "" && !validToolContentKind(args.Kind) {
-			return nil, false, fmt.Errorf("invalid content kind %q", args.Kind)
+			return nil, false, nil, fmt.Errorf("invalid content kind %q", args.Kind)
 		}
 		var limit int64
 		if args.Limit != nil {
 			if *args.Limit <= 0 || *args.Limit > 100 {
-				return nil, false, fmt.Errorf("limit must be between 1 and 100")
+				return nil, false, nil, fmt.Errorf("limit must be between 1 and 100")
 			}
 			limit = *args.Limit
 		}
@@ -171,58 +196,61 @@ func (s *Service) executeContextTool(ctx context.Context, input ToolCallInput) (
 			Tags:            args.Tags,
 			Limit:           limit,
 		})
-		return items, false, err
+		return items, false, nil, err
 	case "read_content":
 		item, err := s.readContentTool(ctx, input.ProjectID, input.ArgumentsJSON, "")
-		return item, true, err
+		return item, true, nil, err
 	case "read_chapter":
 		item, err := s.readContentTool(ctx, input.ProjectID, input.ArgumentsJSON, project.KindChapter)
-		return item, true, err
+		return item, true, nil, err
 	case "read_story_bible_entry":
 		item, err := s.readContentTool(ctx, input.ProjectID, input.ArgumentsJSON, project.KindStoryBibleEntry)
-		return item, true, err
+		return item, true, nil, err
 	case "read_entry_section":
 		var args struct {
 			ContentID string `json:"contentId"`
 			Heading   string `json:"heading"`
 		}
 		if err := decodeToolArgs(input.ArgumentsJSON, &args); err != nil {
-			return nil, false, err
+			return nil, false, nil, err
 		}
 		if strings.TrimSpace(args.ContentID) == "" {
-			return nil, false, fmt.Errorf("contentId is required")
+			return nil, false, nil, fmt.Errorf("contentId is required")
 		}
 		if strings.TrimSpace(args.Heading) == "" {
-			return nil, false, fmt.Errorf("heading is required")
+			return nil, false, nil, fmt.Errorf("heading is required")
 		}
 		item, err := s.projectService.GetContent(ctx, input.ProjectID, args.ContentID)
 		if err != nil {
-			return nil, false, err
+			return nil, false, nil, err
 		}
 		if item.Kind != project.KindStoryBibleEntry {
-			return nil, false, fmt.Errorf("content %q kind = %q, want %q", args.ContentID, item.Kind, project.KindStoryBibleEntry)
+			return nil, false, nil, fmt.Errorf("content %q kind = %q, want %q", args.ContentID, item.Kind, project.KindStoryBibleEntry)
 		}
 		sections, err := s.projectService.ListEntrySections(ctx, input.ProjectID, args.ContentID)
 		if err != nil {
-			return nil, false, err
+			return nil, false, nil, err
 		}
 		for _, section := range sections {
 			if section.Heading == args.Heading {
-				return section, true, nil
+				return section, true, nil, nil
 			}
 		}
-		return nil, false, fmt.Errorf("entry section %q not found", args.Heading)
+		return nil, false, nil, fmt.Errorf("entry section %q not found", args.Heading)
 	case "list_revisions":
 		var args struct {
 			ContentID string `json:"contentId"`
 		}
 		if err := decodeToolArgs(input.ArgumentsJSON, &args); err != nil {
-			return nil, false, err
+			return nil, false, nil, err
 		}
 		revisions, err := s.projectService.ListRevisions(ctx, input.ProjectID, args.ContentID)
-		return revisions, false, err
+		return revisions, false, nil, err
+	case "append_to_chapter", "insert_into_chapter", "replace_selection", "update_story_bible_entry", "update_entry_section":
+		payload, metadata, err := s.executeWriteTool(ctx, input, session)
+		return payload, false, metadata, err
 	default:
-		return nil, false, fmt.Errorf("unknown tool %q", input.ToolName)
+		return nil, false, nil, fmt.Errorf("unknown tool %q", input.ToolName)
 	}
 }
 
@@ -244,6 +272,210 @@ func (s *Service) readContentTool(ctx context.Context, projectID, argsJSON strin
 		return project.ContentItem{}, fmt.Errorf("content %q kind = %q, want %q", args.ContentID, item.Kind, wantKind)
 	}
 	return item, nil
+}
+
+func (s *Service) executeWriteTool(ctx context.Context, input ToolCallInput, session Session) (any, map[string]any, error) {
+	switch input.ToolName {
+	case "append_to_chapter":
+		args, err := decodeStructuredWriteArgs(input.ArgumentsJSON)
+		if err != nil {
+			return nil, nil, err
+		}
+		item, err := s.requireContentKind(ctx, input.ProjectID, args.ContentID, project.KindChapter)
+		if err != nil {
+			return nil, nil, err
+		}
+		updated, err := s.projectService.AppendToContent(ctx, project.StructuredWriteInput{
+			ProjectID:         input.ProjectID,
+			ContentID:         args.ContentID,
+			ExpectedRevision:  args.ExpectedRevision,
+			GeneratedMarkdown: args.GeneratedMarkdown,
+			Reason:            args.Reason,
+			AgentSessionID:    session.ID,
+			ActionKind:        string(session.ActionKind),
+			ModelVariantID:    session.ModelVariantID,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		return updated, writeActivityMetadata(input.ToolName, session, args.ContentID, item.CurrentRevision, updated.CurrentRevision, nil), nil
+	case "insert_into_chapter":
+		args, err := decodeStructuredWriteArgs(input.ArgumentsJSON)
+		if err != nil {
+			return nil, nil, err
+		}
+		item, err := s.requireContentKind(ctx, input.ProjectID, args.ContentID, project.KindChapter)
+		if err != nil {
+			return nil, nil, err
+		}
+		updated, err := s.projectService.InsertIntoContent(ctx, project.StructuredWriteInput{
+			ProjectID:         input.ProjectID,
+			ContentID:         args.ContentID,
+			ExpectedRevision:  args.ExpectedRevision,
+			GeneratedMarkdown: args.GeneratedMarkdown,
+			InsertPosition:    args.InsertPosition,
+			Reason:            args.Reason,
+			AgentSessionID:    session.ID,
+			ActionKind:        string(session.ActionKind),
+			ModelVariantID:    session.ModelVariantID,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		return updated, writeActivityMetadata(input.ToolName, session, args.ContentID, item.CurrentRevision, updated.CurrentRevision, map[string]any{
+			"insertPosition": args.InsertPosition,
+		}), nil
+	case "replace_selection":
+		args, err := decodeStructuredWriteArgs(input.ArgumentsJSON)
+		if err != nil {
+			return nil, nil, err
+		}
+		item, err := s.requireContentKind(ctx, input.ProjectID, args.ContentID, project.KindChapter)
+		if err != nil {
+			return nil, nil, err
+		}
+		updated, err := s.projectService.ReplaceContentRange(ctx, project.StructuredWriteInput{
+			ProjectID:         input.ProjectID,
+			ContentID:         args.ContentID,
+			ExpectedRevision:  args.ExpectedRevision,
+			GeneratedMarkdown: args.GeneratedMarkdown,
+			SelectionStart:    args.SelectionStart,
+			SelectionEnd:      args.SelectionEnd,
+			Reason:            args.Reason,
+			AgentSessionID:    session.ID,
+			ActionKind:        string(session.ActionKind),
+			ModelVariantID:    session.ModelVariantID,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		return updated, writeActivityMetadata(input.ToolName, session, args.ContentID, item.CurrentRevision, updated.CurrentRevision, map[string]any{
+			"selectionStart": args.SelectionStart,
+			"selectionEnd":   args.SelectionEnd,
+		}), nil
+	case "update_story_bible_entry":
+		args, err := decodeStructuredWriteArgs(input.ArgumentsJSON)
+		if err != nil {
+			return nil, nil, err
+		}
+		item, err := s.requireContentKind(ctx, input.ProjectID, args.ContentID, project.KindStoryBibleEntry)
+		if err != nil {
+			return nil, nil, err
+		}
+		updated, err := s.projectService.ReplaceContentRange(ctx, project.StructuredWriteInput{
+			ProjectID:         input.ProjectID,
+			ContentID:         args.ContentID,
+			ExpectedRevision:  args.ExpectedRevision,
+			GeneratedMarkdown: args.GeneratedMarkdown,
+			SelectionStart:    0,
+			SelectionEnd:      int64(len(item.BodyMarkdown)),
+			Reason:            args.Reason,
+			AgentSessionID:    session.ID,
+			ActionKind:        string(session.ActionKind),
+			ModelVariantID:    session.ModelVariantID,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		return updated, writeActivityMetadata(input.ToolName, session, args.ContentID, item.CurrentRevision, updated.CurrentRevision, nil), nil
+	case "update_entry_section":
+		var args struct {
+			ContentID         string `json:"contentId"`
+			Heading           string `json:"heading"`
+			GeneratedMarkdown string `json:"generatedMarkdown"`
+			Reason            string `json:"reason"`
+		}
+		if err := decodeToolArgs(input.ArgumentsJSON, &args); err != nil {
+			return nil, nil, err
+		}
+		if strings.TrimSpace(args.ContentID) == "" {
+			return nil, nil, fmt.Errorf("contentId is required")
+		}
+		if strings.TrimSpace(args.Heading) == "" {
+			return nil, nil, fmt.Errorf("heading is required")
+		}
+		if strings.TrimSpace(args.Reason) == "" {
+			return nil, nil, fmt.Errorf("reason is required")
+		}
+		if _, err := s.requireContentKind(ctx, input.ProjectID, args.ContentID, project.KindStoryBibleEntry); err != nil {
+			return nil, nil, err
+		}
+		section, err := s.projectService.UpdateEntrySectionBody(ctx, project.UpdateEntrySectionInput{
+			ProjectID:      input.ProjectID,
+			ContentID:      args.ContentID,
+			Heading:        args.Heading,
+			BodyMarkdown:   args.GeneratedMarkdown,
+			AgentSessionID: session.ID,
+			ActionKind:     string(session.ActionKind),
+			ModelVariantID: session.ModelVariantID,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		return section, writeActivityMetadata(input.ToolName, session, args.ContentID, 0, 0, map[string]any{
+			"heading": args.Heading,
+		}), nil
+	default:
+		return nil, nil, fmt.Errorf("unknown write tool %q", input.ToolName)
+	}
+}
+
+type structuredWriteArgs struct {
+	ContentID         string `json:"contentId"`
+	ExpectedRevision  int64  `json:"expectedRevision"`
+	GeneratedMarkdown string `json:"generatedMarkdown"`
+	InsertPosition    int64  `json:"insertPosition"`
+	SelectionStart    int64  `json:"selectionStart"`
+	SelectionEnd      int64  `json:"selectionEnd"`
+	Reason            string `json:"reason"`
+}
+
+func decodeStructuredWriteArgs(argumentsJSON string) (structuredWriteArgs, error) {
+	var args structuredWriteArgs
+	if err := decodeToolArgs(argumentsJSON, &args); err != nil {
+		return structuredWriteArgs{}, err
+	}
+	if strings.TrimSpace(args.ContentID) == "" {
+		return structuredWriteArgs{}, fmt.Errorf("contentId is required")
+	}
+	if args.ExpectedRevision <= 0 {
+		return structuredWriteArgs{}, fmt.Errorf("expectedRevision is required")
+	}
+	if strings.TrimSpace(args.Reason) == "" {
+		return structuredWriteArgs{}, fmt.Errorf("reason is required")
+	}
+	return args, nil
+}
+
+func (s *Service) requireContentKind(ctx context.Context, projectID, contentID string, want project.ContentKind) (project.ContentItem, error) {
+	item, err := s.projectService.GetContent(ctx, projectID, contentID)
+	if err != nil {
+		return project.ContentItem{}, err
+	}
+	if item.Kind != want {
+		return project.ContentItem{}, fmt.Errorf("content %q kind = %q, want %q", contentID, item.Kind, want)
+	}
+	return item, nil
+}
+
+func writeActivityMetadata(operationKind string, session Session, targetContentID string, previousRevision, nextRevision int64, extra map[string]any) map[string]any {
+	metadata := map[string]any{
+		"targetContentId": targetContentID,
+		"operationKind":   operationKind,
+		"actionKind":      string(session.ActionKind),
+		"modelVariantId":  session.ModelVariantID,
+		"agentSessionId":  session.ID,
+	}
+	if previousRevision > 0 {
+		metadata["previousRevision"] = previousRevision
+	}
+	if nextRevision > 0 {
+		metadata["nextRevision"] = nextRevision
+	}
+	for key, value := range extra {
+		metadata[key] = value
+	}
+	return metadata
 }
 
 func decodeToolArgs(argumentsJSON string, out any) error {
@@ -502,6 +734,20 @@ func contentIDSchema() map[string]any {
 	}, "contentId")
 }
 
+func structuredWriteSchema(extra map[string]any, requiredExtra ...string) map[string]any {
+	properties := map[string]any{
+		"contentId":         map[string]any{"type": "string"},
+		"expectedRevision":  map[string]any{"type": "integer", "minimum": 1},
+		"generatedMarkdown": map[string]any{"type": "string"},
+		"reason":            map[string]any{"type": "string"},
+	}
+	for key, value := range extra {
+		properties[key] = value
+	}
+	required := append([]string{"contentId", "expectedRevision", "generatedMarkdown", "reason"}, requiredExtra...)
+	return objectSchema(properties, required...)
+}
+
 func firstLine(value string) string {
 	line, _, _ := strings.Cut(value, "\n")
 	return line
@@ -512,6 +758,15 @@ func boolInt(value bool) int64 {
 		return 1
 	}
 	return 0
+}
+
+func isWriteTool(name string) bool {
+	switch name {
+	case "append_to_chapter", "insert_into_chapter", "replace_selection", "update_story_bible_entry", "update_entry_section":
+		return true
+	default:
+		return false
+	}
 }
 
 func validToolContentKind(kind project.ContentKind) bool {

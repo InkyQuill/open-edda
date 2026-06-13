@@ -59,6 +59,7 @@ type Querier interface {
 	SearchContentCandidates(ctx context.Context, arg SearchContentCandidatesParams) ([]ContentItem, error)
 	TouchAgentSession(ctx context.Context, arg TouchAgentSessionParams) error
 	UpdateContentItemBody(ctx context.Context, arg UpdateContentItemBodyParams) (int64, error)
+	UpdateEntrySectionBody(ctx context.Context, arg UpdateEntrySectionBodyParams) (int64, error)
 	UpdateGenerationCandidateStatus(ctx context.Context, arg UpdateGenerationCandidateStatusParams) error
 	UpdateModelVariant(ctx context.Context, arg UpdateModelVariantParams) error
 	UpdateProviderConfig(ctx context.Context, arg UpdateProviderConfigParams) error

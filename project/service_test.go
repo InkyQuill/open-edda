@@ -146,6 +146,213 @@ func TestUpdateContentRollsBackWhenRevisionInsertFails(t *testing.T) {
 	}
 }
 
+func TestStructuredAppendToContentCreatesAgentRevision(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	chapter := createStructuredWriteContent(t, ctx, service, KindChapter, "Opening", "The lantern burned blue.", `{"status":"draft"}`)
+
+	updated, err := service.AppendToContent(ctx, StructuredWriteInput{
+		ProjectID:         "project-1",
+		ContentID:         chapter.ID,
+		ExpectedRevision:  1,
+		GeneratedMarkdown: "\nMira listened.",
+		Reason:            "continue opening",
+		AgentSessionID:    "session-1",
+		ActionKind:        "continuation",
+		ModelVariantID:    "model-1",
+	})
+	if err != nil {
+		t.Fatalf("AppendToContent() error = %v", err)
+	}
+	if updated.BodyMarkdown != "The lantern burned blue.\nMira listened." {
+		t.Fatalf("body = %q", updated.BodyMarkdown)
+	}
+	if updated.CurrentRevision != 2 {
+		t.Fatalf("revision = %d, want 2", updated.CurrentRevision)
+	}
+	assertLatestRevision(t, ctx, db, chapter.ID, revisionAssertion{
+		RevisionNumber:  2,
+		BodyMarkdown:    "The lantern burned blue.\nMira listened.",
+		Reason:          "continue opening",
+		CreatedBy:       "agent",
+		AgentSessionID:  "session-1",
+		ActionKind:      "continuation",
+		ModelVariantID:  "model-1",
+		SkillID:         "",
+		WantAgentFields: true,
+	})
+}
+
+func TestStructuredInsertIntoContentCreatesRevision(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	chapter := createStructuredWriteContent(t, ctx, service, KindChapter, "Opening", "The lantern burned blue.", `{}`)
+
+	updated, err := service.InsertIntoContent(ctx, StructuredWriteInput{
+		ProjectID:         "project-1",
+		ContentID:         chapter.ID,
+		ExpectedRevision:  1,
+		GeneratedMarkdown: " quietly",
+		InsertPosition:    int64(len("The lantern")),
+		Reason:            "insert tone",
+		AgentSessionID:    "session-1",
+		ActionKind:        "rewrite",
+		ModelVariantID:    "model-1",
+	})
+	if err != nil {
+		t.Fatalf("InsertIntoContent() error = %v", err)
+	}
+	if updated.BodyMarkdown != "The lantern quietly burned blue." {
+		t.Fatalf("body = %q", updated.BodyMarkdown)
+	}
+	if updated.CurrentRevision != 2 {
+		t.Fatalf("revision = %d, want 2", updated.CurrentRevision)
+	}
+	assertRevisionCount(t, ctx, db, chapter.ID, 2)
+}
+
+func TestStructuredReplaceContentRangeCreatesRevision(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	chapter := createStructuredWriteContent(t, ctx, service, KindChapter, "Opening", "The lantern burned blue.", `{}`)
+
+	updated, err := service.ReplaceContentRange(ctx, StructuredWriteInput{
+		ProjectID:         "project-1",
+		ContentID:         chapter.ID,
+		ExpectedRevision:  1,
+		GeneratedMarkdown: "glowed green",
+		SelectionStart:    int64(len("The lantern ")),
+		SelectionEnd:      int64(len("The lantern burned blue")),
+		Reason:            "replace image",
+		AgentSessionID:    "session-1",
+		ActionKind:        "rewrite",
+		ModelVariantID:    "model-1",
+	})
+	if err != nil {
+		t.Fatalf("ReplaceContentRange() error = %v", err)
+	}
+	if updated.BodyMarkdown != "The lantern glowed green." {
+		t.Fatalf("body = %q", updated.BodyMarkdown)
+	}
+	if updated.CurrentRevision != 2 {
+		t.Fatalf("revision = %d, want 2", updated.CurrentRevision)
+	}
+	assertRevisionCount(t, ctx, db, chapter.ID, 2)
+}
+
+func TestStructuredUpdateStoryBibleEntryBodyCreatesRevision(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	entry := createStructuredWriteContent(t, ctx, service, KindStoryBibleEntry, "Mira", "An alchemist.", `{"type":"character"}`)
+
+	updated, err := service.ReplaceContentRange(ctx, StructuredWriteInput{
+		ProjectID:         "project-1",
+		ContentID:         entry.ID,
+		ExpectedRevision:  1,
+		GeneratedMarkdown: "An alchemist with a precise memory.",
+		SelectionStart:    0,
+		SelectionEnd:      int64(len("An alchemist.")),
+		Reason:            "update bible entry",
+		AgentSessionID:    "session-1",
+		ActionKind:        "rewrite",
+		ModelVariantID:    "model-1",
+	})
+	if err != nil {
+		t.Fatalf("ReplaceContentRange(entry) error = %v", err)
+	}
+	if updated.BodyMarkdown != "An alchemist with a precise memory." {
+		t.Fatalf("body = %q", updated.BodyMarkdown)
+	}
+	if updated.CurrentRevision != 2 {
+		t.Fatalf("revision = %d, want 2", updated.CurrentRevision)
+	}
+	assertRevisionCount(t, ctx, db, entry.ID, 2)
+}
+
+func TestStructuredWriteStaleExpectedRevisionReturnsConflict(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	chapter := createStructuredWriteContent(t, ctx, service, KindChapter, "Opening", "The lantern burned blue.", `{}`)
+	if _, err := service.AppendToContent(ctx, StructuredWriteInput{
+		ProjectID:         "project-1",
+		ContentID:         chapter.ID,
+		ExpectedRevision:  1,
+		GeneratedMarkdown: "\nMira listened.",
+		Reason:            "first append",
+		AgentSessionID:    "session-1",
+		ActionKind:        "continuation",
+		ModelVariantID:    "model-1",
+	}); err != nil {
+		t.Fatalf("AppendToContent(first) error = %v", err)
+	}
+
+	_, err := service.AppendToContent(ctx, StructuredWriteInput{
+		ProjectID:         "project-1",
+		ContentID:         chapter.ID,
+		ExpectedRevision:  1,
+		GeneratedMarkdown: "\nStale text.",
+		Reason:            "stale append",
+		AgentSessionID:    "session-1",
+		ActionKind:        "continuation",
+		ModelVariantID:    "model-1",
+	})
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("AppendToContent(stale) error = %v, want ErrConflict", err)
+	}
+}
+
+func TestUpdateEntrySectionBodyUpdatesSectionAndRecordsActivity(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	entry := createStructuredWriteContent(t, ctx, service, KindStoryBibleEntry, "Mira", "An alchemist.", `{"type":"character"}`)
+	if err := service.CreateEntrySection(ctx, CreateEntrySectionInput{
+		ProjectID:     "project-1",
+		ContentItemID: entry.ID,
+		Heading:       "Motivation",
+		BodyMarkdown:  "Find the ash compass.",
+		SortOrder:     1,
+	}); err != nil {
+		t.Fatalf("CreateEntrySection() error = %v", err)
+	}
+
+	section, err := service.UpdateEntrySectionBody(ctx, UpdateEntrySectionInput{
+		ProjectID:      "project-1",
+		ContentID:      entry.ID,
+		Heading:        "Motivation",
+		BodyMarkdown:   "Protect the glass city.",
+		AgentSessionID: "session-1",
+		ActionKind:     "rewrite",
+		ModelVariantID: "model-1",
+	})
+	if err != nil {
+		t.Fatalf("UpdateEntrySectionBody() error = %v", err)
+	}
+	if section.BodyMarkdown != "Protect the glass city." {
+		t.Fatalf("section body = %q", section.BodyMarkdown)
+	}
+
+	sections, err := service.ListEntrySections(ctx, "project-1", entry.ID)
+	if err != nil {
+		t.Fatalf("ListEntrySections() error = %v", err)
+	}
+	if len(sections) != 1 || sections[0].BodyMarkdown != "Protect the glass city." {
+		t.Fatalf("sections = %#v", sections)
+	}
+	assertSectionActivity(t, ctx, db, entry.ID, "Motivation")
+}
+
 func TestProjectMapReturnsContentSectionsAndRelations(t *testing.T) {
 	db := openMigratedTestDB(t)
 	service := NewService(db)
@@ -440,10 +647,152 @@ func openMigratedTestDB(t *testing.T) *sql.DB {
 		VALUES ('author-1', 'author@example.com', 'hash', '2026-06-13T00:00:00Z');
 		INSERT INTO story_projects (id, author_id, title, slug, language, created_at, updated_at)
 		VALUES ('project-1', 'author-1', 'Test', 'test', 'en', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z');
+		INSERT INTO provider_configs (id, author_id, name, base_url, api_key_encrypted, created_at, updated_at)
+		VALUES ('provider-1', 'author-1', 'Test Provider', 'http://example.test', 'encrypted', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z');
+		INSERT INTO model_variants (
+			id, provider_config_id, name, model, temperature, max_output_tokens,
+			context_window_tokens, input_price_per_million, output_price_per_million,
+			cache_read_price_per_million, cache_write_price_per_million,
+			request_token_field, reasoning_format, compatibility_json, created_at, updated_at
+		) VALUES (
+			'model-1', 'provider-1', 'Test Model', 'test-model', 0.7, 2048,
+			8192, 0, 0, 0, 0, 'max_tokens', '', '{}', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z'
+		);
+		INSERT INTO agent_sessions (id, project_id, title, action_kind, model_variant_id, apply_mode, created_at, updated_at)
+		VALUES ('session-1', 'project-1', 'Test Session', 'rewrite', 'model-1', 'direct_apply', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z');
 	`)
 	if err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
 
 	return db
+}
+
+func createStructuredWriteContent(t *testing.T, ctx context.Context, service *Service, kind ContentKind, title, body, metadata string) ContentItem {
+	t.Helper()
+
+	item, err := service.CreateContent(ctx, CreateContentInput{
+		ProjectID:    "project-1",
+		Kind:         kind,
+		Title:        title,
+		BodyMarkdown: body,
+		MetadataJSON: metadata,
+		CreatedBy:    "author",
+	})
+	if err != nil {
+		t.Fatalf("CreateContent(%q) error = %v", title, err)
+	}
+	return item
+}
+
+type revisionAssertion struct {
+	RevisionNumber  int64
+	BodyMarkdown    string
+	Reason          string
+	CreatedBy       string
+	AgentSessionID  string
+	ActionKind      string
+	ModelVariantID  string
+	SkillID         string
+	WantAgentFields bool
+}
+
+func assertLatestRevision(t *testing.T, ctx context.Context, db *sql.DB, contentID string, want revisionAssertion) {
+	t.Helper()
+
+	var revisionNumber int64
+	var bodyMarkdown, reason, createdBy, actionKind, skillID string
+	var agentSessionID, modelVariantID sql.NullString
+	err := db.QueryRowContext(ctx, `
+		SELECT revision_number, body_markdown, reason, created_by, agent_session_id, action_kind, model_variant_id, skill_id
+		FROM revisions
+		WHERE content_item_id = ?
+		ORDER BY revision_number DESC
+		LIMIT 1
+	`, contentID).Scan(&revisionNumber, &bodyMarkdown, &reason, &createdBy, &agentSessionID, &actionKind, &modelVariantID, &skillID)
+	if err != nil {
+		t.Fatalf("load latest revision: %v", err)
+	}
+	if revisionNumber != want.RevisionNumber {
+		t.Fatalf("revision number = %d, want %d", revisionNumber, want.RevisionNumber)
+	}
+	if bodyMarkdown != want.BodyMarkdown {
+		t.Fatalf("revision body = %q, want %q", bodyMarkdown, want.BodyMarkdown)
+	}
+	if reason != want.Reason {
+		t.Fatalf("revision reason = %q, want %q", reason, want.Reason)
+	}
+	if createdBy != want.CreatedBy {
+		t.Fatalf("revision created_by = %q, want %q", createdBy, want.CreatedBy)
+	}
+	if want.WantAgentFields {
+		if !agentSessionID.Valid || agentSessionID.String != want.AgentSessionID {
+			t.Fatalf("agent_session_id = %#v, want %q", agentSessionID, want.AgentSessionID)
+		}
+		if actionKind != want.ActionKind {
+			t.Fatalf("action_kind = %q, want %q", actionKind, want.ActionKind)
+		}
+		if !modelVariantID.Valid || modelVariantID.String != want.ModelVariantID {
+			t.Fatalf("model_variant_id = %#v, want %q", modelVariantID, want.ModelVariantID)
+		}
+		if skillID != want.SkillID {
+			t.Fatalf("skill_id = %q, want %q", skillID, want.SkillID)
+		}
+	}
+}
+
+func assertRevisionCount(t *testing.T, ctx context.Context, db *sql.DB, contentID string, want int) {
+	t.Helper()
+
+	var count int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM revisions WHERE content_item_id = ?`, contentID).Scan(&count); err != nil {
+		t.Fatalf("count revisions: %v", err)
+	}
+	if count != want {
+		t.Fatalf("revision count = %d, want %d", count, want)
+	}
+}
+
+func assertSectionActivity(t *testing.T, ctx context.Context, db *sql.DB, contentID, heading string) {
+	t.Helper()
+
+	events, err := store.New(db).ListActivityEvents(ctx, store.ListActivityEventsParams{
+		ProjectID: "project-1",
+		Limit:     10,
+	})
+	if err != nil {
+		t.Fatalf("ListActivityEvents() error = %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("activity event count = %d, want 1", len(events))
+	}
+	event := events[0]
+	if event.EventType != "agent_entry_section_updated" {
+		t.Fatalf("event type = %q, want agent_entry_section_updated", event.EventType)
+	}
+	if !event.SessionID.Valid || event.SessionID.String != "session-1" {
+		t.Fatalf("event session = %#v, want session-1", event.SessionID)
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(event.MetadataJson), &metadata); err != nil {
+		t.Fatalf("unmarshal activity metadata: %v", err)
+	}
+	if metadata["targetContentId"] != contentID {
+		t.Fatalf("targetContentId = %#v, want %q", metadata["targetContentId"], contentID)
+	}
+	if metadata["heading"] != heading {
+		t.Fatalf("heading = %#v, want %q", metadata["heading"], heading)
+	}
+	if metadata["operationKind"] != "update_entry_section" {
+		t.Fatalf("operationKind = %#v, want update_entry_section", metadata["operationKind"])
+	}
+	if metadata["actionKind"] != "rewrite" {
+		t.Fatalf("actionKind = %#v, want rewrite", metadata["actionKind"])
+	}
+	if metadata["modelVariantId"] != "model-1" {
+		t.Fatalf("modelVariantId = %#v, want model-1", metadata["modelVariantId"])
+	}
+	if metadata["agentSessionId"] != "session-1" {
+		t.Fatalf("agentSessionId = %#v, want session-1", metadata["agentSessionId"])
+	}
 }

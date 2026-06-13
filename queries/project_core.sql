@@ -71,6 +71,18 @@ WHERE entry_sections.content_item_id = sqlc.arg(content_item_id)
   AND content_items.project_id = sqlc.arg(project_id)
 ORDER BY entry_sections.sort_order ASC;
 
+-- name: UpdateEntrySectionBody :execrows
+UPDATE entry_sections
+SET body_markdown = sqlc.arg(body_markdown)
+WHERE content_item_id = sqlc.arg(content_item_id)
+  AND heading = sqlc.arg(heading)
+  AND EXISTS (
+    SELECT 1
+    FROM content_items
+    WHERE content_items.id = entry_sections.content_item_id
+      AND content_items.project_id = sqlc.arg(project_id)
+  );
+
 -- name: CreateEntryRelation :exec
 INSERT INTO entry_relations (
   id, project_id, source_item_id, target_item_id, target_title, relation_type, created_at
