@@ -642,9 +642,14 @@ func (s *Service) RunChatTurn(ctx context.Context, input ChatTurnInput) (ChatTur
 		if usageMissing {
 			usage = Usage{}
 		}
+		requestMetadata, err := s.promptRecordRequestMetadata(ctx, input.ProjectID, input.SessionID)
+		if err != nil {
+			s.recordPostResponseFailure(ctx, input.ProjectID, input.SessionID, "prompt_record_failed", "Failed to build prompt record metadata", err)
+		}
 		requestJSON, err := marshalJSON(map[string]any{
 			"providerName": providerConfig.Name,
 			"modelName":    model.Model,
+			"metadata":     requestMetadata,
 			"requests":     requests,
 		})
 		if err != nil {
@@ -677,6 +682,34 @@ func (s *Service) RunChatTurn(ctx context.Context, input ChatTurnInput) (ChatTur
 		AssistantMessage: assistantMessage,
 		PromptRecordID:   promptRecordID,
 	}, nil
+}
+
+func (s *Service) promptRecordRequestMetadata(ctx context.Context, projectID, sessionID string) (map[string]any, error) {
+	metadata := map[string]any{
+		"selectedSkillIds":    []string{},
+		"availableSkillCount": 0,
+	}
+	if s.skillService == nil {
+		return metadata, nil
+	}
+	available, err := s.skillService.List(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list skills: %w", err)
+	}
+	metadata["availableSkillCount"] = len(available)
+	if sessionID == "" {
+		return metadata, nil
+	}
+	selected, err := s.skillService.ListSessionSkills(ctx, projectID, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("list session skills: %w", err)
+	}
+	selectedIDs := make([]string, 0, len(selected))
+	for _, item := range selected {
+		selectedIDs = append(selectedIDs, item.ID)
+	}
+	metadata["selectedSkillIds"] = selectedIDs
+	return metadata, nil
 }
 
 func (s *Service) RunContinuation(ctx context.Context, input ContinuationInput) (ContinuationResult, error) {

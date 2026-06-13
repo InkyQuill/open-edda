@@ -87,6 +87,85 @@ func TestCreateSessionPersistsSkillSelection(t *testing.T) {
 	}
 }
 
+func TestPromptRecordRequestMetadataIncludesSkillSelection(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Prompt Skill Metadata Project")
+	provider := &fakeChatProvider{
+		responses: []CompletionResponse{
+			{
+				ID: "completion-final",
+				Message: CompletionMessage{
+					Role:    MessageRoleAssistant,
+					Content: "Use the selected style pass.",
+				},
+				FinishReason:   "stop",
+				UsageAvailable: true,
+			},
+		},
+	}
+	service := NewService(db, projectService, provider)
+	skillService := skill.NewService(db)
+	service.SetSkillService(skillService)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 30)
+	selectedSkill := installPromptSkill(t, ctx, skillService, storyProject.ID, skill.ImportedSkill{
+		Name:                 "style-pass",
+		Description:          "Use when rewriting prose for style.",
+		InstructionsMarkdown: "These instructions must stay out of request metadata.",
+	})
+	_ = installPromptSkill(t, ctx, skillService, storyProject.ID, skill.ImportedSkill{
+		Name:        "tone-check",
+		Description: "Use when checking tone.",
+	})
+	session, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:      storyProject.ID,
+		Title:          "Skill chat",
+		ActionKind:     ActionKindChat,
+		ModelVariantID: model.ID,
+		ApplyMode:      ApplyModePreview,
+		SkillIDs:       []string{selectedSkill.ID},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	if _, err := service.RunChatTurn(ctx, ChatTurnInput{
+		ProjectID:    storyProject.ID,
+		SessionID:    session.ID,
+		BodyMarkdown: "Apply the style pass.",
+	}); err != nil {
+		t.Fatalf("RunChatTurn() error = %v", err)
+	}
+
+	records, err := store.New(db).ListPromptRecords(ctx, store.ListPromptRecordsParams{ProjectID: storyProject.ID, Limit: 10})
+	if err != nil {
+		t.Fatalf("ListPromptRecords() error = %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("prompt record count = %d, want 1", len(records))
+	}
+	var request map[string]any
+	if err := json.Unmarshal([]byte(records[0].RequestJson), &request); err != nil {
+		t.Fatalf("unmarshal request JSON: %v", err)
+	}
+	metadata, ok := request["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("request metadata = %#v, want object", request["metadata"])
+	}
+	if metadata["availableSkillCount"] != float64(2) {
+		t.Fatalf("availableSkillCount = %#v, want 2", metadata["availableSkillCount"])
+	}
+	selectedIDs, ok := metadata["selectedSkillIds"].([]any)
+	if !ok || len(selectedIDs) != 1 || selectedIDs[0] != selectedSkill.ID {
+		t.Fatalf("selectedSkillIds = %#v, want [%q]", metadata["selectedSkillIds"], selectedSkill.ID)
+	}
+	if strings.Contains(records[0].RequestJson, "These instructions must stay out") {
+		t.Fatalf("request metadata copied skill instructions: %s", records[0].RequestJson)
+	}
+}
+
 func TestCreateSessionWithInvalidSkillIDDoesNotPersistSession(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()

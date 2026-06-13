@@ -3,6 +3,7 @@ package skill
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
@@ -94,6 +95,27 @@ func (s *Service) Install(ctx context.Context, input InstallInput) (Skill, error
 			}); err != nil {
 				return fmt.Errorf("create routing hint: %w", err)
 			}
+		}
+		metadataJSON, err := marshalJSON(map[string]any{
+			"skillId":         skillID,
+			"name":            input.Imported.Name,
+			"scriptCount":     input.Imported.ScriptCount,
+			"scriptsDisabled": input.Imported.ScriptsDisabled,
+			"sourceType":      string(input.SourceType),
+		})
+		if err != nil {
+			return err
+		}
+		if err := q.CreateActivityEvent(ctx, store.CreateActivityEventParams{
+			ID:           newID("event"),
+			ProjectID:    input.ProjectID,
+			SessionID:    sql.NullString{},
+			EventType:    "skill_imported",
+			Summary:      "Imported skill " + input.Imported.Name,
+			MetadataJson: metadataJSON,
+			CreatedAt:    now,
+		}); err != nil {
+			return fmt.Errorf("create skill imported event: %w", err)
 		}
 		return nil
 	})
@@ -207,6 +229,33 @@ func (s *Service) SelectSessionSkills(ctx context.Context, input SelectSessionSk
 			}
 			if rowsAffected == 0 {
 				return ErrInvalidInput
+			}
+			selected, err := q.GetSkillByProjectID(ctx, store.GetSkillByProjectIDParams{
+				ProjectID: input.ProjectID,
+				ID:        skillID,
+			})
+			if err != nil {
+				return fmt.Errorf("get selected skill: %w", err)
+			}
+			metadataJSON, err := marshalJSON(map[string]any{
+				"skillId":         selected.ID,
+				"name":            selected.Name,
+				"scriptCount":     selected.ScriptCount,
+				"scriptsDisabled": selected.ScriptsDisabled != 0,
+			})
+			if err != nil {
+				return err
+			}
+			if err := q.CreateActivityEvent(ctx, store.CreateActivityEventParams{
+				ID:           newID("event"),
+				ProjectID:    input.ProjectID,
+				SessionID:    sql.NullString{String: input.SessionID, Valid: true},
+				EventType:    "skill_selected",
+				Summary:      "Selected skill " + selected.Name,
+				MetadataJson: metadataJSON,
+				CreatedAt:    now,
+			}); err != nil {
+				return fmt.Errorf("create skill selected event: %w", err)
 			}
 		}
 		return nil
@@ -408,6 +457,14 @@ func defaultJSON(value string) string {
 		return "{}"
 	}
 	return value
+}
+
+func marshalJSON(value any) (string, error) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return "", fmt.Errorf("marshal JSON: %w", err)
+	}
+	return string(data), nil
 }
 
 func emptyDefault(value string, fallback string) string {

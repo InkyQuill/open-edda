@@ -680,6 +680,77 @@ func TestExecuteToolValidatesReadEntrySectionArgumentsAndKind(t *testing.T) {
 	}
 }
 
+func TestExecuteSkillToolRecordsSkillLoadedActivityAndKeepsScriptsDisabled(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Skill Tool Activity Project")
+	service := NewService(db, projectService, nil)
+	skillService := skill.NewService(db)
+	service.SetSkillService(skillService)
+	session := createTestSession(t, ctx, service, storyProject.ID)
+	installed := installToolSkill(t, ctx, skillService, storyProject.ID)
+
+	result, err := service.ExecuteTool(ctx, ToolCallInput{
+		ProjectID:     storyProject.ID,
+		SessionID:     session.ID,
+		ToolCallID:    "call-load-skill",
+		ToolName:      "skill",
+		ArgumentsJSON: `{"skillId":"` + installed.ID + `"}`,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool(skill) error = %v", err)
+	}
+	if result.ToolName != "skill" {
+		t.Fatalf("tool name = %q, want skill", result.ToolName)
+	}
+	if !strings.Contains(result.ModelVisibleMarkdown, `disabled="true"`) {
+		t.Fatalf("model-visible markdown missing disabled script status:\n%s", result.ModelVisibleMarkdown)
+	}
+	if strings.Contains(result.ModelVisibleMarkdown, "echo should-not-execute") {
+		t.Fatalf("model-visible markdown included script body:\n%s", result.ModelVisibleMarkdown)
+	}
+
+	events, err := store.New(db).ListActivityEvents(ctx, store.ListActivityEventsParams{ProjectID: storyProject.ID, Limit: 10})
+	if err != nil {
+		t.Fatalf("ListActivityEvents() error = %v", err)
+	}
+	var loadedEvent store.ActivityEvent
+	found := false
+	for _, event := range events {
+		if event.EventType == "skill_loaded" {
+			loadedEvent = event
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("events = %#v, want skill_loaded", events)
+	}
+	if !loadedEvent.SessionID.Valid || loadedEvent.SessionID.String != session.ID {
+		t.Fatalf("loaded event session ID = %#v, want %q", loadedEvent.SessionID, session.ID)
+	}
+	if loadedEvent.Summary != "Loaded skill style-pass" {
+		t.Fatalf("loaded event summary = %q", loadedEvent.Summary)
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(loadedEvent.MetadataJson), &metadata); err != nil {
+		t.Fatalf("unmarshal metadata: %v", err)
+	}
+	if metadata["skillId"] != installed.ID {
+		t.Fatalf("metadata skillId = %#v, want %q", metadata["skillId"], installed.ID)
+	}
+	if metadata["name"] != "style-pass" {
+		t.Fatalf("metadata name = %#v, want style-pass", metadata["name"])
+	}
+	if metadata["scriptCount"] != float64(1) {
+		t.Fatalf("metadata scriptCount = %#v, want 1", metadata["scriptCount"])
+	}
+	if metadata["scriptsDisabled"] != true {
+		t.Fatalf("metadata scriptsDisabled = %#v, want true", metadata["scriptsDisabled"])
+	}
+}
+
 func TestExecuteToolRollsBackActivityWhenArtifactInsertFails(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()
@@ -1059,10 +1130,18 @@ func assertSkillToolActivityAndArtifact(t *testing.T, ctx context.Context, db *s
 	if err != nil {
 		t.Fatalf("ListActivityEvents() error = %v", err)
 	}
-	if len(events) != 1 {
-		t.Fatalf("activity event count = %d, want 1", len(events))
+	var event store.ActivityEvent
+	found := false
+	for _, candidate := range events {
+		if candidate.EventType == "skill_loaded" {
+			event = candidate
+			found = true
+			break
+		}
 	}
-	event := events[0]
+	if !found {
+		t.Fatalf("events = %#v, want skill_loaded", events)
+	}
 	if event.EventType != "skill_loaded" {
 		t.Fatalf("activity event type = %q, want skill_loaded", event.EventType)
 	}

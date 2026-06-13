@@ -3,6 +3,7 @@ package skill
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -161,6 +162,49 @@ func TestServiceInstallsListsGetsReimportsAndRendersSkill(t *testing.T) {
 	}
 }
 
+func TestServiceInstallRecordsSkillImportedActivity(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	installed, err := service.Install(ctx, InstallInput{
+		ProjectID:   "project-1",
+		SourceType:  SourceTypeUpload,
+		SourceLabel: "style-pass.zip",
+		Imported:    importedStylePass("Rewrite template"),
+	})
+	if err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+
+	events, err := store.New(db).ListActivityEvents(ctx, store.ListActivityEventsParams{ProjectID: "project-1", Limit: 10})
+	if err != nil {
+		t.Fatalf("ListActivityEvents() error = %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("activity event count = %d, want 1", len(events))
+	}
+	event := events[0]
+	if event.EventType != "skill_imported" {
+		t.Fatalf("event type = %q, want skill_imported", event.EventType)
+	}
+	if event.SessionID.Valid {
+		t.Fatalf("event session ID = %#v, want empty", event.SessionID)
+	}
+	if event.Summary != "Imported skill style-pass" {
+		t.Fatalf("event summary = %q", event.Summary)
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(event.MetadataJson), &metadata); err != nil {
+		t.Fatalf("unmarshal metadata: %v", err)
+	}
+	assertMetadataString(t, metadata, "skillId", installed.ID)
+	assertMetadataString(t, metadata, "name", "style-pass")
+	assertMetadataFloat(t, metadata, "scriptCount", 1)
+	assertMetadataBool(t, metadata, "scriptsDisabled", true)
+	assertMetadataString(t, metadata, "sourceType", "upload")
+}
+
 func TestServiceSelectsSessionSkillsAndRejectsCrossProjectSkill(t *testing.T) {
 	db := openMigratedTestDB(t)
 	service := NewService(db)
@@ -220,6 +264,58 @@ func TestServiceSelectsSessionSkillsAndRejectsCrossProjectSkill(t *testing.T) {
 	}
 }
 
+func TestServiceSelectSessionSkillsRecordsSkillSelectedActivity(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	selectedSkill, err := service.Install(ctx, InstallInput{
+		ProjectID:   "project-1",
+		SourceType:  SourceTypeUpload,
+		SourceLabel: "style-pass.zip",
+		Imported:    importedStylePass("Rewrite template"),
+	})
+	if err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+
+	if _, err := service.SelectSessionSkills(ctx, SelectSessionSkillsInput{
+		ProjectID: "project-1",
+		SessionID: "session-1",
+		SkillIDs:  []string{selectedSkill.ID},
+	}); err != nil {
+		t.Fatalf("SelectSessionSkills() error = %v", err)
+	}
+
+	events, err := store.New(db).ListActivityEvents(ctx, store.ListActivityEventsParams{ProjectID: "project-1", Limit: 10})
+	if err != nil {
+		t.Fatalf("ListActivityEvents() error = %v", err)
+	}
+	var selectedEvent store.ActivityEvent
+	found := false
+	for _, event := range events {
+		if event.EventType == "skill_selected" {
+			selectedEvent = event
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("events = %#v, want skill_selected", events)
+	}
+	if !selectedEvent.SessionID.Valid || selectedEvent.SessionID.String != "session-1" {
+		t.Fatalf("event session ID = %#v, want session-1", selectedEvent.SessionID)
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(selectedEvent.MetadataJson), &metadata); err != nil {
+		t.Fatalf("unmarshal metadata: %v", err)
+	}
+	assertMetadataString(t, metadata, "skillId", selectedSkill.ID)
+	assertMetadataString(t, metadata, "name", "style-pass")
+	assertMetadataFloat(t, metadata, "scriptCount", 1)
+	assertMetadataBool(t, metadata, "scriptsDisabled", true)
+}
+
 func importedStylePass(templateBody string) ImportedSkill {
 	return ImportedSkill{
 		Name:                 "style-pass",
@@ -255,6 +351,27 @@ func importedStylePass(templateBody string) ImportedSkill {
 				Priority:    10,
 			},
 		},
+	}
+}
+
+func assertMetadataString(t *testing.T, metadata map[string]any, key, want string) {
+	t.Helper()
+	if metadata[key] != want {
+		t.Fatalf("metadata[%s] = %#v, want %q", key, metadata[key], want)
+	}
+}
+
+func assertMetadataFloat(t *testing.T, metadata map[string]any, key string, want float64) {
+	t.Helper()
+	if metadata[key] != want {
+		t.Fatalf("metadata[%s] = %#v, want %v", key, metadata[key], want)
+	}
+}
+
+func assertMetadataBool(t *testing.T, metadata map[string]any, key string, want bool) {
+	t.Helper()
+	if metadata[key] != want {
+		t.Fatalf("metadata[%s] = %#v, want %v", key, metadata[key], want)
 	}
 }
 
