@@ -376,6 +376,37 @@ func TestExportElysiumLayoutRoundTripsAmbiguousRelationTargets(t *testing.T) {
 	}
 }
 
+func TestExportElysiumLayoutRoundTripsEmptyStringLists(t *testing.T) {
+	root := t.TempDir()
+	if err := ExportElysiumLayout(root, []ImportedItem{
+		{
+			Kind:         string(project.KindWritingBrief),
+			Title:        "Genre",
+			BodyMarkdown: "Fantasy.",
+			MetadataJSON: `{"tags":[],"type":"genre"}`,
+		},
+	}); err != nil {
+		t.Fatalf("ExportElysiumLayout() error = %v", err)
+	}
+
+	items, err := ImportElysiumLayout(root)
+	if err != nil {
+		t.Fatalf("ImportElysiumLayout() error = %v", err)
+	}
+
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(items[0].MetadataJSON), &metadata); err != nil {
+		t.Fatalf("metadata json = %q: %v", items[0].MetadataJSON, err)
+	}
+	tags, ok := metadata["tags"].([]any)
+	if !ok {
+		t.Fatalf("tags metadata = %#v, want empty list", metadata["tags"])
+	}
+	if len(tags) != 0 {
+		t.Fatalf("tags len = %d, want 0", len(tags))
+	}
+}
+
 func TestExportElysiumLayoutRejectsUnsupportedMetadataValues(t *testing.T) {
 	tests := []string{
 		`{"nested":{"value":true},"type":"genre"}`,

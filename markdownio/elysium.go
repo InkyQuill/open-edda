@@ -248,6 +248,11 @@ func renderFrontmatter(metadata map[string]any) (string, error) {
 func renderFrontmatterValue(builder *strings.Builder, key string, value any) error {
 	switch typed := value.(type) {
 	case []any:
+		if len(typed) == 0 {
+			builder.WriteString(key)
+			builder.WriteString(": []\n")
+			return nil
+		}
 		builder.WriteString(key)
 		builder.WriteString(":\n")
 		for _, item := range typed {
@@ -260,6 +265,11 @@ func renderFrontmatterValue(builder *strings.Builder, key string, value any) err
 			builder.WriteString("\n")
 		}
 	case []string:
+		if len(typed) == 0 {
+			builder.WriteString(key)
+			builder.WriteString(": []\n")
+			return nil
+		}
 		builder.WriteString(key)
 		builder.WriteString(":\n")
 		for _, item := range typed {
@@ -317,6 +327,8 @@ func parseFrontmatterScalar(value string) any {
 		return false
 	case "null":
 		return nil
+	case "[]":
+		return []string{}
 	}
 	if integer, err := strconv.ParseInt(value, 10, 64); err == nil {
 		return integer
