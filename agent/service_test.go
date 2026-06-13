@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,6 +13,346 @@ import (
 	"git.inkyquill.net/inky/writer/store"
 	"github.com/pressly/goose/v3"
 )
+
+func TestContinuationDirectApplyAppendsGeneratedProseAndCreatesRevision(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Continuation Project")
+	provider := &fakeChatProvider{responses: []CompletionResponse{quickActionResponse("completion-1", "\n\nNew paragraph.")}}
+	service := NewService(db, projectService, provider)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 0)
+	chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Opening", "Existing text.")
+
+	result, err := service.RunContinuation(ctx, ContinuationInput{
+		ProjectID:         storyProject.ID,
+		ContentID:         chapter.ID,
+		ModelVariantID:    model.ID,
+		ApplyMode:         ApplyModeDirectApply,
+		ExpectedRevision:  chapter.CurrentRevision,
+		ContinuationUnits: "paragraph",
+		ContinuationCount: 1,
+	})
+	if err != nil {
+		t.Fatalf("RunContinuation() error = %v", err)
+	}
+
+	if result.Candidate.ID != "" {
+		t.Fatalf("candidate ID = %q, want empty for direct apply", result.Candidate.ID)
+	}
+	updated := mustGetContent(t, ctx, projectService, storyProject.ID, chapter.ID)
+	if updated.BodyMarkdown != "Existing text.\n\nNew paragraph." {
+		t.Fatalf("chapter body = %q", updated.BodyMarkdown)
+	}
+	if updated.CurrentRevision != chapter.CurrentRevision+1 {
+		t.Fatalf("revision = %d, want %d", updated.CurrentRevision, chapter.CurrentRevision+1)
+	}
+	assertAgentRevision(t, ctx, db, chapter.ID, "Existing text.\n\nNew paragraph.", "continuation")
+}
+
+func TestContinuationPreviewCreatesPendingCandidateWithoutChangingChapter(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Continuation Preview Project")
+	provider := &fakeChatProvider{responses: []CompletionResponse{quickActionResponse("completion-1", " inserted")}}
+	service := NewService(db, projectService, provider)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 0)
+	chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Opening", "Existing text.")
+
+	result, err := service.RunContinuation(ctx, ContinuationInput{
+		ProjectID:         storyProject.ID,
+		ContentID:         chapter.ID,
+		ModelVariantID:    model.ID,
+		ApplyMode:         ApplyModePreview,
+		ExpectedRevision:  chapter.CurrentRevision,
+		InsertPosition:    int64(len("Existing")),
+		ContinuationUnits: "sentence",
+		ContinuationCount: 1,
+	})
+	if err != nil {
+		t.Fatalf("RunContinuation() error = %v", err)
+	}
+
+	if result.Candidate.Status != "pending" {
+		t.Fatalf("candidate status = %q, want pending", result.Candidate.Status)
+	}
+	if result.Candidate.OperationKind != "insert" {
+		t.Fatalf("operation kind = %q, want insert", result.Candidate.OperationKind)
+	}
+	if result.Candidate.InsertPosition != int64(len("Existing")) {
+		t.Fatalf("insert position = %d, want %d", result.Candidate.InsertPosition, len("Existing"))
+	}
+	updated := mustGetContent(t, ctx, projectService, storyProject.ID, chapter.ID)
+	if updated.BodyMarkdown != chapter.BodyMarkdown || updated.CurrentRevision != chapter.CurrentRevision {
+		t.Fatalf("chapter changed to body %q revision %d", updated.BodyMarkdown, updated.CurrentRevision)
+	}
+}
+
+func TestAcceptContinuationPreviewCommitsOneStructuredWriteAndMarksAccepted(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Continuation Accept Project")
+	provider := &fakeChatProvider{responses: []CompletionResponse{quickActionResponse("completion-1", "\n\nAccepted paragraph.")}}
+	service := NewService(db, projectService, provider)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 0)
+	chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Opening", "Existing text.")
+
+	preview, err := service.RunContinuation(ctx, ContinuationInput{
+		ProjectID:        storyProject.ID,
+		ContentID:        chapter.ID,
+		ModelVariantID:   model.ID,
+		ApplyMode:        ApplyModePreview,
+		ExpectedRevision: chapter.CurrentRevision,
+	})
+	if err != nil {
+		t.Fatalf("RunContinuation() error = %v", err)
+	}
+	result, err := service.AcceptCandidate(ctx, AcceptCandidateInput{
+		ProjectID:   storyProject.ID,
+		CandidateID: preview.Candidate.ID,
+	})
+	if err != nil {
+		t.Fatalf("AcceptCandidate() error = %v", err)
+	}
+
+	if result.Candidate.Status != "accepted" {
+		t.Fatalf("candidate status = %q, want accepted", result.Candidate.Status)
+	}
+	updated := mustGetContent(t, ctx, projectService, storyProject.ID, chapter.ID)
+	if updated.BodyMarkdown != "Existing text.\n\nAccepted paragraph." {
+		t.Fatalf("chapter body = %q", updated.BodyMarkdown)
+	}
+	assertRevisionCount(t, ctx, db, chapter.ID, 2)
+	assertActivityEvent(t, ctx, db, storyProject.ID, "generation_candidate_accepted")
+}
+
+func TestRewriteDirectApplyReplacesSelectionAndCreatesRevision(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Rewrite Project")
+	provider := &fakeChatProvider{responses: []CompletionResponse{quickActionResponse("completion-1", "bright city")}}
+	service := NewService(db, projectService, provider)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 0)
+	chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Opening", "The old city waited.")
+
+	result, err := service.RunRewrite(ctx, RewriteInput{
+		ProjectID:        storyProject.ID,
+		ContentID:        chapter.ID,
+		ModelVariantID:   model.ID,
+		ApplyMode:        ApplyModeDirectApply,
+		ExpectedRevision: chapter.CurrentRevision,
+		SelectionStart:   int64(strings.Index(chapter.BodyMarkdown, "old city")),
+		SelectionEnd:     int64(strings.Index(chapter.BodyMarkdown, "old city") + len("old city")),
+		Guidance:         "Make it vivid.",
+	})
+	if err != nil {
+		t.Fatalf("RunRewrite() error = %v", err)
+	}
+
+	if result.Candidate.ID != "" {
+		t.Fatalf("candidate ID = %q, want empty for direct apply", result.Candidate.ID)
+	}
+	updated := mustGetContent(t, ctx, projectService, storyProject.ID, chapter.ID)
+	if updated.BodyMarkdown != "The bright city waited." {
+		t.Fatalf("chapter body = %q", updated.BodyMarkdown)
+	}
+	assertAgentRevision(t, ctx, db, chapter.ID, "The bright city waited.", "rewrite")
+}
+
+func TestRewritePreviewCreatesDiffFriendlyPendingCandidateWithoutChangingChapter(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Rewrite Preview Project")
+	provider := &fakeChatProvider{responses: []CompletionResponse{quickActionResponse("completion-1", "bright city")}}
+	service := NewService(db, projectService, provider)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 0)
+	chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Opening", "The old city waited.")
+	start := int64(strings.Index(chapter.BodyMarkdown, "old city"))
+	end := start + int64(len("old city"))
+
+	result, err := service.RunRewrite(ctx, RewriteInput{
+		ProjectID:        storyProject.ID,
+		ContentID:        chapter.ID,
+		ModelVariantID:   model.ID,
+		ApplyMode:        ApplyModePreview,
+		ExpectedRevision: chapter.CurrentRevision,
+		SelectionStart:   start,
+		SelectionEnd:     end,
+	})
+	if err != nil {
+		t.Fatalf("RunRewrite() error = %v", err)
+	}
+
+	candidate := result.Candidate
+	if candidate.Status != "pending" || candidate.OperationKind != "replace" {
+		t.Fatalf("candidate status/kind = %q/%q, want pending/replace", candidate.Status, candidate.OperationKind)
+	}
+	if candidate.OriginalMarkdown != "old city" || candidate.GeneratedMarkdown != "bright city" {
+		t.Fatalf("candidate original/generated = %q/%q", candidate.OriginalMarkdown, candidate.GeneratedMarkdown)
+	}
+	if !strings.Contains(candidate.Reason, `"before":"The "`) || !strings.Contains(candidate.Reason, `"after":" waited."`) {
+		t.Fatalf("candidate reason is not diff-friendly payload: %s", candidate.Reason)
+	}
+	updated := mustGetContent(t, ctx, projectService, storyProject.ID, chapter.ID)
+	if updated.BodyMarkdown != chapter.BodyMarkdown || updated.CurrentRevision != chapter.CurrentRevision {
+		t.Fatalf("chapter changed to body %q revision %d", updated.BodyMarkdown, updated.CurrentRevision)
+	}
+}
+
+func TestRejectRewritePreviewMarksRejectedWithoutChangingChapter(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Rewrite Reject Project")
+	provider := &fakeChatProvider{responses: []CompletionResponse{quickActionResponse("completion-1", "bright city")}}
+	service := NewService(db, projectService, provider)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 0)
+	chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Opening", "The old city waited.")
+
+	preview, err := service.RunRewrite(ctx, RewriteInput{
+		ProjectID:        storyProject.ID,
+		ContentID:        chapter.ID,
+		ModelVariantID:   model.ID,
+		ApplyMode:        ApplyModePreview,
+		ExpectedRevision: chapter.CurrentRevision,
+		SelectionStart:   4,
+		SelectionEnd:     12,
+	})
+	if err != nil {
+		t.Fatalf("RunRewrite() error = %v", err)
+	}
+	candidate, err := service.RejectCandidate(ctx, RejectCandidateInput{
+		ProjectID:   storyProject.ID,
+		CandidateID: preview.Candidate.ID,
+	})
+	if err != nil {
+		t.Fatalf("RejectCandidate() error = %v", err)
+	}
+
+	if candidate.Status != "rejected" {
+		t.Fatalf("candidate status = %q, want rejected", candidate.Status)
+	}
+	assertActivityEvent(t, ctx, db, storyProject.ID, "generation_candidate_rejected")
+	updated := mustGetContent(t, ctx, projectService, storyProject.ID, chapter.ID)
+	if updated.BodyMarkdown != chapter.BodyMarkdown || updated.CurrentRevision != chapter.CurrentRevision {
+		t.Fatalf("chapter changed to body %q revision %d", updated.BodyMarkdown, updated.CurrentRevision)
+	}
+}
+
+func TestAcceptRewritePreviewWithStaleExpectedRevisionMarksConflict(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Rewrite Conflict Project")
+	provider := &fakeChatProvider{responses: []CompletionResponse{quickActionResponse("completion-1", "bright city")}}
+	service := NewService(db, projectService, provider)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 0)
+	chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Opening", "The old city waited.")
+
+	preview, err := service.RunRewrite(ctx, RewriteInput{
+		ProjectID:        storyProject.ID,
+		ContentID:        chapter.ID,
+		ModelVariantID:   model.ID,
+		ApplyMode:        ApplyModePreview,
+		ExpectedRevision: chapter.CurrentRevision,
+		SelectionStart:   4,
+		SelectionEnd:     12,
+	})
+	if err != nil {
+		t.Fatalf("RunRewrite() error = %v", err)
+	}
+	if _, err := projectService.AppendToContent(ctx, project.StructuredWriteInput{
+		ProjectID:         storyProject.ID,
+		ContentID:         chapter.ID,
+		ExpectedRevision:  chapter.CurrentRevision,
+		GeneratedMarkdown: "\n\nAuthor edit.",
+		Reason:            "author edit",
+		AgentSessionID:    "",
+		ActionKind:        "author",
+	}); err != nil {
+		t.Fatalf("AppendToContent() error = %v", err)
+	}
+	_, err = service.AcceptCandidate(ctx, AcceptCandidateInput{
+		ProjectID:   storyProject.ID,
+		CandidateID: preview.Candidate.ID,
+	})
+	if !errors.Is(err, project.ErrConflict) {
+		t.Fatalf("AcceptCandidate() error = %v, want project.ErrConflict", err)
+	}
+
+	candidate, err := store.New(db).GetGenerationCandidate(ctx, store.GetGenerationCandidateParams{
+		ProjectID: storyProject.ID,
+		ID:        preview.Candidate.ID,
+	})
+	if err != nil {
+		t.Fatalf("GetGenerationCandidate() error = %v", err)
+	}
+	if candidate.Status != "conflict" {
+		t.Fatalf("candidate status = %q, want conflict", candidate.Status)
+	}
+	assertActivityEvent(t, ctx, db, storyProject.ID, "generation_candidate_conflict")
+}
+
+func TestReadAndCheckStoresAssistantReportAndAttachedNote(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Read Check Project")
+	provider := &fakeChatProvider{responses: []CompletionResponse{quickActionResponse("completion-1", "Continuity note: the lantern changes color.")}}
+	service := NewService(db, projectService, provider)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 0)
+	chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Opening", "The red lantern burned.")
+
+	result, err := service.RunReadAndCheck(ctx, ReadAndCheckInput{
+		ProjectID:        storyProject.ID,
+		ContentID:        chapter.ID,
+		ModelVariantID:   model.ID,
+		ExpectedRevision: chapter.CurrentRevision,
+		SelectionStart:   4,
+		SelectionEnd:     15,
+		Guidance:         "Check continuity.",
+	})
+	if err != nil {
+		t.Fatalf("RunReadAndCheck() error = %v", err)
+	}
+
+	if result.AssistantMessage.BodyMarkdown != "Continuity note: the lantern changes color." {
+		t.Fatalf("assistant report = %q", result.AssistantMessage.BodyMarkdown)
+	}
+	if result.Note.Source != "read_and_check" || result.Note.ContentItemID != chapter.ID {
+		t.Fatalf("note source/content = %q/%q", result.Note.Source, result.Note.ContentItemID)
+	}
+	if result.Note.SelectionStart != 4 || result.Note.SelectionEnd != 15 {
+		t.Fatalf("note selection = %d-%d, want 4-15", result.Note.SelectionStart, result.Note.SelectionEnd)
+	}
+	if !strings.Contains(result.Note.Title, "Opening") {
+		t.Fatalf("note title = %q, want derived from chapter title", result.Note.Title)
+	}
+	updated := mustGetContent(t, ctx, projectService, storyProject.ID, chapter.ID)
+	if updated.BodyMarkdown != chapter.BodyMarkdown || updated.CurrentRevision != chapter.CurrentRevision {
+		t.Fatalf("chapter changed to body %q revision %d", updated.BodyMarkdown, updated.CurrentRevision)
+	}
+	messages, err := service.ListMessages(ctx, storyProject.ID, result.Session.ID)
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	if len(messages) != 1 || messages[0].Role != MessageRoleAssistant {
+		t.Fatalf("messages = %#v, want one assistant report", messages)
+	}
+	assertActivityEvent(t, ctx, db, storyProject.ID, "read_and_check_completed")
+}
 
 func TestRunChatTurnStoresMessagesToolActivityAndPromptRecord(t *testing.T) {
 	db := openMigratedTestDB(t)
@@ -882,6 +1223,33 @@ func createTestProject(t *testing.T, ctx context.Context, service *project.Servi
 	return storyProject
 }
 
+func createTestChapter(t *testing.T, ctx context.Context, service *project.Service, projectID, title, body string) project.ContentItem {
+	t.Helper()
+
+	chapter, err := service.CreateContent(ctx, project.CreateContentInput{
+		ProjectID:    projectID,
+		Kind:         project.KindChapter,
+		Title:        title,
+		BodyMarkdown: body,
+		Reason:       "seed",
+		CreatedBy:    "author",
+	})
+	if err != nil {
+		t.Fatalf("CreateContent() error = %v", err)
+	}
+	return chapter
+}
+
+func mustGetContent(t *testing.T, ctx context.Context, service *project.Service, projectID, contentID string) project.ContentItem {
+	t.Helper()
+
+	item, err := service.GetContent(ctx, projectID, contentID)
+	if err != nil {
+		t.Fatalf("GetContent() error = %v", err)
+	}
+	return item
+}
+
 func createTestSession(t *testing.T, ctx context.Context, service *Service, projectID string) Session {
 	t.Helper()
 
@@ -945,6 +1313,18 @@ func createTestProviderAndModel(t *testing.T, ctx context.Context, service *Serv
 	return model
 }
 
+func quickActionResponse(id, content string) CompletionResponse {
+	return CompletionResponse{
+		ID: id,
+		Message: CompletionMessage{
+			Role:    MessageRoleAssistant,
+			Content: content,
+		},
+		FinishReason:   "stop",
+		UsageAvailable: true,
+	}
+}
+
 func createPromptProfileWithRetention(t *testing.T, ctx context.Context, service *Service, projectID string, retentionDays int64) {
 	t.Helper()
 	_, err := service.UpsertPromptProfile(ctx, UpsertPromptProfileInput{
@@ -987,6 +1367,57 @@ func (p *fakeChatProvider) Complete(_ context.Context, request CompletionRequest
 	response := p.responses[0]
 	p.responses = p.responses[1:]
 	return response, nil
+}
+
+func assertAgentRevision(t *testing.T, ctx context.Context, db *sql.DB, contentID, bodyMarkdown, actionKind string) {
+	t.Helper()
+
+	var gotBody string
+	var gotCreatedBy string
+	var gotActionKind string
+	err := db.QueryRowContext(ctx, `
+		SELECT body_markdown, created_by, action_kind
+		FROM revisions
+		WHERE content_item_id = ?
+		ORDER BY revision_number DESC
+		LIMIT 1
+	`, contentID).Scan(&gotBody, &gotCreatedBy, &gotActionKind)
+	if err != nil {
+		t.Fatalf("load latest revision: %v", err)
+	}
+	if gotBody != bodyMarkdown {
+		t.Fatalf("revision body = %q, want %q", gotBody, bodyMarkdown)
+	}
+	if gotCreatedBy != "agent" {
+		t.Fatalf("revision created_by = %q, want agent", gotCreatedBy)
+	}
+	if gotActionKind != actionKind {
+		t.Fatalf("revision action_kind = %q, want %q", gotActionKind, actionKind)
+	}
+}
+
+func assertRevisionCount(t *testing.T, ctx context.Context, db *sql.DB, contentID string, want int64) {
+	t.Helper()
+
+	var count int64
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM revisions WHERE content_item_id = ?`, contentID).Scan(&count); err != nil {
+		t.Fatalf("count revisions: %v", err)
+	}
+	if count != want {
+		t.Fatalf("revision count = %d, want %d", count, want)
+	}
+}
+
+func assertActivityEvent(t *testing.T, ctx context.Context, db *sql.DB, projectID, eventType string) {
+	t.Helper()
+
+	events, err := store.New(db).ListActivityEvents(ctx, store.ListActivityEventsParams{ProjectID: projectID, Limit: 100})
+	if err != nil {
+		t.Fatalf("ListActivityEvents() error = %v", err)
+	}
+	if !hasEventType(events, eventType) {
+		t.Fatalf("activity events missing %q: %#v", eventType, events)
+	}
 }
 
 func assertSnapshotSource(t *testing.T, snapshots []store.PromptContextSnapshot, sourceKey string) {

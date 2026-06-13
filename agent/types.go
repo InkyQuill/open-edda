@@ -1,5 +1,7 @@
 package agent
 
+import "git.inkyquill.net/inky/writer/project"
+
 type ActionKind string
 
 const (
@@ -190,6 +192,74 @@ type StructuredWrite struct {
 	GeneratedMarkdown string `json:"generatedMarkdown"`
 }
 
+type ContinuationInput struct {
+	ProjectID         string
+	ContentID         string
+	ModelVariantID    string
+	ApplyMode         ApplyMode
+	Guidance          string
+	ExpectedRevision  int64
+	InsertPosition    int64
+	Insert            bool
+	ContinuationUnits string
+	ContinuationCount int64
+}
+
+type ContinuationResult struct {
+	Session   Session             `json:"session"`
+	Candidate GenerationCandidate `json:"candidate,omitempty"`
+	Content   project.ContentItem `json:"content,omitempty"`
+}
+
+type RewriteInput struct {
+	ProjectID        string
+	ContentID        string
+	ModelVariantID   string
+	ApplyMode        ApplyMode
+	Guidance         string
+	ExpectedRevision int64
+	SelectionStart   int64
+	SelectionEnd     int64
+}
+
+type RewriteResult struct {
+	Session   Session             `json:"session"`
+	Candidate GenerationCandidate `json:"candidate,omitempty"`
+	Content   project.ContentItem `json:"content,omitempty"`
+}
+
+type ReadAndCheckInput struct {
+	ProjectID        string
+	ContentID        string
+	ModelVariantID   string
+	ApplyMode        ApplyMode
+	Guidance         string
+	ExpectedRevision int64
+	SelectionStart   int64
+	SelectionEnd     int64
+}
+
+type ReadAndCheckResult struct {
+	Session          Session              `json:"session"`
+	AssistantMessage Message              `json:"assistantMessage"`
+	Note             project.AttachedNote `json:"note"`
+}
+
+type AcceptCandidateInput struct {
+	ProjectID   string
+	CandidateID string
+}
+
+type AcceptCandidateResult struct {
+	Candidate GenerationCandidate `json:"candidate"`
+	Content   project.ContentItem `json:"content"`
+}
+
+type RejectCandidateInput struct {
+	ProjectID   string
+	CandidateID string
+}
+
 type ActivityEvent struct {
 	ID           string `json:"id"`
 	ProjectID    string `json:"projectId"`
@@ -272,7 +342,13 @@ type GenerationCandidate struct {
 	ActionKind        ActionKind `json:"actionKind"`
 	OperationKind     string     `json:"operationKind"`
 	ExpectedRevision  int64      `json:"expectedRevision"`
+	SelectionStart    int64      `json:"selectionStart,omitempty"`
+	SelectionEnd      int64      `json:"selectionEnd,omitempty"`
+	InsertPosition    int64      `json:"insertPosition,omitempty"`
+	OriginalMarkdown  string     `json:"originalMarkdown,omitempty"`
 	GeneratedMarkdown string     `json:"generatedMarkdown"`
+	Reason            string     `json:"reason,omitempty"`
+	ModelVariantID    string     `json:"modelVariantId,omitempty"`
 	Status            string     `json:"status"`
 	CreatedAt         string     `json:"createdAt"`
 	UpdatedAt         string     `json:"updatedAt"`

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/store"
@@ -556,6 +557,294 @@ func (s *Service) RunChatTurn(ctx context.Context, input ChatTurnInput) (ChatTur
 	}, nil
 }
 
+func (s *Service) RunContinuation(ctx context.Context, input ContinuationInput) (ContinuationResult, error) {
+	if input.ApplyMode == "" {
+		input.ApplyMode = ApplyModePreview
+	}
+	if err := validateApplyMode(input.ApplyMode); err != nil {
+		return ContinuationResult{}, err
+	}
+	generated, session, err := s.runQuickActionCompletion(ctx, quickActionCompletionInput{
+		ProjectID:        input.ProjectID,
+		ContentID:        input.ContentID,
+		ModelVariantID:   input.ModelVariantID,
+		ApplyMode:        input.ApplyMode,
+		ActionKind:       ActionKindContinuation,
+		ExpectedRevision: input.ExpectedRevision,
+		SelectionStart:   0,
+		SelectionEnd:     0,
+		Guidance:         input.Guidance,
+		Instruction:      continuationInstruction(input),
+	})
+	if err != nil {
+		return ContinuationResult{}, err
+	}
+
+	operationKind := "append"
+	if input.Insert || input.InsertPosition > 0 {
+		operationKind = "insert"
+	}
+	reason := quickActionReason(ActionKindContinuation, input.Guidance)
+	if input.ApplyMode == ApplyModePreview {
+		candidate, err := s.createGenerationCandidate(ctx, generationCandidateInput{
+			ProjectID:         input.ProjectID,
+			SessionID:         session.ID,
+			ContentID:         input.ContentID,
+			ActionKind:        ActionKindContinuation,
+			OperationKind:     operationKind,
+			ExpectedRevision:  input.ExpectedRevision,
+			InsertPosition:    input.InsertPosition,
+			HasInsertPosition: operationKind == "insert",
+			GeneratedMarkdown: generated,
+			Reason:            reason,
+			ModelVariantID:    input.ModelVariantID,
+		})
+		if err != nil {
+			return ContinuationResult{}, err
+		}
+		if err := s.createActivityEvent(ctx, input.ProjectID, session.ID, "generation_candidate_created", "Created continuation preview", "{}"); err != nil {
+			return ContinuationResult{}, err
+		}
+		return ContinuationResult{Session: session, Candidate: candidate}, nil
+	}
+
+	writeInput := project.StructuredWriteInput{
+		ProjectID:         input.ProjectID,
+		ContentID:         input.ContentID,
+		ExpectedRevision:  input.ExpectedRevision,
+		GeneratedMarkdown: generated,
+		InsertPosition:    input.InsertPosition,
+		Reason:            reason,
+		AgentSessionID:    session.ID,
+		ActionKind:        string(ActionKindContinuation),
+		ModelVariantID:    input.ModelVariantID,
+	}
+	content, err := s.applyCandidateWrite(ctx, operationKind, writeInput)
+	if err != nil {
+		return ContinuationResult{}, err
+	}
+	if err := s.createActivityEvent(ctx, input.ProjectID, session.ID, "quick_action_applied", "Applied continuation", "{}"); err != nil {
+		return ContinuationResult{}, err
+	}
+	return ContinuationResult{Session: session, Content: content}, nil
+}
+
+func (s *Service) RunRewrite(ctx context.Context, input RewriteInput) (RewriteResult, error) {
+	if input.ApplyMode == "" {
+		input.ApplyMode = ApplyModePreview
+	}
+	if err := validateApplyMode(input.ApplyMode); err != nil {
+		return RewriteResult{}, err
+	}
+	chapter, original, before, after, err := s.selectedChapterContext(ctx, input.ProjectID, input.ContentID, input.SelectionStart, input.SelectionEnd)
+	if err != nil {
+		return RewriteResult{}, err
+	}
+	generated, session, err := s.runQuickActionCompletion(ctx, quickActionCompletionInput{
+		ProjectID:        input.ProjectID,
+		ContentID:        input.ContentID,
+		ModelVariantID:   input.ModelVariantID,
+		ApplyMode:        input.ApplyMode,
+		ActionKind:       ActionKindRewrite,
+		ExpectedRevision: input.ExpectedRevision,
+		SelectionStart:   input.SelectionStart,
+		SelectionEnd:     input.SelectionEnd,
+		Guidance:         input.Guidance,
+		Instruction:      rewriteInstruction(input, original, before, after),
+	})
+	if err != nil {
+		return RewriteResult{}, err
+	}
+	reasonPayload, err := marshalJSON(map[string]any{
+		"action":           "rewrite",
+		"contentTitle":     chapter.Title,
+		"guidance":         input.Guidance,
+		"selectionStart":   input.SelectionStart,
+		"selectionEnd":     input.SelectionEnd,
+		"before":           before,
+		"original":         original,
+		"generated":        generated,
+		"after":            after,
+		"expectedRevision": input.ExpectedRevision,
+	})
+	if err != nil {
+		return RewriteResult{}, err
+	}
+	if input.ApplyMode == ApplyModePreview {
+		candidate, err := s.createGenerationCandidate(ctx, generationCandidateInput{
+			ProjectID:         input.ProjectID,
+			SessionID:         session.ID,
+			ContentID:         input.ContentID,
+			ActionKind:        ActionKindRewrite,
+			OperationKind:     "replace",
+			ExpectedRevision:  input.ExpectedRevision,
+			SelectionStart:    input.SelectionStart,
+			SelectionEnd:      input.SelectionEnd,
+			OriginalMarkdown:  original,
+			GeneratedMarkdown: generated,
+			Reason:            reasonPayload,
+			ModelVariantID:    input.ModelVariantID,
+		})
+		if err != nil {
+			return RewriteResult{}, err
+		}
+		if err := s.createActivityEvent(ctx, input.ProjectID, session.ID, "generation_candidate_created", "Created rewrite preview", "{}"); err != nil {
+			return RewriteResult{}, err
+		}
+		return RewriteResult{Session: session, Candidate: candidate}, nil
+	}
+
+	content, err := s.applyCandidateWrite(ctx, "replace", project.StructuredWriteInput{
+		ProjectID:         input.ProjectID,
+		ContentID:         input.ContentID,
+		ExpectedRevision:  input.ExpectedRevision,
+		GeneratedMarkdown: generated,
+		SelectionStart:    input.SelectionStart,
+		SelectionEnd:      input.SelectionEnd,
+		Reason:            reasonPayload,
+		AgentSessionID:    session.ID,
+		ActionKind:        string(ActionKindRewrite),
+		ModelVariantID:    input.ModelVariantID,
+	})
+	if err != nil {
+		return RewriteResult{}, err
+	}
+	if err := s.createActivityEvent(ctx, input.ProjectID, session.ID, "quick_action_applied", "Applied rewrite", "{}"); err != nil {
+		return RewriteResult{}, err
+	}
+	return RewriteResult{Session: session, Content: content}, nil
+}
+
+func (s *Service) AcceptCandidate(ctx context.Context, input AcceptCandidateInput) (AcceptCandidateResult, error) {
+	candidate, err := s.queries.GetGenerationCandidate(ctx, store.GetGenerationCandidateParams{
+		ProjectID: input.ProjectID,
+		ID:        input.CandidateID,
+	})
+	if err != nil {
+		return AcceptCandidateResult{}, fmt.Errorf("get generation candidate: %w", err)
+	}
+	if candidate.Status != "pending" {
+		return AcceptCandidateResult{}, fmt.Errorf("candidate status = %q, want pending", candidate.Status)
+	}
+
+	content, err := s.applyCandidateWrite(ctx, candidate.OperationKind, project.StructuredWriteInput{
+		ProjectID:         candidate.ProjectID,
+		ContentID:         candidate.ContentItemID,
+		ExpectedRevision:  candidate.ExpectedRevision,
+		GeneratedMarkdown: candidate.GeneratedMarkdown,
+		InsertPosition:    valueInt64(candidate.InsertPosition),
+		SelectionStart:    valueInt64(candidate.SelectionStart),
+		SelectionEnd:      valueInt64(candidate.SelectionEnd),
+		Reason:            candidate.Reason,
+		AgentSessionID:    candidate.SessionID,
+		ActionKind:        candidate.ActionKind,
+		ModelVariantID:    valueString(candidate.ModelVariantID),
+	})
+	if err != nil {
+		if errors.Is(err, project.ErrConflict) {
+			if updateErr := s.updateCandidateStatus(ctx, input.ProjectID, input.CandidateID, "conflict"); updateErr != nil {
+				return AcceptCandidateResult{}, updateErr
+			}
+			if eventErr := s.createActivityEvent(ctx, candidate.ProjectID, candidate.SessionID, "generation_candidate_conflict", "Generation candidate conflicted", "{}"); eventErr != nil {
+				return AcceptCandidateResult{}, eventErr
+			}
+		}
+		return AcceptCandidateResult{}, err
+	}
+	if err := s.updateCandidateStatus(ctx, input.ProjectID, input.CandidateID, "accepted"); err != nil {
+		return AcceptCandidateResult{}, err
+	}
+	if err := s.createActivityEvent(ctx, candidate.ProjectID, candidate.SessionID, "generation_candidate_accepted", "Accepted generation candidate", "{}"); err != nil {
+		return AcceptCandidateResult{}, err
+	}
+	updated, err := s.queries.GetGenerationCandidate(ctx, store.GetGenerationCandidateParams{
+		ProjectID: input.ProjectID,
+		ID:        input.CandidateID,
+	})
+	if err != nil {
+		return AcceptCandidateResult{}, fmt.Errorf("get updated generation candidate: %w", err)
+	}
+	return AcceptCandidateResult{Candidate: generationCandidateFromStore(updated), Content: content}, nil
+}
+
+func (s *Service) RejectCandidate(ctx context.Context, input RejectCandidateInput) (GenerationCandidate, error) {
+	candidate, err := s.queries.GetGenerationCandidate(ctx, store.GetGenerationCandidateParams{
+		ProjectID: input.ProjectID,
+		ID:        input.CandidateID,
+	})
+	if err != nil {
+		return GenerationCandidate{}, fmt.Errorf("get generation candidate: %w", err)
+	}
+	if err := s.updateCandidateStatus(ctx, input.ProjectID, input.CandidateID, "rejected"); err != nil {
+		return GenerationCandidate{}, err
+	}
+	if err := s.createActivityEvent(ctx, candidate.ProjectID, candidate.SessionID, "generation_candidate_rejected", "Rejected generation candidate", "{}"); err != nil {
+		return GenerationCandidate{}, err
+	}
+	updated, err := s.queries.GetGenerationCandidate(ctx, store.GetGenerationCandidateParams{
+		ProjectID: input.ProjectID,
+		ID:        input.CandidateID,
+	})
+	if err != nil {
+		return GenerationCandidate{}, fmt.Errorf("get updated generation candidate: %w", err)
+	}
+	return generationCandidateFromStore(updated), nil
+}
+
+func (s *Service) RunReadAndCheck(ctx context.Context, input ReadAndCheckInput) (ReadAndCheckResult, error) {
+	if input.ApplyMode == "" {
+		input.ApplyMode = ApplyModePreview
+	}
+	if err := validateApplyMode(input.ApplyMode); err != nil {
+		return ReadAndCheckResult{}, err
+	}
+	chapter, original, before, after, err := s.selectedChapterContext(ctx, input.ProjectID, input.ContentID, input.SelectionStart, input.SelectionEnd)
+	if err != nil {
+		return ReadAndCheckResult{}, err
+	}
+	report, session, err := s.runQuickActionCompletion(ctx, quickActionCompletionInput{
+		ProjectID:        input.ProjectID,
+		ContentID:        input.ContentID,
+		ModelVariantID:   input.ModelVariantID,
+		ApplyMode:        input.ApplyMode,
+		ActionKind:       ActionKindReadCheck,
+		ExpectedRevision: input.ExpectedRevision,
+		SelectionStart:   input.SelectionStart,
+		SelectionEnd:     input.SelectionEnd,
+		Guidance:         input.Guidance,
+		Instruction:      readAndCheckInstruction(input, original, before, after),
+	})
+	if err != nil {
+		return ReadAndCheckResult{}, err
+	}
+	assistantMessage, err := s.AppendMessage(ctx, AppendMessageInput{
+		ProjectID:    input.ProjectID,
+		SessionID:    session.ID,
+		Role:         MessageRoleAssistant,
+		BodyMarkdown: report,
+		MetadataJSON: `{"actionKind":"read_check"}`,
+	})
+	if err != nil {
+		return ReadAndCheckResult{}, err
+	}
+	note, err := s.projectService.CreateAttachedNote(ctx, project.CreateAttachedNoteInput{
+		ProjectID:      input.ProjectID,
+		ContentItemID:  input.ContentID,
+		SelectionStart: input.SelectionStart,
+		SelectionEnd:   input.SelectionEnd,
+		Title:          "Read and check: " + chapter.Title,
+		BodyMarkdown:   report,
+		Source:         "read_and_check",
+	})
+	if err != nil {
+		return ReadAndCheckResult{}, err
+	}
+	if err := s.createActivityEvent(ctx, input.ProjectID, session.ID, "read_and_check_completed", "Stored read and check report", "{}"); err != nil {
+		return ReadAndCheckResult{}, err
+	}
+	return ReadAndCheckResult{Session: session, AssistantMessage: assistantMessage, Note: note}, nil
+}
+
 func (s *Service) PrunePromptRecords(ctx context.Context, projectID string) (int64, error) {
 	profile, err := s.GetPromptProfile(ctx, projectID)
 	if err != nil {
@@ -580,6 +869,280 @@ func (s *Service) PrunePromptRecords(ctx context.Context, projectID string) (int
 		return 0, fmt.Errorf("delete expired prompt records: %w", err)
 	}
 	return deleted, nil
+}
+
+type quickActionCompletionInput struct {
+	ProjectID        string
+	ContentID        string
+	ModelVariantID   string
+	ApplyMode        ApplyMode
+	ActionKind       ActionKind
+	ExpectedRevision int64
+	SelectionStart   int64
+	SelectionEnd     int64
+	Guidance         string
+	Instruction      string
+}
+
+func (s *Service) runQuickActionCompletion(ctx context.Context, input quickActionCompletionInput) (string, Session, error) {
+	if s.provider == nil {
+		return "", Session{}, fmt.Errorf("provider is required")
+	}
+	if input.ModelVariantID == "" {
+		return "", Session{}, fmt.Errorf("model variant ID is required")
+	}
+	model, err := s.GetModelVariantForProject(ctx, input.ProjectID, input.ModelVariantID)
+	if err != nil {
+		return "", Session{}, err
+	}
+	if _, err := s.projectService.GetContent(ctx, input.ProjectID, input.ContentID); err != nil {
+		return "", Session{}, err
+	}
+	session, err := s.CreateSession(ctx, CreateSessionInput{
+		ProjectID:      input.ProjectID,
+		Title:          quickActionTitle(input.ActionKind),
+		ActionKind:     input.ActionKind,
+		ModelVariantID: input.ModelVariantID,
+		ApplyMode:      input.ApplyMode,
+	})
+	if err != nil {
+		return "", Session{}, err
+	}
+	cursorSummary := quickActionCursorSummary(input)
+	bundle, err := s.BuildActionPrompt(ctx, BuildPromptInput{
+		ProjectID:       input.ProjectID,
+		SessionID:       session.ID,
+		ActionKind:      input.ActionKind,
+		TargetContentID: input.ContentID,
+		CursorSummary:   cursorSummary,
+		UserGuidance:    input.Instruction,
+	})
+	if err != nil {
+		return "", Session{}, err
+	}
+	request := CompletionRequest{
+		Model: model.Model,
+		Messages: []CompletionMessage{
+			{Role: MessageRoleSystem, Content: bundle.SystemMessage},
+			{Role: MessageRoleSystem, Content: bundle.DeveloperMessage},
+			{Role: MessageRoleUser, Content: bundle.UserMessage},
+		},
+		Temperature:     &model.Temperature,
+		MaxOutputTokens: model.MaxOutputTokens,
+	}
+	response, err := s.provider.Complete(ctx, request)
+	if err != nil {
+		return "", Session{}, fmt.Errorf("complete quick action: %w", err)
+	}
+	generated := response.Message.Content
+	if strings.TrimSpace(generated) == "" {
+		return "", Session{}, fmt.Errorf("provider did not return generated markdown")
+	}
+	return generated, session, nil
+}
+
+type generationCandidateInput struct {
+	ProjectID         string
+	SessionID         string
+	ContentID         string
+	ActionKind        ActionKind
+	OperationKind     string
+	ExpectedRevision  int64
+	SelectionStart    int64
+	SelectionEnd      int64
+	InsertPosition    int64
+	HasInsertPosition bool
+	OriginalMarkdown  string
+	GeneratedMarkdown string
+	Reason            string
+	ModelVariantID    string
+}
+
+func (s *Service) createGenerationCandidate(ctx context.Context, input generationCandidateInput) (GenerationCandidate, error) {
+	now := nowString()
+	candidate := GenerationCandidate{
+		ID:                newID("candidate"),
+		ProjectID:         input.ProjectID,
+		SessionID:         input.SessionID,
+		ContentItemID:     input.ContentID,
+		ActionKind:        input.ActionKind,
+		OperationKind:     input.OperationKind,
+		ExpectedRevision:  input.ExpectedRevision,
+		SelectionStart:    input.SelectionStart,
+		SelectionEnd:      input.SelectionEnd,
+		InsertPosition:    input.InsertPosition,
+		OriginalMarkdown:  input.OriginalMarkdown,
+		GeneratedMarkdown: input.GeneratedMarkdown,
+		Reason:            input.Reason,
+		ModelVariantID:    input.ModelVariantID,
+		Status:            "pending",
+		CreatedAt:         now,
+		UpdatedAt:         now,
+	}
+	if err := s.queries.CreateGenerationCandidate(ctx, store.CreateGenerationCandidateParams{
+		ID:                candidate.ID,
+		ProjectID:         candidate.ProjectID,
+		SessionID:         candidate.SessionID,
+		ContentItemID:     candidate.ContentItemID,
+		ActionKind:        string(candidate.ActionKind),
+		OperationKind:     candidate.OperationKind,
+		ExpectedRevision:  candidate.ExpectedRevision,
+		SelectionStart:    nullInt64(input.SelectionStart, input.SelectionEnd > input.SelectionStart),
+		SelectionEnd:      nullInt64(input.SelectionEnd, input.SelectionEnd > input.SelectionStart),
+		InsertPosition:    nullInt64(input.InsertPosition, input.HasInsertPosition),
+		OriginalMarkdown:  candidate.OriginalMarkdown,
+		GeneratedMarkdown: candidate.GeneratedMarkdown,
+		Reason:            candidate.Reason,
+		ModelVariantID:    nullString(candidate.ModelVariantID),
+		Status:            candidate.Status,
+		CreatedAt:         candidate.CreatedAt,
+		UpdatedAt:         candidate.UpdatedAt,
+	}); err != nil {
+		return GenerationCandidate{}, fmt.Errorf("create generation candidate: %w", err)
+	}
+	return candidate, nil
+}
+
+func (s *Service) updateCandidateStatus(ctx context.Context, projectID, candidateID, status string) error {
+	if err := s.queries.UpdateGenerationCandidateStatus(ctx, store.UpdateGenerationCandidateStatusParams{
+		Status:    status,
+		UpdatedAt: nowString(),
+		ProjectID: projectID,
+		ID:        candidateID,
+	}); err != nil {
+		return fmt.Errorf("update generation candidate status: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) applyCandidateWrite(ctx context.Context, operationKind string, input project.StructuredWriteInput) (project.ContentItem, error) {
+	switch operationKind {
+	case "append":
+		return s.projectService.AppendToContent(ctx, input)
+	case "insert":
+		return s.projectService.InsertIntoContent(ctx, input)
+	case "replace":
+		return s.projectService.ReplaceContentRange(ctx, input)
+	default:
+		return project.ContentItem{}, fmt.Errorf("unknown candidate operation %q", operationKind)
+	}
+}
+
+func (s *Service) selectedChapterContext(ctx context.Context, projectID, contentID string, start, end int64) (project.ContentItem, string, string, string, error) {
+	chapter, err := s.projectService.GetContent(ctx, projectID, contentID)
+	if err != nil {
+		return project.ContentItem{}, "", "", "", err
+	}
+	if chapter.Kind != project.KindChapter {
+		return project.ContentItem{}, "", "", "", fmt.Errorf("target content must be chapter, got %q", chapter.Kind)
+	}
+	if start < 0 || end <= start || end > int64(len(chapter.BodyMarkdown)) {
+		return project.ContentItem{}, "", "", "", fmt.Errorf("selection range out of range")
+	}
+	if !validUTF8ByteBoundary(chapter.BodyMarkdown, start) {
+		return project.ContentItem{}, "", "", "", fmt.Errorf("selection start byte offset %d is not a UTF-8 rune boundary", start)
+	}
+	if !validUTF8ByteBoundary(chapter.BodyMarkdown, end) {
+		return project.ContentItem{}, "", "", "", fmt.Errorf("selection end byte offset %d is not a UTF-8 rune boundary", end)
+	}
+	const contextBytes = 200
+	beforeStart := start - contextBytes
+	if beforeStart < 0 {
+		beforeStart = 0
+	}
+	afterEnd := end + contextBytes
+	if afterEnd > int64(len(chapter.BodyMarkdown)) {
+		afterEnd = int64(len(chapter.BodyMarkdown))
+	}
+	return chapter,
+		chapter.BodyMarkdown[start:end],
+		chapter.BodyMarkdown[beforeStart:start],
+		chapter.BodyMarkdown[end:afterEnd],
+		nil
+}
+
+func continuationInstruction(input ContinuationInput) string {
+	unit := emptyDefault(input.ContinuationUnits, "words")
+	count := input.ContinuationCount
+	if count <= 0 {
+		count = 1
+	}
+	var b strings.Builder
+	b.WriteString("Continue the target chapter with polished prose only. ")
+	b.WriteString(fmt.Sprintf("Target length: %d %s. ", count, unit))
+	if input.Insert || input.InsertPosition > 0 {
+		b.WriteString(fmt.Sprintf("Insert at byte position %d. ", input.InsertPosition))
+	} else {
+		b.WriteString("Append after the current chapter text. ")
+	}
+	if input.Guidance != "" {
+		b.WriteString("Author guidance: ")
+		b.WriteString(input.Guidance)
+	}
+	return b.String()
+}
+
+func rewriteInstruction(input RewriteInput, original, before, after string) string {
+	var b strings.Builder
+	b.WriteString("Rewrite only the selected text. Return replacement Markdown only.\n\n")
+	b.WriteString("Before selection:\n")
+	b.WriteString(before)
+	b.WriteString("\n\nSelected text:\n")
+	b.WriteString(original)
+	b.WriteString("\n\nAfter selection:\n")
+	b.WriteString(after)
+	if input.Guidance != "" {
+		b.WriteString("\n\nAuthor guidance:\n")
+		b.WriteString(input.Guidance)
+	}
+	return b.String()
+}
+
+func readAndCheckInstruction(input ReadAndCheckInput, original, before, after string) string {
+	var b strings.Builder
+	b.WriteString("Read and check the selected prose. Return a concise assistant report with issues, risks, and suggested fixes. Do not rewrite the prose.\n\n")
+	b.WriteString("Before selection:\n")
+	b.WriteString(before)
+	b.WriteString("\n\nSelected text:\n")
+	b.WriteString(original)
+	b.WriteString("\n\nAfter selection:\n")
+	b.WriteString(after)
+	if input.Guidance != "" {
+		b.WriteString("\n\nAuthor guidance:\n")
+		b.WriteString(input.Guidance)
+	}
+	return b.String()
+}
+
+func quickActionReason(action ActionKind, guidance string) string {
+	if guidance == "" {
+		return string(action)
+	}
+	return string(action) + ": " + guidance
+}
+
+func quickActionTitle(action ActionKind) string {
+	switch action {
+	case ActionKindContinuation:
+		return "Continuation"
+	case ActionKindRewrite:
+		return "Rewrite"
+	case ActionKindReadCheck:
+		return "Read and check"
+	default:
+		return "Quick action"
+	}
+}
+
+func quickActionCursorSummary(input quickActionCompletionInput) string {
+	switch input.ActionKind {
+	case ActionKindContinuation:
+		return fmt.Sprintf("Expected revision %d.", input.ExpectedRevision)
+	case ActionKindRewrite, ActionKindReadCheck:
+		return fmt.Sprintf("Expected revision %d; selection byte range %d-%d.", input.ExpectedRevision, input.SelectionStart, input.SelectionEnd)
+	default:
+		return ""
+	}
 }
 
 func chatPromptMessages(profile PromptProfile, transcript []Message) []CompletionMessage {
@@ -851,6 +1414,28 @@ func promptProfileFromStore(profile store.PromptProfile) PromptProfile {
 	}
 }
 
+func generationCandidateFromStore(candidate store.GenerationCandidate) GenerationCandidate {
+	return GenerationCandidate{
+		ID:                candidate.ID,
+		ProjectID:         candidate.ProjectID,
+		SessionID:         candidate.SessionID,
+		ContentItemID:     candidate.ContentItemID,
+		ActionKind:        ActionKind(candidate.ActionKind),
+		OperationKind:     candidate.OperationKind,
+		ExpectedRevision:  candidate.ExpectedRevision,
+		SelectionStart:    valueInt64(candidate.SelectionStart),
+		SelectionEnd:      valueInt64(candidate.SelectionEnd),
+		InsertPosition:    valueInt64(candidate.InsertPosition),
+		OriginalMarkdown:  candidate.OriginalMarkdown,
+		GeneratedMarkdown: candidate.GeneratedMarkdown,
+		Reason:            candidate.Reason,
+		ModelVariantID:    valueString(candidate.ModelVariantID),
+		Status:            candidate.Status,
+		CreatedAt:         candidate.CreatedAt,
+		UpdatedAt:         candidate.UpdatedAt,
+	}
+}
+
 func validateActionKind(value ActionKind) error {
 	switch value {
 	case ActionKindChat, ActionKindContinuation, ActionKindRewrite, ActionKindReadCheck:
@@ -889,6 +1474,17 @@ func valueString(value sql.NullString) string {
 	return value.String
 }
 
+func nullInt64(value int64, valid bool) sql.NullInt64 {
+	return sql.NullInt64{Int64: value, Valid: valid}
+}
+
+func valueInt64(value sql.NullInt64) int64 {
+	if !value.Valid {
+		return 0
+	}
+	return value.Int64
+}
+
 func defaultJSON(value string) string {
 	if value == "" {
 		return "{}"
@@ -901,6 +1497,23 @@ func defaultRequestTokenField(value string) string {
 		return "max_tokens"
 	}
 	return value
+}
+
+func emptyDefault(value string, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func validUTF8ByteBoundary(value string, offset int64) bool {
+	if offset < 0 || offset > int64(len(value)) {
+		return false
+	}
+	if offset == 0 || offset == int64(len(value)) {
+		return true
+	}
+	return utf8.RuneStart(value[offset])
 }
 
 var idCounter uint64
