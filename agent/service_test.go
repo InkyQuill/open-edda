@@ -192,10 +192,17 @@ func TestAcceptCandidateWriteErrorRollsBackToPending(t *testing.T) {
 		ModelVariantID:   model.ID,
 		ApplyMode:        ApplyModePreview,
 		ExpectedRevision: chapter.CurrentRevision,
-		InsertPosition:   int64(len(chapter.BodyMarkdown) + 100),
+		InsertPosition:   int64(len("Existing")),
 	})
 	if err != nil {
 		t.Fatalf("RunContinuation() error = %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		UPDATE generation_candidates
+		SET insert_position = ?
+		WHERE id = ?
+	`, int64(len(chapter.BodyMarkdown)+100), preview.Candidate.ID); err != nil {
+		t.Fatalf("corrupt candidate insert position: %v", err)
 	}
 	_, err = service.AcceptCandidate(ctx, AcceptCandidateInput{
 		ProjectID:   storyProject.ID,

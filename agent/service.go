@@ -12,9 +12,12 @@ import (
 
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/store"
+	"github.com/mattn/go-sqlite3"
 )
 
 const maxToolRounds = 4
+
+var ErrInvalidInput = errors.New("invalid input")
 
 type Service struct {
 	db             *sql.DB
@@ -191,6 +194,9 @@ func (s *Service) CreateProviderConfig(ctx context.Context, input CreateProvider
 		CreatedAt:       provider.CreatedAt,
 		UpdatedAt:       provider.UpdatedAt,
 	}); err != nil {
+		if isSQLiteConstraint(err, sqlite3.ErrConstraintUnique) {
+			return ProviderConfig{}, project.ErrConflict
+		}
 		return ProviderConfig{}, fmt.Errorf("create provider config: %w", err)
 	}
 
@@ -284,6 +290,9 @@ func (s *Service) CreateModelVariant(ctx context.Context, input CreateModelVaria
 		CreatedAt:                 model.CreatedAt,
 		UpdatedAt:                 model.UpdatedAt,
 	}); err != nil {
+		if isSQLiteConstraint(err, sqlite3.ErrConstraintUnique) {
+			return ModelVariant{}, project.ErrConflict
+		}
 		return ModelVariant{}, fmt.Errorf("create model variant: %w", err)
 	}
 
@@ -582,6 +591,9 @@ func (s *Service) RunContinuation(ctx context.Context, input ContinuationInput) 
 	if err := validateApplyMode(input.ApplyMode); err != nil {
 		return ContinuationResult{}, err
 	}
+	if err := s.validateContinuationTarget(ctx, input); err != nil {
+		return ContinuationResult{}, err
+	}
 	generated, session, err := s.runQuickActionCompletion(ctx, quickActionCompletionInput{
 		ProjectID:        input.ProjectID,
 		ContentID:        input.ContentID,
@@ -656,7 +668,10 @@ func (s *Service) RunRewrite(ctx context.Context, input RewriteInput) (RewriteRe
 	}
 	chapter, original, before, after, err := s.selectedChapterContext(ctx, input.ProjectID, input.ContentID, input.SelectionStart, input.SelectionEnd)
 	if err != nil {
-		return RewriteResult{}, err
+		if errors.Is(err, sql.ErrNoRows) {
+			return RewriteResult{}, err
+		}
+		return RewriteResult{}, invalidInputError(err)
 	}
 	generated, session, err := s.runQuickActionCompletion(ctx, quickActionCompletionInput{
 		ProjectID:        input.ProjectID,
@@ -826,7 +841,10 @@ func (s *Service) RunReadAndCheck(ctx context.Context, input ReadAndCheckInput) 
 	}
 	chapter, original, before, after, err := s.selectedChapterContext(ctx, input.ProjectID, input.ContentID, input.SelectionStart, input.SelectionEnd)
 	if err != nil {
-		return ReadAndCheckResult{}, err
+		if errors.Is(err, sql.ErrNoRows) {
+			return ReadAndCheckResult{}, err
+		}
+		return ReadAndCheckResult{}, invalidInputError(err)
 	}
 	report, session, err := s.runQuickActionCompletion(ctx, quickActionCompletionInput{
 		ProjectID:        input.ProjectID,
@@ -954,7 +972,7 @@ type quickActionCompletionInput struct {
 
 func (s *Service) runQuickActionCompletion(ctx context.Context, input quickActionCompletionInput) (string, Session, error) {
 	if input.ModelVariantID == "" {
-		return "", Session{}, fmt.Errorf("model variant ID is required")
+		return "", Session{}, fmt.Errorf("model variant ID is required: %w", ErrInvalidInput)
 	}
 	model, err := s.queries.GetModelVariantForProject(ctx, store.GetModelVariantForProjectParams{
 		ProjectID:      input.ProjectID,
@@ -1023,6 +1041,25 @@ func (s *Service) completionProvider(providerConfig store.ProviderConfig, model 
 		return s.provider
 	}
 	return NewOpenAICompatibleClient(providerConfig.BaseUrl, providerConfig.ApiKeyEncrypted, model)
+}
+
+func (s *Service) validateContinuationTarget(ctx context.Context, input ContinuationInput) error {
+	content, err := s.projectService.GetContent(ctx, input.ProjectID, input.ContentID)
+	if err != nil {
+		return err
+	}
+	if content.Kind != project.KindChapter {
+		return fmt.Errorf("target content must be chapter, got %q: %w", content.Kind, ErrInvalidInput)
+	}
+	if input.Insert || input.InsertPosition > 0 {
+		if input.InsertPosition < 0 || input.InsertPosition > int64(len(content.BodyMarkdown)) {
+			return fmt.Errorf("insert position out of range: %w", ErrInvalidInput)
+		}
+		if !validUTF8ByteBoundary(content.BodyMarkdown, input.InsertPosition) {
+			return fmt.Errorf("insert position byte offset %d is not a UTF-8 rune boundary: %w", input.InsertPosition, ErrInvalidInput)
+		}
+	}
+	return nil
 }
 
 type generationCandidateInput struct {
@@ -1571,7 +1608,7 @@ func validateActionKind(value ActionKind) error {
 	case ActionKindChat, ActionKindContinuation, ActionKindRewrite, ActionKindReadCheck:
 		return nil
 	default:
-		return fmt.Errorf("invalid action kind %q", value)
+		return fmt.Errorf("invalid action kind %q: %w", value, ErrInvalidInput)
 	}
 }
 
@@ -1580,7 +1617,7 @@ func validateApplyMode(value ApplyMode) error {
 	case ApplyModePreview, ApplyModeDirectApply:
 		return nil
 	default:
-		return fmt.Errorf("invalid apply mode %q", value)
+		return fmt.Errorf("invalid apply mode %q: %w", value, ErrInvalidInput)
 	}
 }
 
@@ -1589,8 +1626,20 @@ func validateMessageRole(value MessageRole) error {
 	case MessageRoleUser, MessageRoleAssistant, MessageRoleTool, MessageRoleSystem:
 		return nil
 	default:
-		return fmt.Errorf("invalid message role %q", value)
+		return fmt.Errorf("invalid message role %q: %w", value, ErrInvalidInput)
 	}
+}
+
+func invalidInputError(err error) error {
+	if errors.Is(err, ErrInvalidInput) {
+		return err
+	}
+	return fmt.Errorf("%v: %w", err, ErrInvalidInput)
+}
+
+func isSQLiteConstraint(err error, code sqlite3.ErrNoExtended) bool {
+	var sqliteErr sqlite3.Error
+	return errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == code
 }
 
 func nullString(value string) sql.NullString {

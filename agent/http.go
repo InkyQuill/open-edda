@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -135,6 +136,9 @@ func (h httpHandler) createProviderConfig(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
 		return
 	}
+	if !validateProviderConfigRequest(w, input.Name, input.BaseURL, input.APIKey, true) {
+		return
+	}
 
 	provider, err := h.service.CreateProviderConfig(r.Context(), CreateProviderConfigInput{
 		AuthorID: placeholderAuthorID,
@@ -153,6 +157,9 @@ func (h httpHandler) updateProviderConfig(w http.ResponseWriter, r *http.Request
 	var input updateProviderConfigRequest
 	if err := decodeJSON(r, &input); err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+		return
+	}
+	if !validateProviderConfigRequest(w, "existing provider", input.BaseURL, input.APIKey, false) {
 		return
 	}
 
@@ -182,6 +189,9 @@ func (h httpHandler) createModelVariant(w http.ResponseWriter, r *http.Request) 
 	var input createModelVariantRequest
 	if err := decodeJSON(r, &input); err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+		return
+	}
+	if !validateModelVariantRequest(w, input.Name, input.Model) {
 		return
 	}
 
@@ -462,6 +472,52 @@ func validateQuickActionRequest(w http.ResponseWriter, contentID, modelVariantID
 	return true
 }
 
+func validateProviderConfigRequest(w http.ResponseWriter, name, baseURL, apiKey string, validateName bool) bool {
+	if validateName && strings.TrimSpace(name) == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "provider name is required"})
+		return false
+	}
+	if strings.TrimSpace(baseURL) == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "provider base URL is required"})
+		return false
+	}
+	if err := validateBaseURL(baseURL); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid provider base URL"})
+		return false
+	}
+	if strings.TrimSpace(apiKey) == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "provider API key is required"})
+		return false
+	}
+	return true
+}
+
+func validateBaseURL(rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return err
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return errors.New("base URL scheme must be http or https")
+	}
+	if parsed.Host == "" {
+		return errors.New("base URL host is required")
+	}
+	return nil
+}
+
+func validateModelVariantRequest(w http.ResponseWriter, name, model string) bool {
+	if strings.TrimSpace(name) == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "model variant name is required"})
+		return false
+	}
+	if strings.TrimSpace(model) == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "model is required"})
+		return false
+	}
+	return true
+}
+
 func limitFromQuery(r *http.Request) int64 {
 	value, err := strconv.ParseInt(r.URL.Query().Get("limit"), 10, 64)
 	if err != nil || value <= 0 {
@@ -490,6 +546,8 @@ type errorResponse struct {
 
 func writeError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, ErrInvalidInput):
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid input"})
 	case errors.Is(err, project.ErrConflict):
 		writeJSON(w, http.StatusConflict, errorResponse{Error: "conflict"})
 	case errors.Is(err, sql.ErrNoRows):

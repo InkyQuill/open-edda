@@ -225,8 +225,25 @@ func TestQuickActionHTTPValidationErrorsReturnBadRequest(t *testing.T) {
 	projectService := project.NewService(db)
 	storyProject := createTestProject(t, ctx, projectService, "author-1", "Quick Action Validation Project")
 	chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Opening", "The old city waited.")
-	service := NewService(db, projectService, nil)
+	utf8Chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Accent", "éclair")
+	provider := &fakeChatProvider{responses: []CompletionResponse{
+		quickActionResponse("unused-1", "unused"),
+		quickActionResponse("unused-2", "unused"),
+	}}
+	service := NewService(db, projectService, provider)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
 	handler := newTestAgentHTTP(service)
+	entry, err := projectService.CreateContent(ctx, project.CreateContentInput{
+		ProjectID:    storyProject.ID,
+		Kind:         project.KindStoryBibleEntry,
+		Title:        "Mira",
+		BodyMarkdown: "An alchemist.",
+		Reason:       "seed",
+		CreatedBy:    "author",
+	})
+	if err != nil {
+		t.Fatalf("CreateContent(entry) error = %v", err)
+	}
 
 	tests := []struct {
 		name string
@@ -263,6 +280,31 @@ func TestQuickActionHTTPValidationErrorsReturnBadRequest(t *testing.T) {
 			path: "/api/projects/" + storyProject.ID + "/agent/actions/read-check",
 			body: `{"contentId":"` + chapter.ID + `","modelVariantId":"model-1","applyMode":"invalid","expectedRevision":1,"selectionStart":4,"selectionEnd":12}`,
 		},
+		{
+			name: "rewrite invalid selection range",
+			path: "/api/projects/" + storyProject.ID + "/agent/actions/rewrite",
+			body: `{"contentId":"` + chapter.ID + `","modelVariantId":"` + model.ID + `","expectedRevision":1,"selectionStart":12,"selectionEnd":4}`,
+		},
+		{
+			name: "read check utf8 boundary",
+			path: "/api/projects/" + storyProject.ID + "/agent/actions/read-check",
+			body: `{"contentId":"` + utf8Chapter.ID + `","modelVariantId":"` + model.ID + `","expectedRevision":1,"selectionStart":1,"selectionEnd":2}`,
+		},
+		{
+			name: "rewrite non chapter target",
+			path: "/api/projects/" + storyProject.ID + "/agent/actions/rewrite",
+			body: `{"contentId":"` + entry.ID + `","modelVariantId":"` + model.ID + `","expectedRevision":1,"selectionStart":0,"selectionEnd":2}`,
+		},
+		{
+			name: "continuation preview invalid insert position",
+			path: "/api/projects/" + storyProject.ID + "/agent/actions/continuation",
+			body: `{"contentId":"` + chapter.ID + `","modelVariantId":"` + model.ID + `","applyMode":"preview","expectedRevision":1,"insert":true,"insertPosition":999}`,
+		},
+		{
+			name: "continuation direct apply invalid insert position",
+			path: "/api/projects/" + storyProject.ID + "/agent/actions/continuation",
+			body: `{"contentId":"` + chapter.ID + `","modelVariantId":"` + model.ID + `","applyMode":"direct_apply","expectedRevision":1,"insert":true,"insertPosition":999}`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -281,6 +323,70 @@ func TestQuickActionHTTPValidationErrorsReturnBadRequest(t *testing.T) {
 			}
 		})
 	}
+	if len(provider.requests) != 0 {
+		t.Fatalf("provider request count = %d, want 0 for invalid quick-action requests", len(provider.requests))
+	}
+}
+
+func TestProviderAndModelHTTPValidationAndConflicts(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db, project.NewService(db), nil)
+	handler := newTestAgentHTTP(service)
+
+	badProviderRequests := []string{
+		`{"name":"","baseUrl":"https://provider.test","apiKey":"secret"}`,
+		`{"name":"Provider","baseUrl":"","apiKey":"secret"}`,
+		`{"name":"Provider","baseUrl":"://bad-url","apiKey":"secret"}`,
+		`{"name":"Provider","baseUrl":"https://provider.test","apiKey":""}`,
+	}
+	for _, body := range badProviderRequests {
+		req := httptest.NewRequest(http.MethodPost, "/api/provider-configs", bytes.NewBufferString(body))
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("provider validation status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+		}
+	}
+
+	provider := postJSON[ProviderConfig](t, handler, "/api/provider-configs", `{
+		"name": "Duplicate Provider",
+		"baseUrl": "https://provider.test",
+		"apiKey": "secret"
+	}`, http.StatusCreated)
+	_ = postJSON[errorResponse](t, handler, "/api/provider-configs", `{
+		"name": "Duplicate Provider",
+		"baseUrl": "https://other-provider.test",
+		"apiKey": "secret"
+	}`, http.StatusConflict)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/provider-configs/"+provider.ID, bytes.NewBufferString(`{"baseUrl":"","apiKey":"secret"}`))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("provider update validation status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+
+	badModelRequests := []string{
+		`{"name":"","model":"chat-model"}`,
+		`{"name":"Chat","model":""}`,
+	}
+	for _, body := range badModelRequests {
+		req := httptest.NewRequest(http.MethodPost, "/api/provider-configs/"+provider.ID+"/model-variants", bytes.NewBufferString(body))
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("model validation status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+		}
+	}
+
+	_ = postJSON[ModelVariant](t, handler, "/api/provider-configs/"+provider.ID+"/model-variants", `{
+		"name": "Duplicate Model",
+		"model": "chat-model"
+	}`, http.StatusCreated)
+	_ = postJSON[errorResponse](t, handler, "/api/provider-configs/"+provider.ID+"/model-variants", `{
+		"name": "Duplicate Model",
+		"model": "other-chat-model"
+	}`, http.StatusConflict)
 }
 
 func newTestAgentHTTP(service *Service) http.Handler {
