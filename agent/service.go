@@ -710,20 +710,20 @@ func (s *Service) promptRecordRequestMetadata(ctx context.Context, projectID, se
 		"selectedSkillIds":    []string{},
 		"availableSkillCount": 0,
 	}
-	if s.skillService == nil {
-		return metadata, nil
-	}
-	available, err := s.skillService.List(ctx, projectID)
+	available, err := s.queries.ListSkillsByProject(ctx, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("list skills: %w", err)
+		return metadata, fmt.Errorf("list skills: %w", err)
 	}
 	metadata["availableSkillCount"] = len(available)
 	if sessionID == "" {
 		return metadata, nil
 	}
-	selected, err := s.skillService.ListSessionSkills(ctx, projectID, sessionID)
+	selected, err := s.queries.ListSessionSkills(ctx, store.ListSessionSkillsParams{
+		ProjectID: projectID,
+		SessionID: sessionID,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("list session skills: %w", err)
+		return metadata, fmt.Errorf("list session skills: %w", err)
 	}
 	selectedIDs := make([]string, 0, len(selected))
 	for _, item := range selected {

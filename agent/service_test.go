@@ -230,6 +230,33 @@ func TestPromptRecordRequestMetadataIncludesSkillSelection(t *testing.T) {
 	}
 }
 
+func TestPromptRecordSkillMetadataFallsBackOnQueryError(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	service := NewService(db, project.NewService(db), nil)
+	if err := db.Close(); err != nil {
+		t.Fatalf("close test db: %v", err)
+	}
+
+	metadata, err := service.promptRecordRequestMetadata(ctx, "project-1", "session-1")
+	if err == nil {
+		t.Fatal("promptRecordRequestMetadata() error = nil, want query error")
+	}
+	if metadata == nil {
+		t.Fatal("promptRecordRequestMetadata() metadata = nil, want fallback object")
+	}
+	if metadata["availableSkillCount"] != 0 {
+		t.Fatalf("availableSkillCount = %#v, want 0", metadata["availableSkillCount"])
+	}
+	selectedIDs, ok := metadata["selectedSkillIds"].([]string)
+	if !ok {
+		t.Fatalf("selectedSkillIds = %#v, want []string", metadata["selectedSkillIds"])
+	}
+	if len(selectedIDs) != 0 {
+		t.Fatalf("selectedSkillIds = %#v, want empty", selectedIDs)
+	}
+}
+
 func TestCreateSessionWithInvalidSkillIDDoesNotPersistSession(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()
