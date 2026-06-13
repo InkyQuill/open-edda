@@ -239,7 +239,17 @@ func assertSessionSkillIDs(t *testing.T, ctx context.Context, service *skill.Ser
 
 func TestAgentHTTPMapsClientErrors(t *testing.T) {
 	db := openMigratedTestDB(t)
-	service := NewService(db, project.NewService(db), nil)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "HTTP Error Project")
+	otherProject := createTestProject(t, ctx, projectService, "author-1", "Other HTTP Error Project")
+	service := NewService(db, projectService, nil)
+	skillService := skill.NewService(db)
+	service.SetSkillService(skillService)
+	otherProjectSkill := installPromptSkill(t, ctx, skillService, otherProject.ID, skill.ImportedSkill{
+		Name:        "other-error-skill",
+		Description: "Use only in the other project.",
+	})
 	handler := newTestAgentHTTP(service)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/provider-configs", bytes.NewBufferString(`{"name":"Bad"} trailing`))
@@ -254,6 +264,30 @@ func TestAgentHTTPMapsClientErrors(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("missing profile status = %d, want %d; body = %s", rec.Code, http.StatusNotFound, rec.Body.String())
+	}
+
+	tests := []struct {
+		name     string
+		skillIDs string
+	}{
+		{name: "blank skill ID", skillIDs: `[""]`},
+		{name: "cross-project skill ID", skillIDs: `["` + otherProjectSkill.ID + `"]`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/projects/"+storyProject.ID+"/agent/sessions", bytes.NewBufferString(`{
+				"title": "Invalid skill session",
+				"actionKind": "chat",
+				"applyMode": "preview",
+				"skillIds": `+tt.skillIDs+`
+			}`))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+			}
+		})
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"git.inkyquill.net/inky/writer/project"
+	"git.inkyquill.net/inky/writer/skill"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -553,7 +554,7 @@ type errorResponse struct {
 
 func writeError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, ErrInvalidInput):
+	case errors.Is(err, ErrInvalidInput), errors.Is(err, skill.ErrInvalidInput):
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid input"})
 	case errors.Is(err, project.ErrConflict):
 		writeJSON(w, http.StatusConflict, errorResponse{Error: "conflict"})

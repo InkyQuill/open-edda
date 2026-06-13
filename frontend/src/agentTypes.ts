@@ -130,6 +130,7 @@ export type GenerationCandidate = {
   generatedMarkdown: string;
   reason?: string;
   modelVariantId?: string;
+  skillId?: string;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -143,7 +144,7 @@ export type ContinuationRequest = {
   expectedRevision: number;
   insertPosition: number;
   insert: boolean;
-  continuationUnits: "word" | "sentence";
+  continuationUnits: "word" | "sentence" | "paragraph";
   continuationCount: number;
 } & Partial<SkillSelection>;
 
