@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/store"
@@ -31,6 +32,35 @@ func TestHealth(t *testing.T) {
 	}
 	if got := rec.Body.String(); got != `{"status":"ok"}`+"\n" {
 		t.Fatalf("body = %q", got)
+	}
+}
+
+func TestStaticFrontendServesIndexAndKeepsAPINotFound(t *testing.T) {
+	handler := New(&Dependencies{
+		StaticFS: fstest.MapFS{
+			"index.html": {Data: []byte("<!doctype html><html><body>Writer</body></html>")},
+		},
+	})
+
+	for _, path := range []string{"/", "/projects/project-1"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want %d", path, rec.Code, http.StatusOK)
+		}
+		if got := rec.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
+			t.Fatalf("%s content type = %q, want text/html; charset=utf-8", path, got)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/missing", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("api status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
 

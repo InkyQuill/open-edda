@@ -41,6 +41,7 @@ func main() {
 func buildDependencies() (*app.Dependencies, func(), error) {
 	dbPath := getenvDefault("WRITER_DB_PATH", "writer.db")
 	migrationsPath := getenvDefault("WRITER_MIGRATIONS_PATH", "migrations")
+	staticPath := getenvDefault("WRITER_STATIC_PATH", "frontend/dist")
 
 	db, err := store.Open(dbPath)
 	if err != nil {
@@ -59,6 +60,7 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 
 	return &app.Dependencies{
 		ProjectService: project.NewService(db),
+		StaticFS:       os.DirFS(staticPath),
 	}, cleanup, nil
 }
 
