@@ -825,6 +825,7 @@ type AgentPanelProps = {
 type AgentPanelScope = {
   projectId: string;
   contentId: string | null;
+  modelVariantId: string | null;
 };
 
 function AgentPanel({
@@ -859,27 +860,32 @@ function AgentPanel({
   const [readCheckReport, setReadCheckReport] = useState<string | null>(null);
 
   const selectedContentId = selectedContent?.id ?? null;
-  const latestScopeRef = useRef<AgentPanelScope>({ projectId, contentId: selectedContentId });
-  latestScopeRef.current = { projectId, contentId: selectedContentId };
+  const activeModelId = activeModel?.id ?? null;
+  const latestScopeRef = useRef<AgentPanelScope>({ projectId, contentId: selectedContentId, modelVariantId: activeModelId });
+  latestScopeRef.current = { projectId, contentId: selectedContentId, modelVariantId: activeModelId };
 
   useEffect(() => {
     setPreviewCandidate(null);
     setReadCheckReport(null);
     setIsSendingMessage(false);
     setIsRunningAction(false);
-  }, [projectId, selectedContentId]);
+  }, [projectId, selectedContentId, activeModelId]);
 
   const activeChatSession = sessions.find((session) => session.actionKind === "chat" && session.modelVariantId === activeModel?.id) ?? null;
   const actionsDisabled = !activeModel || !selectedContent || selectedContent.kind !== "chapter" || isRunningAction;
   const activeSessionRecord = activeSessionId ? newestRecordForSession(promptRecords, activeSessionId) : null;
 
   function currentScope(): AgentPanelScope {
-    return { projectId, contentId: selectedContentId };
+    return { projectId, contentId: selectedContentId, modelVariantId: activeModelId };
   }
 
   function isCurrentScope(scope: AgentPanelScope): boolean {
     const latest = latestScopeRef.current;
-    return latest.projectId === scope.projectId && latest.contentId === scope.contentId;
+    return (
+      latest.projectId === scope.projectId &&
+      latest.contentId === scope.contentId &&
+      latest.modelVariantId === scope.modelVariantId
+    );
   }
 
   async function ensureChatSession(scope: AgentPanelScope): Promise<AgentSession | null> {
