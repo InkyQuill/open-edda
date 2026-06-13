@@ -212,6 +212,26 @@ func TestAgentCoreQueriesScopeProviderAndModelByAuthor(t *testing.T) {
 	if _, err := queries.GetModelVariant(ctx, GetModelVariantParams{ID: "model-1", AuthorID: "author-2"}); err != sql.ErrNoRows {
 		t.Fatalf("GetModelVariant() with wrong author error = %v, want sql.ErrNoRows", err)
 	}
+	models, err := queries.ListModelVariantsByProvider(ctx, ListModelVariantsByProviderParams{
+		ProviderConfigID: "provider-1",
+		AuthorID:         "author-2",
+	})
+	if err != nil {
+		t.Fatalf("list model variants by provider with wrong author: %v", err)
+	}
+	if len(models) != 0 {
+		t.Fatalf("ListModelVariantsByProvider() with wrong author returned %d models, want 0", len(models))
+	}
+	models, err = queries.ListModelVariantsByProvider(ctx, ListModelVariantsByProviderParams{
+		ProviderConfigID: "provider-1",
+		AuthorID:         "author-1",
+	})
+	if err != nil {
+		t.Fatalf("list model variants by provider with owner: %v", err)
+	}
+	if len(models) != 1 || models[0].ID != "model-1" {
+		t.Fatalf("ListModelVariantsByProvider() with owner returned %#v, want model-1", models)
+	}
 	if err := queries.UpdateModelVariant(ctx, UpdateModelVariantParams{
 		Name:                      "Wrong author",
 		Model:                     "wrong-model",

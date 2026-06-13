@@ -35,9 +35,12 @@ INSERT INTO model_variants (
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: ListModelVariantsByProvider :many
-SELECT * FROM model_variants
-WHERE provider_config_id = ?
-ORDER BY name ASC;
+SELECT model_variants.*
+FROM model_variants
+JOIN provider_configs ON provider_configs.id = model_variants.provider_config_id
+WHERE model_variants.provider_config_id = sqlc.arg(provider_config_id)
+  AND provider_configs.author_id = sqlc.arg(author_id)
+ORDER BY model_variants.name ASC;
 
 -- name: ListModelVariantsByAuthor :many
 SELECT model_variants.*

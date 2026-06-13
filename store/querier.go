@@ -44,7 +44,7 @@ type Querier interface {
 	ListEntrySections(ctx context.Context, arg ListEntrySectionsParams) ([]EntrySection, error)
 	ListGenerationCandidates(ctx context.Context, arg ListGenerationCandidatesParams) ([]GenerationCandidate, error)
 	ListModelVariantsByAuthor(ctx context.Context, authorID string) ([]ModelVariant, error)
-	ListModelVariantsByProvider(ctx context.Context, providerConfigID string) ([]ModelVariant, error)
+	ListModelVariantsByProvider(ctx context.Context, arg ListModelVariantsByProviderParams) ([]ModelVariant, error)
 	ListProjectContentItems(ctx context.Context, projectID string) ([]ContentItem, error)
 	ListPromptContextSnapshots(ctx context.Context, promptRecordID string) ([]PromptContextSnapshot, error)
 	ListPromptRecords(ctx context.Context, arg ListPromptRecordsParams) ([]PromptRecord, error)

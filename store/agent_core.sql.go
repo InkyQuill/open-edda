@@ -855,13 +855,21 @@ func (q *Queries) ListModelVariantsByAuthor(ctx context.Context, authorID string
 }
 
 const listModelVariantsByProvider = `-- name: ListModelVariantsByProvider :many
-SELECT id, provider_config_id, name, model, temperature, max_output_tokens, context_window_tokens, input_price_per_million, output_price_per_million, cache_read_price_per_million, cache_write_price_per_million, request_token_field, reasoning_format, compatibility_json, created_at, updated_at FROM model_variants
-WHERE provider_config_id = ?
-ORDER BY name ASC
+SELECT model_variants.id, model_variants.provider_config_id, model_variants.name, model_variants.model, model_variants.temperature, model_variants.max_output_tokens, model_variants.context_window_tokens, model_variants.input_price_per_million, model_variants.output_price_per_million, model_variants.cache_read_price_per_million, model_variants.cache_write_price_per_million, model_variants.request_token_field, model_variants.reasoning_format, model_variants.compatibility_json, model_variants.created_at, model_variants.updated_at
+FROM model_variants
+JOIN provider_configs ON provider_configs.id = model_variants.provider_config_id
+WHERE model_variants.provider_config_id = ?1
+  AND provider_configs.author_id = ?2
+ORDER BY model_variants.name ASC
 `
 
-func (q *Queries) ListModelVariantsByProvider(ctx context.Context, providerConfigID string) ([]ModelVariant, error) {
-	rows, err := q.db.QueryContext(ctx, listModelVariantsByProvider, providerConfigID)
+type ListModelVariantsByProviderParams struct {
+	ProviderConfigID string `json:"provider_config_id"`
+	AuthorID         string `json:"author_id"`
+}
+
+func (q *Queries) ListModelVariantsByProvider(ctx context.Context, arg ListModelVariantsByProviderParams) ([]ModelVariant, error) {
+	rows, err := q.db.QueryContext(ctx, listModelVariantsByProvider, arg.ProviderConfigID, arg.AuthorID)
 	if err != nil {
 		return nil, err
 	}
