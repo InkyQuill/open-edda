@@ -443,6 +443,7 @@ func (s *Service) RunChatTurn(ctx context.Context, input ChatTurnInput) (ChatTur
 			usage = addUsage(usage, response.Usage)
 		} else {
 			usageMissing = true
+			usage = Usage{}
 		}
 
 		if len(response.Message.ToolCalls) == 0 {
@@ -512,6 +513,9 @@ func (s *Service) RunChatTurn(ctx context.Context, input ChatTurnInput) (ChatTur
 
 	promptRecordID := ""
 	if profile.PromptRecordRetentionDays > 0 {
+		if usageMissing {
+			usage = Usage{}
+		}
 		requestJSON, err := marshalJSON(map[string]any{
 			"providerName": providerConfig.Name,
 			"modelName":    model.Model,
@@ -550,6 +554,13 @@ func (s *Service) PrunePromptRecords(ctx context.Context, projectID string) (int
 	profile, err := s.GetPromptProfile(ctx, projectID)
 	if err != nil {
 		return 0, err
+	}
+	if profile.PromptRecordRetentionDays == 0 {
+		result, err := s.db.ExecContext(ctx, `DELETE FROM prompt_records WHERE project_id = ?`, projectID)
+		if err != nil {
+			return 0, fmt.Errorf("delete project prompt records: %w", err)
+		}
+		return result.RowsAffected()
 	}
 	cutoff := nowString()
 	if profile.PromptRecordRetentionDays > 0 {

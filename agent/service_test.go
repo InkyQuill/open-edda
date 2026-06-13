@@ -192,7 +192,32 @@ func TestRunChatTurnStoresZeroUsageAndEventWhenProviderOmitsUsage(t *testing.T) 
 	provider := &fakeChatProvider{
 		responses: []CompletionResponse{
 			{
-				ID: "completion-no-usage",
+				ID: "completion-tool-with-usage",
+				Message: CompletionMessage{
+					Role: MessageRoleAssistant,
+					ToolCalls: []CompletionToolCall{
+						{
+							ID:   "tool-call-usage-missing",
+							Type: "function",
+							Function: CompletionToolCallFunction{
+								Name:      "project_map",
+								Arguments: `{}`,
+							},
+						},
+					},
+				},
+				FinishReason: "tool_calls",
+				Usage: Usage{
+					InputTokens:      50,
+					OutputTokens:     10,
+					CacheReadTokens:  5,
+					CacheWriteTokens: 2,
+					TotalTokens:      67,
+				},
+				UsageAvailable: true,
+			},
+			{
+				ID: "completion-final-no-usage",
 				Message: CompletionMessage{
 					Role:    MessageRoleAssistant,
 					Content: "No usage came back.",
@@ -222,8 +247,17 @@ func TestRunChatTurnStoresZeroUsageAndEventWhenProviderOmitsUsage(t *testing.T) 
 	if len(records) != 1 {
 		t.Fatalf("prompt record count = %d, want 1", len(records))
 	}
-	if records[0].TotalTokens != 0 || records[0].TotalCost != 0 {
-		t.Fatalf("usage/cost = tokens %d cost %f, want zeros", records[0].TotalTokens, records[0].TotalCost)
+	if records[0].InputTokens != 0 ||
+		records[0].OutputTokens != 0 ||
+		records[0].CacheReadTokens != 0 ||
+		records[0].CacheWriteTokens != 0 ||
+		records[0].TotalTokens != 0 ||
+		records[0].InputCost != 0 ||
+		records[0].OutputCost != 0 ||
+		records[0].CacheReadCost != 0 ||
+		records[0].CacheWriteCost != 0 ||
+		records[0].TotalCost != 0 {
+		t.Fatalf("usage/cost = %#v, want all zeros", records[0])
 	}
 	events, err := queries.ListActivityEvents(ctx, store.ListActivityEventsParams{ProjectID: storyProject.ID, Limit: 10})
 	if err != nil {
@@ -299,12 +333,20 @@ func TestPrunePromptRecordsDeletesRecordsOlderThanRetentionWindow(t *testing.T) 
 	}
 
 	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 0)
+	insertPromptRecordForPrune(t, ctx, db, storyProject.ID, "future-record", "2999-01-01T00:00:00Z")
 	deleted, err = service.PrunePromptRecords(ctx, storyProject.ID)
 	if err != nil {
 		t.Fatalf("PrunePromptRecords(retention zero) error = %v", err)
 	}
-	if deleted != 1 {
-		t.Fatalf("retention zero deleted rows = %d, want 1", deleted)
+	if deleted != 2 {
+		t.Fatalf("retention zero deleted rows = %d, want 2", deleted)
+	}
+	records, err = store.New(db).ListPromptRecords(ctx, store.ListPromptRecordsParams{ProjectID: storyProject.ID, Limit: 10})
+	if err != nil {
+		t.Fatalf("ListPromptRecords(retention zero) error = %v", err)
+	}
+	if len(records) != 0 {
+		t.Fatalf("retention zero remaining records = %#v, want none", records)
 	}
 }
 
