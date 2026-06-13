@@ -213,10 +213,6 @@ body {
   font-size: 18px;
 }
 
-.skill-browser-header input[type="file"] {
-  display: none;
-}
-
 .skill-browser-grid {
   display: grid;
   grid-template-columns: minmax(240px, 0.75fr) minmax(0, 1.25fr);
@@ -435,9 +431,22 @@ button {
 .settings-card button:disabled,
 .chat-form button:disabled,
 .action-buttons button:disabled,
-.preview-result button:disabled {
+.preview-result button:disabled,
+.pill-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+  padding: 0;
 }
 
 .model-list {

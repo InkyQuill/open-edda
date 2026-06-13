@@ -563,6 +563,16 @@ function SkillBrowser({ projectId, skills, skillError, onError, onSkillsChange, 
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [skillDetail, setSkillDetail] = useState<WriterSkill | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const currentProjectIdRef = useRef(projectId);
+  const importRequestRef = useRef(0);
+  currentProjectIdRef.current = projectId;
+
+  useEffect(() => {
+    currentProjectIdRef.current = projectId;
+    importRequestRef.current += 1;
+    setIsImporting(false);
+  }, [projectId]);
 
   useEffect(() => {
     setSelectedSkillId((current) => {
@@ -605,18 +615,31 @@ function SkillBrowser({ projectId, skills, skillError, onError, onSkillsChange, 
     if (!file) {
       return;
     }
+    const importProjectId = projectId;
+    const requestId = importRequestRef.current + 1;
+    importRequestRef.current = requestId;
     setIsImporting(true);
-    void importSkill(projectId, file)
+    void importSkill(importProjectId, file)
       .then((skill) => {
+        if (currentProjectIdRef.current !== importProjectId || importRequestRef.current !== requestId) {
+          return;
+        }
         onSkillsChange((current) => sortSkillsByName([skill, ...current.filter((entry) => entry.id !== skill.id)]));
         setSelectedSkillId(skill.id);
         onError(null);
-        onRefreshSkills(projectId);
+        onRefreshSkills(importProjectId);
       })
       .catch((cause: unknown) => {
+        if (currentProjectIdRef.current !== importProjectId || importRequestRef.current !== requestId) {
+          return;
+        }
         onError(cause instanceof Error ? cause.message : "Skill import failed");
       })
-      .finally(() => setIsImporting(false));
+      .finally(() => {
+        if (currentProjectIdRef.current === importProjectId && importRequestRef.current === requestId) {
+          setIsImporting(false);
+        }
+      });
   }
 
   return (
@@ -626,10 +649,18 @@ function SkillBrowser({ projectId, skills, skillError, onError, onSkillsChange, 
           <h2>Skills</h2>
           <p>{skills.length} installed</p>
         </div>
-        <label className="pill-button">
-          <span>{isImporting ? "Importing..." : "Import .zip"}</span>
-          <input type="file" accept=".zip,application/zip" onChange={handleImport} disabled={isImporting} />
-        </label>
+        <button className="pill-button" type="button" onClick={() => fileInputRef.current?.click()} disabled={isImporting}>
+          {isImporting ? "Importing..." : "Import .zip"}
+        </button>
+        <input
+          ref={fileInputRef}
+          className="visually-hidden"
+          type="file"
+          accept=".zip,application/zip"
+          onChange={handleImport}
+          disabled={isImporting}
+          tabIndex={-1}
+        />
       </header>
 
       {skillError ? <p className="agent-error" role="alert">{skillError}</p> : null}
@@ -1099,6 +1130,10 @@ function AgentPanel({
   const [previewCandidate, setPreviewCandidate] = useState<GenerationCandidate | null>(null);
   const [readCheckReport, setReadCheckReport] = useState<string | null>(null);
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
+  const [skillSelectionModelId, setSkillSelectionModelId] = useState<string | null>(null);
+  const [isSkillSelectionLoading, setIsSkillSelectionLoading] = useState(false);
+  const skillSelectionLoadRef = useRef(0);
+  const skillSelectionDirtyRef = useRef(false);
 
   const selectedContentId = selectedContent?.id ?? null;
   const activeModelId = activeModel?.id ?? null;
@@ -1113,6 +1148,8 @@ function AgentPanel({
   }, [projectId, selectedContentId, activeModelId]);
 
   const activeChatSession = sessions.find((session) => session.actionKind === "chat" && session.modelVariantId === activeModel?.id) ?? null;
+  const activeChatSessionId = activeChatSession?.id ?? null;
+  const scopedSelectedSkillIds = skillSelectionModelId === activeModelId ? selectedSkillIds : [];
   const actionsDisabled = !activeModel || !selectedContent || selectedContent.kind !== "chapter" || isRunningAction;
   const activeSessionRecord = activeSessionId ? newestRecordForSession(promptRecords, activeSessionId) : null;
 
@@ -1122,13 +1159,25 @@ function AgentPanel({
   }, [skills]);
 
   useEffect(() => {
-    if (!activeSessionId) {
+    skillSelectionDirtyRef.current = false;
+    const loadId = skillSelectionLoadRef.current + 1;
+    skillSelectionLoadRef.current = loadId;
+    setSkillSelectionModelId(activeModelId);
+
+    if (!activeChatSessionId) {
+      setSelectedSkillIds([]);
+      setIsSkillSelectionLoading(false);
       return;
     }
 
     const abortController = new AbortController();
-    void listSessionSkills(projectId, activeSessionId, abortController.signal)
+    setIsSkillSelectionLoading(true);
+    void listSessionSkills(projectId, activeChatSessionId, abortController.signal)
       .then((sessionSkills) => {
+        if (skillSelectionLoadRef.current !== loadId || skillSelectionDirtyRef.current) {
+          return;
+        }
+        setSkillSelectionModelId(activeModelId);
         setSelectedSkillIds(sessionSkills.map((skill) => skill.id));
         onError(null);
       })
@@ -1137,12 +1186,17 @@ function AgentPanel({
           return;
         }
         onError(cause instanceof Error ? cause.message : "Session skill list failed");
+      })
+      .finally(() => {
+        if (skillSelectionLoadRef.current === loadId) {
+          setIsSkillSelectionLoading(false);
+        }
       });
 
     return () => {
       abortController.abort();
     };
-  }, [projectId, activeSessionId, onError]);
+  }, [projectId, activeChatSessionId, activeModelId, onError]);
 
   function currentScope(): AgentPanelScope {
     return { projectId, contentId: selectedContentId, modelVariantId: activeModelId };
@@ -1158,6 +1212,8 @@ function AgentPanel({
   }
 
   function toggleSkill(skillId: string, checked: boolean): void {
+    skillSelectionDirtyRef.current = true;
+    setSkillSelectionModelId(activeModelId);
     setSelectedSkillIds((current) => {
       if (checked) {
         return current.includes(skillId) ? current : [...current, skillId];
@@ -1181,7 +1237,7 @@ function AgentPanel({
       actionKind: "chat",
       modelVariantId: activeModel.id,
       applyMode,
-      skillIds: selectedSkillIds,
+      skillIds: scopedSelectedSkillIds,
     });
     if (!isCurrentScope(scope)) {
       return null;
@@ -1204,7 +1260,7 @@ function AgentPanel({
         if (!session || !isCurrentScope(launchScope)) {
           return null;
         }
-        return selectSessionSkills(launchScope.projectId, session.id, selectedSkillIds).then(() => session);
+        return selectSessionSkills(launchScope.projectId, session.id, scopedSelectedSkillIds).then(() => session);
       })
       .then((session) => {
         if (!session || !isCurrentScope(launchScope)) {
@@ -1258,7 +1314,7 @@ function AgentPanel({
             insert: false,
             continuationUnits,
             continuationCount,
-            skillIds: selectedSkillIds,
+            skillIds: scopedSelectedSkillIds,
           })
         : action === "rewrite"
           ? runRewrite(launchScope.projectId, {
@@ -1269,7 +1325,7 @@ function AgentPanel({
               expectedRevision,
               selectionStart: 0,
               selectionEnd: wholeSelectionEnd,
-              skillIds: selectedSkillIds,
+              skillIds: scopedSelectedSkillIds,
             })
           : runReadAndCheck(launchScope.projectId, {
               contentId: selectedContent.id,
@@ -1279,7 +1335,7 @@ function AgentPanel({
               expectedRevision,
               selectionStart: 0,
               selectionEnd: wholeSelectionEnd,
-              skillIds: selectedSkillIds,
+              skillIds: scopedSelectedSkillIds,
             });
 
     void actionRequest
@@ -1389,7 +1445,12 @@ function AgentPanel({
       </div>
 
       {skills.length > 0 ? (
-        <SkillSelector skills={skills} selectedSkillIds={selectedSkillIds} onToggle={toggleSkill} />
+        <SkillSelector
+          skills={skills}
+          selectedSkillIds={scopedSelectedSkillIds}
+          disabled={isSkillSelectionLoading}
+          onToggle={toggleSkill}
+        />
       ) : null}
 
       {showActivity ? <ActivityRows events={activityEvents} records={promptRecords} /> : null}
@@ -1503,10 +1564,12 @@ function AgentPanel({
 function SkillSelector({
   skills,
   selectedSkillIds,
+  disabled,
   onToggle,
 }: {
   skills: WriterSkill[];
   selectedSkillIds: string[];
+  disabled: boolean;
   onToggle: (skillId: string, checked: boolean) => void;
 }) {
   return (
@@ -1517,6 +1580,7 @@ function SkillSelector({
           <input
             type="checkbox"
             checked={selectedSkillIds.includes(skill.id)}
+            disabled={disabled}
             onChange={(event) => onToggle(skill.id, event.target.checked)}
           />
           <span>{skill.displayName}</span>

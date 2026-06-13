@@ -3,7 +3,16 @@ import type { WriterSkill } from "./skillTypes";
 async function requestJSON<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   if (!response.ok) {
-    throw new Error(`${init?.method ?? "GET"} ${path} failed: ${response.status}`);
+    let message = `${init?.method ?? "GET"} ${path} failed: ${response.status}`;
+    try {
+      const body = (await response.json()) as { error?: unknown };
+      if (typeof body.error === "string" && body.error.trim()) {
+        message = body.error;
+      }
+    } catch {
+      // Keep the status-based fallback when the server returns a non-JSON error.
+    }
+    throw new Error(message);
   }
   return response.json() as Promise<T>;
 }
