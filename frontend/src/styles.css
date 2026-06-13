@@ -639,8 +639,66 @@ button {
   gap: 8px;
 }
 
+.chat-input-wrap {
+  position: relative;
+}
+
 .chat-form textarea {
   min-height: 76px;
+}
+
+.skill-mention-list {
+  position: absolute;
+  z-index: 5;
+  right: 8px;
+  bottom: 8px;
+  display: grid;
+  width: min(320px, calc(100% - 16px));
+  max-height: 190px;
+  overflow: auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgb(15 23 42 / 14%);
+  padding: 4px;
+}
+
+.skill-mention-list button {
+  display: grid;
+  grid-template-columns: minmax(84px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #1f2933;
+  padding: 6px 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.skill-mention-list button:hover,
+.skill-mention-list button[data-active="true"] {
+  background: #eef4ff;
+  color: #1d4ed8;
+}
+
+.skill-mention-list strong,
+.skill-mention-list span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-mention-list strong {
+  font-size: 12px;
+}
+
+.skill-mention-list span {
+  color: #5f6b7a;
+  font-size: 12px;
 }
 
 .quick-actions textarea {

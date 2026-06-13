@@ -113,6 +113,38 @@ function sortSkillsByName(items: WriterSkill[]): WriterSkill[] {
   return [...items].sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
+type DollarSkillToken = {
+  start: number;
+  end: number;
+  query: string;
+};
+
+function findDollarSkillToken(value: string, cursorPosition: number): DollarSkillToken | null {
+  const cursor = Math.max(0, Math.min(cursorPosition, value.length));
+  let start = cursor;
+  while (start > 0 && !/\s/.test(value[start - 1])) {
+    start -= 1;
+  }
+  const prefix = value.slice(start, cursor);
+  if (!prefix.startsWith("$") || prefix.includes("/")) {
+    return null;
+  }
+
+  let end = cursor;
+  while (end < value.length && !/\s/.test(value[end])) {
+    end += 1;
+  }
+
+  return { start, end, query: prefix.slice(1).toLowerCase() };
+}
+
+function matchesSkillQuery(skill: WriterSkill, query: string): boolean {
+  if (!query) {
+    return true;
+  }
+  return [skill.name, skill.displayName, skill.description].some((value) => value.toLowerCase().includes(query));
+}
+
 function usageForSession(records: PromptRecord[], sessionId: string | null): { tokens: number; cost: number } {
   if (!sessionId) {
     return { tokens: 0, cost: 0 };
@@ -1132,6 +1164,10 @@ function AgentPanel({
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
   const [skillSelectionModelId, setSkillSelectionModelId] = useState<string | null>(null);
   const [isSkillSelectionLoading, setIsSkillSelectionLoading] = useState(false);
+  const [chatCursorPosition, setChatCursorPosition] = useState(0);
+  const [highlightedSkillIndex, setHighlightedSkillIndex] = useState(0);
+  const [dismissedSkillMentionKey, setDismissedSkillMentionKey] = useState<string | null>(null);
+  const chatTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const skillSelectionLoadRef = useRef(0);
   const skillSelectionDirtyRef = useRef(false);
 
@@ -1152,6 +1188,28 @@ function AgentPanel({
   const scopedSelectedSkillIds = skillSelectionModelId === activeModelId ? selectedSkillIds : [];
   const actionsDisabled = !activeModel || !selectedContent || selectedContent.kind !== "chapter" || isRunningAction;
   const activeSessionRecord = activeSessionId ? newestRecordForSession(promptRecords, activeSessionId) : null;
+  const activeDollarSkillToken = useMemo(
+    () => findDollarSkillToken(messageInput, chatCursorPosition),
+    [chatCursorPosition, messageInput],
+  );
+  const activeDollarSkillTokenKey = activeDollarSkillToken
+    ? `${activeDollarSkillToken.start}:${activeDollarSkillToken.end}:${activeDollarSkillToken.query}`
+    : null;
+  const skillMentionSuggestions = useMemo(() => {
+    if (!activeDollarSkillToken) {
+      return [];
+    }
+    return skills.filter((skill) => matchesSkillQuery(skill, activeDollarSkillToken.query)).slice(0, 6);
+  }, [activeDollarSkillToken, skills]);
+  const showSkillMentionSuggestions =
+    skills.length > 0 &&
+    activeDollarSkillToken !== null &&
+    activeDollarSkillTokenKey !== dismissedSkillMentionKey &&
+    skillMentionSuggestions.length > 0;
+
+  useEffect(() => {
+    setHighlightedSkillIndex(0);
+  }, [activeDollarSkillTokenKey, skillMentionSuggestions.length]);
 
   useEffect(() => {
     const installedSkillIds = new Set(skills.map((skill) => skill.id));
@@ -1221,6 +1279,57 @@ function AgentPanel({
       }
       return current.filter((entry) => entry !== skillId);
     });
+  }
+
+  function updateChatCursorPosition(element: HTMLTextAreaElement): void {
+    setChatCursorPosition(element.selectionStart);
+  }
+
+  function acceptSkillMention(skill: WriterSkill): void {
+    if (!activeDollarSkillToken) {
+      return;
+    }
+    const beforeToken = messageInput.slice(0, activeDollarSkillToken.start);
+    const afterToken = messageInput.slice(activeDollarSkillToken.end);
+    const suffix = afterToken.length === 0 || /^\s/.test(afterToken) ? "" : " ";
+    const mention = `$${skill.name}`;
+    const nextInput = `${beforeToken}${mention}${suffix}${afterToken}`;
+    const nextCursorPosition = beforeToken.length + mention.length + suffix.length;
+
+    toggleSkill(skill.id, true);
+    setMessageInput(nextInput);
+    setChatCursorPosition(nextCursorPosition);
+    setDismissedSkillMentionKey(null);
+    window.requestAnimationFrame(() => {
+      chatTextareaRef.current?.focus();
+      chatTextareaRef.current?.setSelectionRange(nextCursorPosition, nextCursorPosition);
+    });
+  }
+
+  function handleChatKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>): void {
+    if (!showSkillMentionSuggestions) {
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setHighlightedSkillIndex((current) => (current + 1) % skillMentionSuggestions.length);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setHighlightedSkillIndex((current) => (current - 1 + skillMentionSuggestions.length) % skillMentionSuggestions.length);
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setDismissedSkillMentionKey(activeDollarSkillTokenKey);
+      return;
+    }
+    if (event.key === "Enter" || event.key === "Tab") {
+      event.preventDefault();
+      acceptSkillMention(skillMentionSuggestions[highlightedSkillIndex] ?? skillMentionSuggestions[0]);
+    }
   }
 
   async function ensureChatSession(scope: AgentPanelScope): Promise<AgentSession | null> {
@@ -1470,12 +1579,42 @@ function AgentPanel({
           )}
         </div>
         <form className="chat-form" onSubmit={handleChatSubmit}>
-          <textarea
-            value={messageInput}
-            onChange={(event) => setMessageInput(event.target.value)}
-            placeholder="Ask about this project..."
-            disabled={!activeModel || isSendingMessage}
-          />
+          <div className="chat-input-wrap">
+            <textarea
+              ref={chatTextareaRef}
+              value={messageInput}
+              onChange={(event) => {
+                setMessageInput(event.target.value);
+                updateChatCursorPosition(event.target);
+              }}
+              onClick={(event) => updateChatCursorPosition(event.currentTarget)}
+              onKeyDown={handleChatKeyDown}
+              onKeyUp={(event) => updateChatCursorPosition(event.currentTarget)}
+              onSelect={(event) => updateChatCursorPosition(event.currentTarget)}
+              placeholder="Ask about this project..."
+              disabled={!activeModel || isSendingMessage}
+            />
+            {showSkillMentionSuggestions ? (
+              <div className="skill-mention-list" role="listbox" aria-label="Skill suggestions">
+                {skillMentionSuggestions.map((skill, index) => (
+                  <button
+                    key={skill.id}
+                    type="button"
+                    role="option"
+                    aria-selected={index === highlightedSkillIndex}
+                    data-active={index === highlightedSkillIndex}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      acceptSkillMention(skill);
+                    }}
+                  >
+                    <strong>${skill.name}</strong>
+                    <span>{skill.displayName}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <button type="submit" disabled={!activeModel || isSendingMessage || messageInput.trim() === ""}>
             {isSendingMessage ? "Sending..." : "Send"}
           </button>
