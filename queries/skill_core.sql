@@ -85,9 +85,14 @@ ORDER BY skills.display_name ASC, skills.name ASC;
 DELETE FROM agent_session_skills
 WHERE session_id = ?;
 
--- name: AddSessionSkill :exec
-INSERT INTO agent_session_skills (session_id, skill_id, selected_at)
-VALUES (?, ?, ?);
+-- name: AddSessionSkill :execrows
+INSERT INTO agent_session_skills (project_id, session_id, skill_id, selected_at)
+SELECT sqlc.arg(project_id), agent_sessions.id, skills.id, sqlc.arg(selected_at)
+FROM agent_sessions
+JOIN skills ON skills.id = sqlc.arg(skill_id)
+WHERE agent_sessions.id = sqlc.arg(session_id)
+  AND agent_sessions.project_id = sqlc.arg(project_id)
+  AND skills.project_id = sqlc.arg(project_id);
 
 -- name: ListSessionSkills :many
 SELECT skills.*
@@ -96,4 +101,5 @@ JOIN skills ON skills.id = agent_session_skills.skill_id
 JOIN agent_sessions ON agent_sessions.id = agent_session_skills.session_id
 WHERE agent_session_skills.session_id = sqlc.arg(session_id)
   AND agent_sessions.project_id = sqlc.arg(project_id)
+  AND skills.project_id = agent_sessions.project_id
 ORDER BY skills.display_name ASC, skills.name ASC;

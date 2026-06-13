@@ -42,24 +42,31 @@ CREATE TABLE skill_routing_hints (
 );
 
 CREATE TABLE agent_session_skills (
+  project_id TEXT NOT NULL REFERENCES story_projects(id) ON DELETE CASCADE,
   session_id TEXT NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
   skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
   selected_at TEXT NOT NULL,
-  PRIMARY KEY (session_id, skill_id)
+  PRIMARY KEY (project_id, session_id, skill_id),
+  FOREIGN KEY (session_id, project_id) REFERENCES agent_sessions(id, project_id) ON DELETE CASCADE,
+  FOREIGN KEY (skill_id, project_id) REFERENCES skills(id, project_id) ON DELETE CASCADE
 );
 
 ALTER TABLE generation_candidates ADD COLUMN skill_id TEXT NOT NULL DEFAULT '';
 
+CREATE UNIQUE INDEX idx_agent_sessions_id_project ON agent_sessions(id, project_id);
+CREATE UNIQUE INDEX idx_skills_id_project ON skills(id, project_id);
 CREATE INDEX idx_skills_project_name ON skills(project_id, name);
 CREATE INDEX idx_skill_files_skill_path ON skill_files(skill_id, relative_path);
 CREATE INDEX idx_skill_routing_hints_lookup ON skill_routing_hints(action_kind, content_kind, tag, priority DESC);
-CREATE INDEX idx_agent_session_skills_skill ON agent_session_skills(skill_id, session_id);
+CREATE INDEX idx_agent_session_skills_skill ON agent_session_skills(project_id, skill_id, session_id);
 
 -- +goose Down
 DROP INDEX IF EXISTS idx_agent_session_skills_skill;
 DROP INDEX IF EXISTS idx_skill_routing_hints_lookup;
 DROP INDEX IF EXISTS idx_skill_files_skill_path;
 DROP INDEX IF EXISTS idx_skills_project_name;
+DROP INDEX IF EXISTS idx_skills_id_project;
+DROP INDEX IF EXISTS idx_agent_sessions_id_project;
 ALTER TABLE generation_candidates DROP COLUMN skill_id;
 DROP TABLE IF EXISTS agent_session_skills;
 DROP TABLE IF EXISTS skill_routing_hints;

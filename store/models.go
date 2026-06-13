@@ -39,6 +39,7 @@ type AgentSession struct {
 }
 
 type AgentSessionSkill struct {
+	ProjectID  string `json:"project_id"`
 	SessionID  string `json:"session_id"`
 	SkillID    string `json:"skill_id"`
 	SelectedAt string `json:"selected_at"`

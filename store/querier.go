@@ -9,7 +9,7 @@ import (
 )
 
 type Querier interface {
-	AddSessionSkill(ctx context.Context, arg AddSessionSkillParams) error
+	AddSessionSkill(ctx context.Context, arg AddSessionSkillParams) (int64, error)
 	CreateActivityEvent(ctx context.Context, arg CreateActivityEventParams) error
 	CreateAgentMessage(ctx context.Context, arg CreateAgentMessageParams) error
 	CreateAgentMessageForProject(ctx context.Context, arg CreateAgentMessageForProjectParams) (int64, error)

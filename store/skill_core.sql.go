@@ -9,20 +9,34 @@ import (
 	"context"
 )
 
-const addSessionSkill = `-- name: AddSessionSkill :exec
-INSERT INTO agent_session_skills (session_id, skill_id, selected_at)
-VALUES (?, ?, ?)
+const addSessionSkill = `-- name: AddSessionSkill :execrows
+INSERT INTO agent_session_skills (project_id, session_id, skill_id, selected_at)
+SELECT ?1, agent_sessions.id, skills.id, ?2
+FROM agent_sessions
+JOIN skills ON skills.id = ?3
+WHERE agent_sessions.id = ?4
+  AND agent_sessions.project_id = ?1
+  AND skills.project_id = ?1
 `
 
 type AddSessionSkillParams struct {
-	SessionID  string `json:"session_id"`
-	SkillID    string `json:"skill_id"`
+	ProjectID  string `json:"project_id"`
 	SelectedAt string `json:"selected_at"`
+	SkillID    string `json:"skill_id"`
+	SessionID  string `json:"session_id"`
 }
 
-func (q *Queries) AddSessionSkill(ctx context.Context, arg AddSessionSkillParams) error {
-	_, err := q.db.ExecContext(ctx, addSessionSkill, arg.SessionID, arg.SkillID, arg.SelectedAt)
-	return err
+func (q *Queries) AddSessionSkill(ctx context.Context, arg AddSessionSkillParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, addSessionSkill,
+		arg.ProjectID,
+		arg.SelectedAt,
+		arg.SkillID,
+		arg.SessionID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const createSkillFile = `-- name: CreateSkillFile :exec
@@ -269,6 +283,7 @@ JOIN skills ON skills.id = agent_session_skills.skill_id
 JOIN agent_sessions ON agent_sessions.id = agent_session_skills.session_id
 WHERE agent_session_skills.session_id = ?1
   AND agent_sessions.project_id = ?2
+  AND skills.project_id = agent_sessions.project_id
 ORDER BY skills.display_name ASC, skills.name ASC
 `
 

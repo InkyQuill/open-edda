@@ -143,6 +143,68 @@ func TestSkillCoreTablesExist(t *testing.T) {
 	}
 }
 
+func TestAddSessionSkillRejectsCrossProjectSkill(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	queries := New(db)
+	ctx := context.Background()
+
+	seedProjectScopedContent(t, db)
+	now := "2026-06-13T00:00:00Z"
+	if err := queries.CreateAgentSession(ctx, CreateAgentSessionParams{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Title:          "Rewrite",
+		ActionKind:     "rewrite",
+		ModelVariantID: sql.NullString{},
+		ApplyMode:      "preview",
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}); err != nil {
+		t.Fatalf("create agent session: %v", err)
+	}
+	if err := queries.UpsertSkill(ctx, UpsertSkillParams{
+		ID:                   "skill-2",
+		ProjectID:            "project-2",
+		Name:                 "style",
+		DisplayName:          "Style",
+		Description:          "",
+		InstructionsMarkdown: "Write plainly.",
+		SourceType:           "upload",
+		SourceLabel:          "style.md",
+		ScriptCount:          0,
+		ScriptsDisabled:      1,
+		MetadataJson:         "{}",
+		InstalledAt:          now,
+		UpdatedAt:            now,
+	}); err != nil {
+		t.Fatalf("create skill: %v", err)
+	}
+	rowsAffected, err := queries.AddSessionSkill(ctx, AddSessionSkillParams{
+		ProjectID:  "project-1",
+		SessionID:  "session-1",
+		SkillID:    "skill-2",
+		SelectedAt: now,
+	})
+	if err != nil {
+		t.Fatalf("add cross-project session skill: %v", err)
+	}
+	if rowsAffected != 0 {
+		t.Fatalf("AddSessionSkill() rows affected = %d, want 0", rowsAffected)
+	}
+
+	skills, err := queries.ListSessionSkills(ctx, ListSessionSkillsParams{
+		SessionID: "session-1",
+		ProjectID: "project-1",
+	})
+	if err != nil {
+		t.Fatalf("list session skills: %v", err)
+	}
+	if len(skills) != 0 {
+		t.Fatalf("ListSessionSkills() returned %d skills, want 0", len(skills))
+	}
+}
+
 func TestAgentCoreDownMigrationRemovesRevisionColumns(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
