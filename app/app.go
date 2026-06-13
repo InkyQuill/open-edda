@@ -7,8 +7,10 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// Dependencies holds services used by the application router.
 type Dependencies struct{}
 
+// New builds the HTTP handler for the Writer service.
 func New(deps *Dependencies) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {

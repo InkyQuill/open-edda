@@ -18,6 +18,9 @@ func TestHealth(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
+	if got := rec.Header().Get("Content-Type"); got != "application/json" {
+		t.Fatalf("content type = %q, want %q", got, "application/json")
+	}
 	if got := rec.Body.String(); got != `{"status":"ok"}`+"\n" {
 		t.Fatalf("body = %q", got)
 	}
