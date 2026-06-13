@@ -105,7 +105,19 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		UpdatedAt:      now,
 	}
 
-	if err := s.queries.CreateAgentSession(ctx, store.CreateAgentSessionParams{
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Session{}, fmt.Errorf("begin create session transaction: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	queries := s.queries.WithTx(tx)
+
+	if err := queries.CreateAgentSession(ctx, store.CreateAgentSessionParams{
 		ID:             session.ID,
 		ProjectID:      session.ProjectID,
 		Title:          session.Title,
@@ -118,16 +130,51 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		return Session{}, fmt.Errorf("create agent session: %w", err)
 	}
 	if s.skillService != nil && len(input.SkillIDs) > 0 {
-		if _, err := s.skillService.SelectSessionSkills(ctx, skill.SelectSessionSkillsInput{
-			ProjectID: input.ProjectID,
-			SessionID: session.ID,
-			SkillIDs:  input.SkillIDs,
-		}); err != nil {
+		if err := s.selectSessionSkillsWithQueries(ctx, queries, input.ProjectID, session.ID, input.SkillIDs, now); err != nil {
 			return Session{}, err
 		}
 	}
+	if err := tx.Commit(); err != nil {
+		return Session{}, fmt.Errorf("commit create session transaction: %w", err)
+	}
+	committed = true
 
 	return session, nil
+}
+
+func (s *Service) selectSessionSkillsWithQueries(ctx context.Context, queries *store.Queries, projectID, sessionID string, skillIDs []string, selectedAt string) error {
+	seen := make(map[string]struct{}, len(skillIDs))
+	for _, skillID := range skillIDs {
+		if strings.TrimSpace(skillID) == "" {
+			return skill.ErrInvalidInput
+		}
+		if _, ok := seen[skillID]; ok {
+			continue
+		}
+		seen[skillID] = struct{}{}
+		if _, err := queries.GetSkillByProjectID(ctx, store.GetSkillByProjectIDParams{
+			ProjectID: projectID,
+			ID:        skillID,
+		}); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return skill.ErrInvalidInput
+			}
+			return fmt.Errorf("get skill: %w", err)
+		}
+		rowsAffected, err := queries.AddSessionSkill(ctx, store.AddSessionSkillParams{
+			ProjectID:  projectID,
+			SessionID:  sessionID,
+			SkillID:    skillID,
+			SelectedAt: selectedAt,
+		})
+		if err != nil {
+			return fmt.Errorf("add session skill: %w", err)
+		}
+		if rowsAffected == 0 {
+			return skill.ErrInvalidInput
+		}
+	}
+	return nil
 }
 
 func (s *Service) ListSessions(ctx context.Context, input ListSessionsInput) ([]Session, error) {

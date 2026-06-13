@@ -121,6 +121,48 @@ func TestCreateSessionWithInvalidSkillIDDoesNotPersistSession(t *testing.T) {
 	}
 }
 
+func TestCreateSessionRollsBackWhenSessionSkillInsertFails(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Session Skill Rollback Project")
+	service := NewService(db, projectService, nil)
+	skillService := skill.NewService(db)
+	service.SetSkillService(skillService)
+	selectedSkill := installPromptSkill(t, ctx, skillService, storyProject.ID, skill.ImportedSkill{
+		Name:        "blocked-style-pass",
+		Description: "Use when session skill insert should fail.",
+	})
+	if _, err := db.ExecContext(ctx, `
+		CREATE TEMP TRIGGER block_session_skill_insert
+		BEFORE INSERT ON agent_session_skills
+		BEGIN
+			SELECT RAISE(ABORT, 'session skill insert blocked');
+		END;
+	`); err != nil {
+		t.Fatalf("create session-skill-blocking trigger: %v", err)
+	}
+
+	_, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:  storyProject.ID,
+		Title:      "Blocked skill session",
+		ActionKind: ActionKindContinuation,
+		ApplyMode:  ApplyModePreview,
+		SkillIDs:   []string{selectedSkill.ID},
+	})
+	if err == nil {
+		t.Fatal("CreateSession() error = nil, want session skill insert failure")
+	}
+
+	sessions, listErr := service.ListSessions(ctx, ListSessionsInput{ProjectID: storyProject.ID})
+	if listErr != nil {
+		t.Fatalf("ListSessions() error = %v", listErr)
+	}
+	if len(sessions) != 0 {
+		t.Fatalf("sessions after failed CreateSession = %#v, want none", sessions)
+	}
+}
+
 func TestContinuationDirectApplyStoresSelectedSkillIDOnRevision(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()
