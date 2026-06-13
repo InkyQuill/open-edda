@@ -8,14 +8,14 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "latest",
-    "typescript": "latest",
-    "vite": "latest",
     "react": "latest",
     "react-dom": "latest"
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "latest",
     "@types/react": "latest",
-    "@types/react-dom": "latest"
+    "@types/react-dom": "latest",
+    "vite": "latest",
+    "typescript": "latest"
   }
 }

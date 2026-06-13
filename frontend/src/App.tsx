@@ -5,9 +5,21 @@ import "./styles.css";
 
 export function App() {
   const [projects, setProjects] = useState<StoryProject[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void listProjects().then(setProjects);
+    void listProjects()
+      .then((items) => {
+        setProjects(items);
+        setError(null);
+      })
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "Project list failed");
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
   }, []);
 
   return (
@@ -19,7 +31,11 @@ export function App() {
         </header>
 
         <div className="project-list">
-          {projects.length === 0 ? (
+          {isLoading ? (
+            <p>Loading story projects...</p>
+          ) : error ? (
+            <p role="alert">Could not load story projects.</p>
+          ) : projects.length === 0 ? (
             <p>No story projects yet.</p>
           ) : (
             projects.map((project) => (
