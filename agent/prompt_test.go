@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"git.inkyquill.net/inky/writer/project"
+	"git.inkyquill.net/inky/writer/store"
 )
 
 func TestPromptProfileStoresAndRetrievesProjectPreferences(t *testing.T) {
@@ -163,6 +164,235 @@ func TestPromptBuildActionPromptAssemblesContinuationContext(t *testing.T) {
 	}
 }
 
+func TestPromptBuildActionPromptValidatesSessionProject(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	projectOne := createTestProject(t, ctx, projectService, "author-1", "Prompt Session Project One")
+	projectTwo := createTestProject(t, ctx, projectService, "author-1", "Prompt Session Project Two")
+	service := NewService(db, projectService, nil)
+	createPromptProfile(t, ctx, service, projectOne.ID)
+	createPromptProfile(t, ctx, service, projectTwo.ID)
+
+	otherSession, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:  projectTwo.ID,
+		Title:      "Other session",
+		ActionKind: ActionKindContinuation,
+		ApplyMode:  ApplyModePreview,
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	chapter := createPromptContent(t, ctx, projectService, project.CreateContentInput{
+		ProjectID:    projectOne.ID,
+		Kind:         project.KindChapter,
+		Title:        "Chapter 1",
+		BodyMarkdown: "Opening.",
+	})
+
+	_, err = service.BuildActionPrompt(ctx, BuildPromptInput{
+		ProjectID:       projectOne.ID,
+		SessionID:       otherSession.ID,
+		ActionKind:      ActionKindContinuation,
+		TargetContentID: chapter.ID,
+	})
+	assertErrorContains(t, err, "get agent session")
+}
+
+func TestPromptBuildActionPromptRequiresChapterTarget(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Prompt Target Validation Project")
+	service := NewService(db, projectService, nil)
+	createPromptProfile(t, ctx, service, storyProject.ID)
+
+	t.Run("missing target ID", func(t *testing.T) {
+		_, err := service.BuildActionPrompt(ctx, BuildPromptInput{
+			ProjectID:  storyProject.ID,
+			ActionKind: ActionKindContinuation,
+		})
+		assertErrorContains(t, err, "target content ID is required")
+	})
+
+	t.Run("wrong target kind", func(t *testing.T) {
+		brief := createPromptContent(t, ctx, projectService, project.CreateContentInput{
+			ProjectID:    storyProject.ID,
+			Kind:         project.KindWritingBrief,
+			Title:        "Not a Chapter",
+			BodyMarkdown: "Brief text.",
+		})
+
+		_, err := service.BuildActionPrompt(ctx, BuildPromptInput{
+			ProjectID:       storyProject.ID,
+			ActionKind:      ActionKindContinuation,
+			TargetContentID: brief.ID,
+		})
+		assertErrorContains(t, err, "target content must be chapter")
+	})
+}
+
+func TestPromptBuildActionPromptValidatesWritingBriefMetadata(t *testing.T) {
+	tests := []struct {
+		name         string
+		metadataJSON string
+		wantErr      string
+	}{
+		{
+			name:         "project scope with content item",
+			metadataJSON: `{"scope":"project","contentItemId":"chapter-1"}`,
+			wantErr:      "project-scoped writing brief must not have contentItemId",
+		},
+		{
+			name:         "chapter scope without content item",
+			metadataJSON: `{"scope":"chapter"}`,
+			wantErr:      "chapter-scoped writing brief must have contentItemId",
+		},
+		{
+			name:         "unknown scope",
+			metadataJSON: `{"scope":"scene"}`,
+			wantErr:      `unknown writing brief scope "scene"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := openMigratedTestDB(t)
+			ctx := context.Background()
+			projectService := project.NewService(db)
+			storyProject := createTestProject(t, ctx, projectService, "author-1", "Prompt Brief Metadata Project")
+			service := NewService(db, projectService, nil)
+			createPromptProfile(t, ctx, service, storyProject.ID)
+			chapter := createPromptContent(t, ctx, projectService, project.CreateContentInput{
+				ProjectID:    storyProject.ID,
+				Kind:         project.KindChapter,
+				Title:        "Chapter 1",
+				BodyMarkdown: "Opening.",
+			})
+			createPromptContent(t, ctx, projectService, project.CreateContentInput{
+				ProjectID:    storyProject.ID,
+				Kind:         project.KindWritingBrief,
+				Title:        "Invalid Brief",
+				BodyMarkdown: "Invalid metadata.",
+				MetadataJSON: tt.metadataJSON,
+			})
+
+			_, err := service.BuildActionPrompt(ctx, BuildPromptInput{
+				ProjectID:       storyProject.ID,
+				ActionKind:      ActionKindContinuation,
+				TargetContentID: chapter.ID,
+			})
+			assertErrorContains(t, err, tt.wantErr)
+		})
+	}
+}
+
+func TestPromptBuildActionPromptTreatsContentItemIDWithoutScopeAsTargetBrief(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Prompt Brief Compatibility Project")
+	service := NewService(db, projectService, nil)
+	createPromptProfile(t, ctx, service, storyProject.ID)
+	chapter := createPromptContent(t, ctx, projectService, project.CreateContentInput{
+		ProjectID:    storyProject.ID,
+		Kind:         project.KindChapter,
+		Title:        "Chapter 1",
+		BodyMarkdown: "Opening.",
+	})
+	createPromptContent(t, ctx, projectService, project.CreateContentInput{
+		ProjectID:    storyProject.ID,
+		Kind:         project.KindWritingBrief,
+		Title:        "Legacy Chapter Brief",
+		BodyMarkdown: "Legacy target-specific brief.",
+		MetadataJSON: `{"contentItemId":"` + chapter.ID + `"}`,
+	})
+
+	bundle, err := service.BuildActionPrompt(ctx, BuildPromptInput{
+		ProjectID:       storyProject.ID,
+		ActionKind:      ActionKindContinuation,
+		TargetContentID: chapter.ID,
+	})
+	if err != nil {
+		t.Fatalf("BuildActionPrompt() error = %v", err)
+	}
+
+	assertContains(t, bundle.DeveloperMessage, "Legacy target-specific brief.")
+}
+
+func TestPromptBuildActionPromptOrdersWritingBriefsDeterministically(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Prompt Brief Ordering Project")
+	service := NewService(db, projectService, nil)
+	createPromptProfile(t, ctx, service, storyProject.ID)
+	chapter := createPromptContent(t, ctx, projectService, project.CreateContentInput{
+		ProjectID:    storyProject.ID,
+		Kind:         project.KindChapter,
+		Title:        "Chapter 1",
+		BodyMarkdown: "Opening.",
+	})
+
+	insertPromptContentRow(t, ctx, service, store.CreateContentItemParams{
+		ID:              "brief-b",
+		ProjectID:       storyProject.ID,
+		Kind:            string(project.KindWritingBrief),
+		Title:           "Same Brief",
+		Slug:            "same-brief-b",
+		BodyMarkdown:    "Project brief B.",
+		MetadataJson:    `{}`,
+		SortOrder:       10,
+		CurrentRevision: 1,
+	})
+	insertPromptContentRow(t, ctx, service, store.CreateContentItemParams{
+		ID:              "brief-a",
+		ProjectID:       storyProject.ID,
+		Kind:            string(project.KindWritingBrief),
+		Title:           "Same Brief",
+		Slug:            "same-brief-a",
+		BodyMarkdown:    "Project brief A.",
+		MetadataJson:    `{}`,
+		SortOrder:       10,
+		CurrentRevision: 1,
+	})
+	insertPromptContentRow(t, ctx, service, store.CreateContentItemParams{
+		ID:              "brief-target-b",
+		ProjectID:       storyProject.ID,
+		Kind:            string(project.KindWritingBrief),
+		Title:           "Same Target Brief",
+		Slug:            "same-target-brief-b",
+		BodyMarkdown:    "Target brief B.",
+		MetadataJson:    `{"scope":"chapter","contentItemId":"` + chapter.ID + `"}`,
+		SortOrder:       20,
+		CurrentRevision: 1,
+	})
+	insertPromptContentRow(t, ctx, service, store.CreateContentItemParams{
+		ID:              "brief-target-a",
+		ProjectID:       storyProject.ID,
+		Kind:            string(project.KindWritingBrief),
+		Title:           "Same Target Brief",
+		Slug:            "same-target-brief-a",
+		BodyMarkdown:    "Target brief A.",
+		MetadataJson:    `{"scope":"chapter","contentItemId":"` + chapter.ID + `"}`,
+		SortOrder:       20,
+		CurrentRevision: 1,
+	})
+
+	bundle, err := service.BuildActionPrompt(ctx, BuildPromptInput{
+		ProjectID:       storyProject.ID,
+		ActionKind:      ActionKindContinuation,
+		TargetContentID: chapter.ID,
+	})
+	if err != nil {
+		t.Fatalf("BuildActionPrompt() error = %v", err)
+	}
+
+	assertOrdered(t, bundle.DeveloperMessage, "Project brief A.", "Project brief B.")
+	assertOrdered(t, bundle.DeveloperMessage, "Project brief B.", "Target brief A.")
+	assertOrdered(t, bundle.DeveloperMessage, "Target brief A.", "Target brief B.")
+}
+
 func createPromptContent(t *testing.T, ctx context.Context, service *project.Service, input project.CreateContentInput) project.ContentItem {
 	t.Helper()
 
@@ -174,10 +404,45 @@ func createPromptContent(t *testing.T, ctx context.Context, service *project.Ser
 	return created
 }
 
+func createPromptProfile(t *testing.T, ctx context.Context, service *Service, projectID string) {
+	t.Helper()
+	_, err := service.UpsertPromptProfile(ctx, UpsertPromptProfileInput{
+		ProjectID:                 projectID,
+		Genre:                     "fantasy",
+		Tense:                     "past tense",
+		POV:                       "third person",
+		Voice:                     "clear",
+		PromptRecordRetentionDays: 30,
+	})
+	if err != nil {
+		t.Fatalf("UpsertPromptProfile() error = %v", err)
+	}
+}
+
+func insertPromptContentRow(t *testing.T, ctx context.Context, service *Service, input store.CreateContentItemParams) {
+	t.Helper()
+	now := nowString()
+	input.CreatedAt = now
+	input.UpdatedAt = now
+	if err := service.queries.CreateContentItem(ctx, input); err != nil {
+		t.Fatalf("CreateContentItem(%q) error = %v", input.ID, err)
+	}
+}
+
 func assertContains(t *testing.T, value string, want string) {
 	t.Helper()
 	if !strings.Contains(value, want) {
 		t.Fatalf("expected value to contain %q\nvalue:\n%s", want, value)
+	}
+}
+
+func assertErrorContains(t *testing.T, err error, want string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("error = nil, want containing %q", want)
+	}
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error = %q, want containing %q", err.Error(), want)
 	}
 }
 

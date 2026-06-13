@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"git.inkyquill.net/inky/writer/project"
@@ -18,6 +19,14 @@ func (s *Service) BuildActionPrompt(ctx context.Context, input BuildPromptInput)
 	if _, err := s.queries.GetStoryProjectByID(ctx, input.ProjectID); err != nil {
 		return PromptBundle{}, fmt.Errorf("get story project: %w", err)
 	}
+	if input.SessionID != "" {
+		if _, err := s.GetSession(ctx, input.ProjectID, input.SessionID); err != nil {
+			return PromptBundle{}, fmt.Errorf("validate session: %w", err)
+		}
+	}
+	if input.TargetContentID == "" {
+		return PromptBundle{}, fmt.Errorf("target content ID is required")
+	}
 
 	profile, err := s.GetPromptProfile(ctx, input.ProjectID)
 	if err != nil {
@@ -27,6 +36,9 @@ func (s *Service) BuildActionPrompt(ctx context.Context, input BuildPromptInput)
 	target, err := s.projectService.GetContent(ctx, input.ProjectID, input.TargetContentID)
 	if err != nil {
 		return PromptBundle{}, err
+	}
+	if target.Kind != project.KindChapter {
+		return PromptBundle{}, fmt.Errorf("target content must be chapter, got %q", target.Kind)
 	}
 
 	writingBriefs, err := s.layeredWritingBriefs(ctx, input.ProjectID, input.TargetContentID)
@@ -77,6 +89,8 @@ func (s *Service) layeredWritingBriefs(ctx context.Context, projectID, targetCon
 			targetBriefs = append(targetBriefs, item)
 		}
 	}
+	sortWritingBriefsForPrompt(projectBriefs)
+	sortWritingBriefsForPrompt(targetBriefs)
 
 	result := make([]project.ContentItem, 0, len(projectBriefs)+len(targetBriefs))
 	result = append(result, projectBriefs...)
@@ -97,7 +111,33 @@ func writingBriefMetadata(value string) (briefMetadata, error) {
 	if err := json.Unmarshal([]byte(value), &metadata); err != nil {
 		return briefMetadata{}, err
 	}
+	switch metadata.Scope {
+	case "":
+		return metadata, nil
+	case "project":
+		if metadata.ContentItemID != "" {
+			return briefMetadata{}, fmt.Errorf("project-scoped writing brief must not have contentItemId")
+		}
+	case "chapter":
+		if metadata.ContentItemID == "" {
+			return briefMetadata{}, fmt.Errorf("chapter-scoped writing brief must have contentItemId")
+		}
+	default:
+		return briefMetadata{}, fmt.Errorf("unknown writing brief scope %q", metadata.Scope)
+	}
 	return metadata, nil
+}
+
+func sortWritingBriefsForPrompt(briefs []project.ContentItem) {
+	sort.Slice(briefs, func(i, j int) bool {
+		if briefs[i].SortOrder != briefs[j].SortOrder {
+			return briefs[i].SortOrder < briefs[j].SortOrder
+		}
+		if briefs[i].Title != briefs[j].Title {
+			return briefs[i].Title < briefs[j].Title
+		}
+		return briefs[i].ID < briefs[j].ID
+	})
 }
 
 func buildContextSources(profile PromptProfile, writingBriefs []project.ContentItem, target project.ContentItem, input BuildPromptInput, tools []CompletionTool) ([]ContextSourceSnapshot, error) {
