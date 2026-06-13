@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   acceptCandidate,
   createModelVariant,
@@ -151,6 +151,8 @@ export function App() {
   const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
   const [promptRecords, setPromptRecords] = useState<PromptRecord[]>([]);
   const [agentError, setAgentError] = useState<string | null>(null);
+  const latestProjectIdRef = useRef<string | null>(selectedProjectId);
+  latestProjectIdRef.current = selectedProjectId;
 
   useEffect(() => {
     void listProjects()
@@ -314,11 +316,17 @@ export function App() {
   function refreshAgentTrail(projectId: string): void {
     void Promise.all([listActivity(projectId, 30), listPromptRecords(projectId, 30), listSessions(projectId, 12)])
       .then(([events, records, sessions]) => {
+        if (latestProjectIdRef.current !== projectId) {
+          return;
+        }
         setActivityEvents(events);
         setPromptRecords(records);
         setAgentSessions(sessions);
       })
       .catch((cause: unknown) => {
+        if (latestProjectIdRef.current !== projectId) {
+          return;
+        }
         setAgentError(cause instanceof Error ? cause.message : "Agent refresh failed");
       });
   }
@@ -807,11 +815,16 @@ type AgentPanelProps = {
   sessionSpend: { tokens: number; cost: number };
   sessions: AgentSession[];
   onActiveSessionChange: (sessionId: string | null) => void;
-  onChatMessagesChange: (messages: AgentMessage[]) => void;
+  onChatMessagesChange: React.Dispatch<React.SetStateAction<AgentMessage[]>>;
   onContentUpdate: (content: ContentItem) => void;
   onError: (message: string | null) => void;
   onRefreshTrail: (projectId: string) => void;
-  onSessionsChange: (sessions: AgentSession[]) => void;
+  onSessionsChange: React.Dispatch<React.SetStateAction<AgentSession[]>>;
+};
+
+type AgentPanelScope = {
+  projectId: string;
+  contentId: string | null;
 };
 
 function AgentPanel({
@@ -845,25 +858,50 @@ function AgentPanel({
   const [previewCandidate, setPreviewCandidate] = useState<GenerationCandidate | null>(null);
   const [readCheckReport, setReadCheckReport] = useState<string | null>(null);
 
+  const selectedContentId = selectedContent?.id ?? null;
+  const latestScopeRef = useRef<AgentPanelScope>({ projectId, contentId: selectedContentId });
+  latestScopeRef.current = { projectId, contentId: selectedContentId };
+
+  useEffect(() => {
+    setPreviewCandidate(null);
+    setReadCheckReport(null);
+    setIsSendingMessage(false);
+    setIsRunningAction(false);
+  }, [projectId, selectedContentId]);
+
   const activeChatSession = sessions.find((session) => session.actionKind === "chat" && session.modelVariantId === activeModel?.id) ?? null;
   const actionsDisabled = !activeModel || !selectedContent || selectedContent.kind !== "chapter" || isRunningAction;
   const activeSessionRecord = activeSessionId ? newestRecordForSession(promptRecords, activeSessionId) : null;
 
-  async function ensureChatSession(): Promise<AgentSession> {
+  function currentScope(): AgentPanelScope {
+    return { projectId, contentId: selectedContentId };
+  }
+
+  function isCurrentScope(scope: AgentPanelScope): boolean {
+    const latest = latestScopeRef.current;
+    return latest.projectId === scope.projectId && latest.contentId === scope.contentId;
+  }
+
+  async function ensureChatSession(scope: AgentPanelScope): Promise<AgentSession | null> {
     if (activeChatSession) {
-      onActiveSessionChange(activeChatSession.id);
+      if (isCurrentScope(scope)) {
+        onActiveSessionChange(activeChatSession.id);
+      }
       return activeChatSession;
     }
     if (!activeModel) {
       throw new Error("Select a model variant before chatting.");
     }
-    const session = await createSession(projectId, {
+    const session = await createSession(scope.projectId, {
       title: selectedContent ? `Chat: ${selectedContent.title}` : "Workspace chat",
       actionKind: "chat",
       modelVariantId: activeModel.id,
       applyMode,
     });
-    onSessionsChange([session, ...sessions]);
+    if (!isCurrentScope(scope)) {
+      return null;
+    }
+    onSessionsChange((current) => [session, ...current.filter((entry) => entry.id !== session.id)]);
     onActiveSessionChange(session.id);
     return session;
   }
@@ -874,19 +912,35 @@ function AgentPanel({
     if (!body) {
       return;
     }
+    const launchScope = currentScope();
     setIsSendingMessage(true);
-    void ensureChatSession()
-      .then((session) => createSessionMessage(projectId, session.id, body))
+    void ensureChatSession(launchScope)
+      .then((session) => {
+        if (!session || !isCurrentScope(launchScope)) {
+          return null;
+        }
+        return createSessionMessage(launchScope.projectId, session.id, body);
+      })
       .then((result) => {
-        onChatMessagesChange([...chatMessages, result.userMessage, result.assistantMessage]);
+        if (!result || !isCurrentScope(launchScope)) {
+          return;
+        }
+        onChatMessagesChange((current) => [...current, result.userMessage, result.assistantMessage]);
         setMessageInput("");
         onError(null);
-        onRefreshTrail(projectId);
+        onRefreshTrail(launchScope.projectId);
       })
       .catch((cause: unknown) => {
+        if (!isCurrentScope(launchScope)) {
+          return;
+        }
         onError(cause instanceof Error ? cause.message : "Chat turn failed");
       })
-      .finally(() => setIsSendingMessage(false));
+      .finally(() => {
+        if (isCurrentScope(launchScope)) {
+          setIsSendingMessage(false);
+        }
+      });
   }
 
   function handleQuickAction(action: "continuation" | "rewrite" | "read_check"): void {
@@ -894,6 +948,7 @@ function AgentPanel({
       onError("Select a chapter and model variant before running an action.");
       return;
     }
+    const launchScope = currentScope();
     const expectedRevision = selectedContent.currentRevision;
     const wholeSelectionEnd = byteLength(selectedContent.bodyMarkdown);
     setIsRunningAction(true);
@@ -902,7 +957,7 @@ function AgentPanel({
 
     const actionRequest =
       action === "continuation"
-        ? runContinuation(projectId, {
+        ? runContinuation(launchScope.projectId, {
             contentId: selectedContent.id,
             modelVariantId: activeModel.id,
             applyMode,
@@ -914,7 +969,7 @@ function AgentPanel({
             continuationCount,
           })
         : action === "rewrite"
-          ? runRewrite(projectId, {
+          ? runRewrite(launchScope.projectId, {
               contentId: selectedContent.id,
               modelVariantId: activeModel.id,
               applyMode,
@@ -923,7 +978,7 @@ function AgentPanel({
               selectionStart: 0,
               selectionEnd: wholeSelectionEnd,
             })
-          : runReadAndCheck(projectId, {
+          : runReadAndCheck(launchScope.projectId, {
               contentId: selectedContent.id,
               modelVariantId: activeModel.id,
               applyMode,
@@ -935,6 +990,9 @@ function AgentPanel({
 
     void actionRequest
       .then((result) => {
+        if (!isCurrentScope(launchScope)) {
+          return;
+        }
         if ("candidate" in result && result.candidate) {
           setPreviewCandidate(result.candidate);
         }
@@ -945,43 +1003,72 @@ function AgentPanel({
           setReadCheckReport(result.assistantMessage.bodyMarkdown);
         }
         onActiveSessionChange(result.session.id);
-        onSessionsChange([result.session, ...sessions.filter((session) => session.id !== result.session.id)]);
+        onSessionsChange((current) => [result.session, ...current.filter((session) => session.id !== result.session.id)]);
         onError(null);
-        onRefreshTrail(projectId);
+        onRefreshTrail(launchScope.projectId);
       })
       .catch((cause: unknown) => {
+        if (!isCurrentScope(launchScope)) {
+          return;
+        }
         onError(cause instanceof Error ? cause.message : "Quick action failed");
       })
-      .finally(() => setIsRunningAction(false));
+      .finally(() => {
+        if (isCurrentScope(launchScope)) {
+          setIsRunningAction(false);
+        }
+      });
   }
 
   function handleAccept(candidate: GenerationCandidate): void {
+    const launchScope = currentScope();
     setIsRunningAction(true);
-    void acceptCandidate(projectId, candidate.id)
+    void acceptCandidate(launchScope.projectId, candidate.id)
       .then((result) => {
+        if (!isCurrentScope(launchScope)) {
+          return;
+        }
         onContentUpdate(result.content);
         setPreviewCandidate(null);
         onError(null);
-        onRefreshTrail(projectId);
+        onRefreshTrail(launchScope.projectId);
       })
       .catch((cause: unknown) => {
+        if (!isCurrentScope(launchScope)) {
+          return;
+        }
         onError(cause instanceof Error ? cause.message : "Accept candidate failed");
       })
-      .finally(() => setIsRunningAction(false));
+      .finally(() => {
+        if (isCurrentScope(launchScope)) {
+          setIsRunningAction(false);
+        }
+      });
   }
 
   function handleReject(candidate: GenerationCandidate): void {
+    const launchScope = currentScope();
     setIsRunningAction(true);
-    void rejectCandidate(projectId, candidate.id)
+    void rejectCandidate(launchScope.projectId, candidate.id)
       .then(() => {
+        if (!isCurrentScope(launchScope)) {
+          return;
+        }
         setPreviewCandidate(null);
         onError(null);
-        onRefreshTrail(projectId);
+        onRefreshTrail(launchScope.projectId);
       })
       .catch((cause: unknown) => {
+        if (!isCurrentScope(launchScope)) {
+          return;
+        }
         onError(cause instanceof Error ? cause.message : "Reject candidate failed");
       })
-      .finally(() => setIsRunningAction(false));
+      .finally(() => {
+        if (isCurrentScope(launchScope)) {
+          setIsRunningAction(false);
+        }
+      });
   }
 
   return (
