@@ -443,6 +443,7 @@ export function App() {
               agentError={agentError}
               chatMessages={chatMessages}
               currentModelLabel={currentModelLabel}
+              hasConfiguredModelVariant={models.length > 0}
               promptRecords={promptRecords}
               projectId={selectedProject.id}
               selectedContent={selectedContent}
@@ -799,6 +800,7 @@ type AgentPanelProps = {
   agentError: string | null;
   chatMessages: AgentMessage[];
   currentModelLabel: string;
+  hasConfiguredModelVariant: boolean;
   promptRecords: PromptRecord[];
   projectId: string;
   selectedContent: ContentItem | null;
@@ -819,6 +821,7 @@ function AgentPanel({
   agentError,
   chatMessages,
   currentModelLabel,
+  hasConfiguredModelVariant,
   promptRecords,
   projectId,
   selectedContent,
@@ -993,7 +996,7 @@ function AgentPanel({
         </button>
       </header>
 
-      {!activeModel ? <p className="agent-warning">Configure and select a model variant to enable Agent actions.</p> : null}
+      {!hasConfiguredModelVariant ? <p className="agent-warning">Configure and select a model variant to enable Agent actions.</p> : null}
       {agentError ? <p className="agent-error" role="alert">{agentError}</p> : null}
 
       <div className="agent-spend">
