@@ -219,6 +219,70 @@ func TestAgentHTTPMapsClientErrors(t *testing.T) {
 	}
 }
 
+func TestQuickActionHTTPValidationErrorsReturnBadRequest(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Quick Action Validation Project")
+	chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Opening", "The old city waited.")
+	service := NewService(db, projectService, nil)
+	handler := newTestAgentHTTP(service)
+
+	tests := []struct {
+		name string
+		path string
+		body string
+	}{
+		{
+			name: "continuation missing model variant",
+			path: "/api/projects/" + storyProject.ID + "/agent/actions/continuation",
+			body: `{"contentId":"` + chapter.ID + `","expectedRevision":1}`,
+		},
+		{
+			name: "continuation invalid apply mode",
+			path: "/api/projects/" + storyProject.ID + "/agent/actions/continuation",
+			body: `{"contentId":"` + chapter.ID + `","modelVariantId":"model-1","applyMode":"invalid","expectedRevision":1}`,
+		},
+		{
+			name: "rewrite missing model variant",
+			path: "/api/projects/" + storyProject.ID + "/agent/actions/rewrite",
+			body: `{"contentId":"` + chapter.ID + `","expectedRevision":1,"selectionStart":4,"selectionEnd":12}`,
+		},
+		{
+			name: "rewrite invalid apply mode",
+			path: "/api/projects/" + storyProject.ID + "/agent/actions/rewrite",
+			body: `{"contentId":"` + chapter.ID + `","modelVariantId":"model-1","applyMode":"invalid","expectedRevision":1,"selectionStart":4,"selectionEnd":12}`,
+		},
+		{
+			name: "read check missing model variant",
+			path: "/api/projects/" + storyProject.ID + "/agent/actions/read-check",
+			body: `{"contentId":"` + chapter.ID + `","expectedRevision":1,"selectionStart":4,"selectionEnd":12}`,
+		},
+		{
+			name: "read check invalid apply mode",
+			path: "/api/projects/" + storyProject.ID + "/agent/actions/read-check",
+			body: `{"contentId":"` + chapter.ID + `","modelVariantId":"model-1","applyMode":"invalid","expectedRevision":1,"selectionStart":4,"selectionEnd":12}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, tt.path, bytes.NewBufferString(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+			}
+			if got := rec.Header().Get("Content-Type"); got != "application/json" {
+				t.Fatalf("content type = %q, want application/json", got)
+			}
+		})
+	}
+}
+
 func newTestAgentHTTP(service *Service) http.Handler {
 	r := chi.NewRouter()
 	r.Route("/api", func(r chi.Router) {

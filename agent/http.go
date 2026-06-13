@@ -316,6 +316,9 @@ func (h httpHandler) runContinuation(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
 		return
 	}
+	if !validateQuickActionRequest(w, input.ContentID, input.ModelVariantID, input.ApplyMode) {
+		return
+	}
 
 	result, err := h.service.RunContinuation(r.Context(), ContinuationInput{
 		ProjectID:         chi.URLParam(r, "projectID"),
@@ -342,6 +345,9 @@ func (h httpHandler) runRewrite(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
 		return
 	}
+	if !validateQuickActionRequest(w, input.ContentID, input.ModelVariantID, input.ApplyMode) {
+		return
+	}
 
 	result, err := h.service.RunRewrite(r.Context(), RewriteInput{
 		ProjectID:        chi.URLParam(r, "projectID"),
@@ -364,6 +370,9 @@ func (h httpHandler) runReadCheck(w http.ResponseWriter, r *http.Request) {
 	var input rewriteRequest
 	if err := decodeJSON(r, &input); err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+		return
+	}
+	if !validateQuickActionRequest(w, input.ContentID, input.ModelVariantID, input.ApplyMode) {
 		return
 	}
 
@@ -433,6 +442,24 @@ func (h httpHandler) prunePromptRecords(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, prunePromptRecordsResponse{Deleted: deleted})
+}
+
+func validateQuickActionRequest(w http.ResponseWriter, contentID, modelVariantID string, applyMode ApplyMode) bool {
+	if strings.TrimSpace(contentID) == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "content ID is required"})
+		return false
+	}
+	if strings.TrimSpace(modelVariantID) == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "model variant ID is required"})
+		return false
+	}
+	if applyMode != "" {
+		if err := validateApplyMode(applyMode); err != nil {
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid apply mode"})
+			return false
+		}
+	}
+	return true
 }
 
 func limitFromQuery(r *http.Request) int64 {
