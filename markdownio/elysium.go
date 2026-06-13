@@ -264,7 +264,7 @@ func renderFrontmatterValue(builder *strings.Builder, key string, value any) err
 		builder.WriteString(":\n")
 		for _, item := range typed {
 			builder.WriteString("  - ")
-			builder.WriteString(item)
+			builder.WriteString(frontmatterScalar(item))
 			builder.WriteString("\n")
 		}
 	default:

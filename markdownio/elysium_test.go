@@ -348,6 +348,34 @@ func TestExportElysiumLayoutRoundTripsAmbiguousStringMetadata(t *testing.T) {
 	}
 }
 
+func TestExportElysiumLayoutRoundTripsAmbiguousRelationTargets(t *testing.T) {
+	root := t.TempDir()
+	if err := ExportElysiumLayout(root, []ImportedItem{
+		{
+			Kind:         string(project.KindStoryBibleEntry),
+			Title:        "Flag",
+			BodyMarkdown: "Body.",
+			MetadataJSON: `{"type":"worldbuilding"}`,
+			Relations: []ImportedRelation{
+				{TargetTitle: "true", RelationType: "related"},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("ExportElysiumLayout() error = %v", err)
+	}
+
+	items, err := ImportElysiumLayout(root)
+	if err != nil {
+		t.Fatalf("ImportElysiumLayout() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("imported items = %d, want 1", len(items))
+	}
+	if len(items[0].Relations) != 1 || items[0].Relations[0].TargetTitle != "true" {
+		t.Fatalf("relations = %#v, want related target true", items[0].Relations)
+	}
+}
+
 func TestExportElysiumLayoutRejectsUnsupportedMetadataValues(t *testing.T) {
 	tests := []string{
 		`{"nested":{"value":true},"type":"genre"}`,
