@@ -251,8 +251,12 @@ func renderFrontmatterValue(builder *strings.Builder, key string, value any) err
 		builder.WriteString(key)
 		builder.WriteString(":\n")
 		for _, item := range typed {
+			text, ok := item.(string)
+			if !ok {
+				return fmt.Errorf("metadata list %q contains unsupported non-string value", key)
+			}
 			builder.WriteString("  - ")
-			builder.WriteString(frontmatterScalar(item))
+			builder.WriteString(frontmatterScalar(text))
 			builder.WriteString("\n")
 		}
 	case []string:
@@ -264,6 +268,9 @@ func renderFrontmatterValue(builder *strings.Builder, key string, value any) err
 			builder.WriteString("\n")
 		}
 	default:
+		if !supportedFrontmatterScalar(typed) {
+			return fmt.Errorf("metadata key %q contains unsupported value", key)
+		}
 		builder.WriteString(key)
 		builder.WriteString(": ")
 		builder.WriteString(frontmatterScalar(typed))
@@ -275,7 +282,7 @@ func renderFrontmatterValue(builder *strings.Builder, key string, value any) err
 func frontmatterScalar(value any) string {
 	switch typed := value.(type) {
 	case string:
-		return typed
+		return strconv.Quote(typed)
 	case nil:
 		return "null"
 	default:
@@ -287,7 +294,22 @@ func frontmatterScalar(value any) string {
 	}
 }
 
+func supportedFrontmatterScalar(value any) bool {
+	switch value.(type) {
+	case string, bool, nil, float64, float32, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return true
+	default:
+		return false
+	}
+}
+
 func parseFrontmatterScalar(value string) any {
+	if strings.HasPrefix(value, `"`) {
+		var quoted string
+		if err := json.Unmarshal([]byte(value), &quoted); err == nil {
+			return quoted
+		}
+	}
 	switch value {
 	case "true":
 		return true
@@ -440,7 +462,12 @@ func parseFrontmatter(frontmatter string) (map[string]any, error) {
 			continue
 		}
 		if list.active() && strings.HasPrefix(trimmed, "- ") {
-			list.append(strings.TrimSpace(strings.TrimPrefix(trimmed, "- ")))
+			item := parseFrontmatterScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "- ")))
+			text, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("frontmatter list %q contains non-string item", list.key)
+			}
+			list.append(text)
 			continue
 		}
 

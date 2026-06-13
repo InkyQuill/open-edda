@@ -203,10 +203,10 @@ func TestExportElysiumLayoutWritesMappedPathsAndSections(t *testing.T) {
 		t.Fatalf("ExportElysiumLayout() error = %v", err)
 	}
 
-	assertFile(t, root, "story/Chapter 1.md", "# Chapter 1\n---\nstatus: draft\n---\nChapter body.\n\nWith a second paragraph.\n")
-	assertFile(t, root, "characters/Hugh.md", "# Hugh\n---\nrelated:\n  - Dwarves\ntype: character\n---\nCharacter body.\n")
-	assertFile(t, root, "worldbuilding/Dwarves.md", "# Dwarves\n---\nstatus: canon\ntype: worldbuilding\n---\nWorldbuilding body.\n\n## Player Perspective\nPlayer-facing details.\n\n## NPC Perspective\nNPC-facing details.\n")
-	assertFile(t, root, "braindump/Loose Ideas.md", "# Loose Ideas\n---\nmood: exploratory\n---\nNote body.\n")
+	assertFile(t, root, "story/Chapter 1.md", "# Chapter 1\n---\nstatus: \"draft\"\n---\nChapter body.\n\nWith a second paragraph.\n")
+	assertFile(t, root, "characters/Hugh.md", "# Hugh\n---\nrelated:\n  - \"Dwarves\"\ntype: \"character\"\n---\nCharacter body.\n")
+	assertFile(t, root, "worldbuilding/Dwarves.md", "# Dwarves\n---\nstatus: \"canon\"\ntype: \"worldbuilding\"\n---\nWorldbuilding body.\n\n## Player Perspective\nPlayer-facing details.\n\n## NPC Perspective\nNPC-facing details.\n")
+	assertFile(t, root, "braindump/Loose Ideas.md", "# Loose Ideas\n---\nmood: \"exploratory\"\n---\nNote body.\n")
 }
 
 func TestExportElysiumLayoutWritesBriefPathsAndMetadataRoundTrips(t *testing.T) {
@@ -311,6 +311,63 @@ func TestExportElysiumLayoutRoundTripsTypedMetadata(t *testing.T) {
 	}
 	if metadata["unset"] != nil {
 		t.Fatalf("unset metadata = %#v, want nil", metadata["unset"])
+	}
+}
+
+func TestExportElysiumLayoutRoundTripsAmbiguousStringMetadata(t *testing.T) {
+	root := t.TempDir()
+	if err := ExportElysiumLayout(root, []ImportedItem{
+		{
+			Kind:         string(project.KindWritingBrief),
+			Title:        "Genre",
+			BodyMarkdown: "Fantasy.",
+			MetadataJSON: `{"count":"2","enabled":"true","type":"genre","unset":"null"}`,
+		},
+	}); err != nil {
+		t.Fatalf("ExportElysiumLayout() error = %v", err)
+	}
+
+	items, err := ImportElysiumLayout(root)
+	if err != nil {
+		t.Fatalf("ImportElysiumLayout() error = %v", err)
+	}
+
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(items[0].MetadataJSON), &metadata); err != nil {
+		t.Fatalf("metadata json = %q: %v", items[0].MetadataJSON, err)
+	}
+	for key, want := range map[string]string{
+		"count":   "2",
+		"enabled": "true",
+		"unset":   "null",
+	} {
+		got, ok := metadata[key].(string)
+		if !ok || got != want {
+			t.Fatalf("metadata[%q] = %#v, want string %q", key, metadata[key], want)
+		}
+	}
+}
+
+func TestExportElysiumLayoutRejectsUnsupportedMetadataValues(t *testing.T) {
+	tests := []string{
+		`{"nested":{"value":true},"type":"genre"}`,
+		`{"values":[true,2,null],"type":"genre"}`,
+	}
+
+	for _, metadataJSON := range tests {
+		t.Run(metadataJSON, func(t *testing.T) {
+			err := ExportElysiumLayout(t.TempDir(), []ImportedItem{
+				{
+					Kind:         string(project.KindWritingBrief),
+					Title:        "Genre",
+					BodyMarkdown: "Fantasy.",
+					MetadataJSON: metadataJSON,
+				},
+			})
+			if err == nil {
+				t.Fatal("ExportElysiumLayout() error = nil, want unsupported metadata error")
+			}
+		})
 	}
 }
 
