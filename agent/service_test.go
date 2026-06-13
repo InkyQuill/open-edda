@@ -267,6 +267,33 @@ func TestRewriteDirectApplyReplacesSelectionAndCreatesRevision(t *testing.T) {
 	assertAgentRevision(t, ctx, db, chapter.ID, "The bright city waited.", "rewrite")
 }
 
+func TestRunRewriteDoesNotClassifyContentLoadFailureAsInvalidInput(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Rewrite Storage Failure Project")
+	chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Opening", "The old city waited.")
+	service := NewService(db, projectService, nil)
+	if err := db.Close(); err != nil {
+		t.Fatalf("close db: %v", err)
+	}
+
+	_, err := service.RunRewrite(ctx, RewriteInput{
+		ProjectID:        storyProject.ID,
+		ContentID:        chapter.ID,
+		ModelVariantID:   "model-1",
+		ExpectedRevision: chapter.CurrentRevision,
+		SelectionStart:   4,
+		SelectionEnd:     12,
+	})
+	if err == nil {
+		t.Fatal("RunRewrite() error = nil, want content load error")
+	}
+	if errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("RunRewrite() error = %v, want non-invalid-input server error", err)
+	}
+}
+
 func TestRewritePreviewCreatesDiffFriendlyPendingCandidateWithoutChangingChapter(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()
