@@ -190,7 +190,7 @@ WHERE project_id = ?
 ORDER BY created_at DESC
 LIMIT sqlc.arg(limit);
 
--- name: DeleteExpiredPromptRecords :exec
+-- name: DeleteExpiredPromptRecords :execrows
 DELETE FROM prompt_records
 WHERE project_id = sqlc.arg(project_id)
   AND created_at < sqlc.arg(cutoff);

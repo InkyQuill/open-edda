@@ -25,7 +25,7 @@ type Querier interface {
 	CreateRevision(ctx context.Context, arg CreateRevisionParams) error
 	CreateStoryProject(ctx context.Context, arg CreateStoryProjectParams) error
 	CreateToolResultArtifact(ctx context.Context, arg CreateToolResultArtifactParams) error
-	DeleteExpiredPromptRecords(ctx context.Context, arg DeleteExpiredPromptRecordsParams) error
+	DeleteExpiredPromptRecords(ctx context.Context, arg DeleteExpiredPromptRecordsParams) (int64, error)
 	DeleteModelVariant(ctx context.Context, arg DeleteModelVariantParams) error
 	DeleteProviderConfig(ctx context.Context, arg DeleteProviderConfigParams) error
 	GetAgentSession(ctx context.Context, arg GetAgentSessionParams) (AgentSession, error)

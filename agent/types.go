@@ -61,6 +61,18 @@ type AppendMessageInput struct {
 	MetadataJSON string
 }
 
+type ChatTurnInput struct {
+	ProjectID    string
+	SessionID    string
+	BodyMarkdown string
+}
+
+type ChatTurnResult struct {
+	UserMessage      Message `json:"userMessage"`
+	AssistantMessage Message `json:"assistantMessage"`
+	PromptRecordID   string  `json:"promptRecordId,omitempty"`
+}
+
 type ListSessionsInput struct {
 	ProjectID string
 	Limit     int64
@@ -192,6 +204,7 @@ type PromptRecord struct {
 	ID           string     `json:"id"`
 	ProjectID    string     `json:"projectId"`
 	SessionID    string     `json:"sessionId"`
+	ProviderName string     `json:"providerName"`
 	ModelName    string     `json:"modelName"`
 	ActionKind   ActionKind `json:"actionKind"`
 	RequestJSON  string     `json:"requestJson"`

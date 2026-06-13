@@ -54,11 +54,12 @@ type CompletionToolCallFunction struct {
 }
 
 type CompletionResponse struct {
-	ID           string            `json:"id"`
-	Model        string            `json:"model"`
-	Message      CompletionMessage `json:"message"`
-	FinishReason string            `json:"finishReason"`
-	Usage        Usage             `json:"usage"`
+	ID             string            `json:"id"`
+	Model          string            `json:"model"`
+	Message        CompletionMessage `json:"message"`
+	FinishReason   string            `json:"finishReason"`
+	Usage          Usage             `json:"usage"`
+	UsageAvailable bool              `json:"usageAvailable"`
 }
 
 type OpenAICompatibleClient struct {
@@ -121,7 +122,10 @@ func (c *OpenAICompatibleClient) Complete(ctx context.Context, request Completio
 		Model:        decoded.Model,
 		Message:      decoded.Choices[0].Message,
 		FinishReason: decoded.Choices[0].FinishReason,
-		Usage:        normalizeUsage(decoded.Usage, c.modelVariant),
+	}
+	if decoded.Usage != nil {
+		result.Usage = normalizeUsage(*decoded.Usage, c.modelVariant)
+		result.UsageAvailable = true
 	}
 	return result, nil
 }
@@ -213,7 +217,7 @@ type openAIChatCompletionResponse struct {
 		Message      CompletionMessage `json:"message"`
 		FinishReason string            `json:"finish_reason"`
 	} `json:"choices"`
-	Usage openAIUsage `json:"usage"`
+	Usage *openAIUsage `json:"usage"`
 }
 
 type openAIUsage struct {

@@ -391,7 +391,7 @@ func (q *Queries) CreateToolResultArtifact(ctx context.Context, arg CreateToolRe
 	return err
 }
 
-const deleteExpiredPromptRecords = `-- name: DeleteExpiredPromptRecords :exec
+const deleteExpiredPromptRecords = `-- name: DeleteExpiredPromptRecords :execrows
 DELETE FROM prompt_records
 WHERE project_id = ?1
   AND created_at < ?2
@@ -402,9 +402,12 @@ type DeleteExpiredPromptRecordsParams struct {
 	Cutoff    string `json:"cutoff"`
 }
 
-func (q *Queries) DeleteExpiredPromptRecords(ctx context.Context, arg DeleteExpiredPromptRecordsParams) error {
-	_, err := q.db.ExecContext(ctx, deleteExpiredPromptRecords, arg.ProjectID, arg.Cutoff)
-	return err
+func (q *Queries) DeleteExpiredPromptRecords(ctx context.Context, arg DeleteExpiredPromptRecordsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteExpiredPromptRecords, arg.ProjectID, arg.Cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const deleteModelVariant = `-- name: DeleteModelVariant :exec

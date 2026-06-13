@@ -5,12 +5,15 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/store"
 )
+
+const maxToolRounds = 4
 
 type Service struct {
 	db             *sql.DB
@@ -361,6 +364,416 @@ func (s *Service) UpsertPromptProfile(ctx context.Context, input UpsertPromptPro
 		return PromptProfile{}, fmt.Errorf("get prompt profile: %w", err)
 	}
 	return promptProfileFromStore(profile), nil
+}
+
+func (s *Service) RunChatTurn(ctx context.Context, input ChatTurnInput) (ChatTurnResult, error) {
+	if strings.TrimSpace(input.BodyMarkdown) == "" {
+		return ChatTurnResult{}, fmt.Errorf("body markdown is required")
+	}
+	if s.provider == nil {
+		return ChatTurnResult{}, fmt.Errorf("provider is required")
+	}
+	session, err := s.GetSession(ctx, input.ProjectID, input.SessionID)
+	if err != nil {
+		return ChatTurnResult{}, err
+	}
+	if session.ActionKind != ActionKindChat {
+		return ChatTurnResult{}, fmt.Errorf("session action kind = %q, want %q", session.ActionKind, ActionKindChat)
+	}
+	if session.ModelVariantID == "" {
+		return ChatTurnResult{}, fmt.Errorf("session model variant ID is required")
+	}
+	model, err := s.queries.GetModelVariantForProject(ctx, store.GetModelVariantForProjectParams{
+		ProjectID:      input.ProjectID,
+		ModelVariantID: session.ModelVariantID,
+	})
+	if err != nil {
+		return ChatTurnResult{}, fmt.Errorf("get model variant for project: %w", err)
+	}
+	providerConfig, err := s.providerConfigForModel(ctx, model.ProviderConfigID)
+	if err != nil {
+		return ChatTurnResult{}, err
+	}
+	profile, err := s.GetPromptProfile(ctx, input.ProjectID)
+	if err != nil {
+		return ChatTurnResult{}, err
+	}
+
+	userMessage, err := s.AppendMessage(ctx, AppendMessageInput{
+		ProjectID:    input.ProjectID,
+		SessionID:    input.SessionID,
+		Role:         MessageRoleUser,
+		BodyMarkdown: input.BodyMarkdown,
+	})
+	if err != nil {
+		return ChatTurnResult{}, err
+	}
+	transcript, err := s.ListMessages(ctx, input.ProjectID, input.SessionID)
+	if err != nil {
+		return ChatTurnResult{}, err
+	}
+
+	contextSources, err := chatContextSources(profile, transcript)
+	if err != nil {
+		return ChatTurnResult{}, err
+	}
+	messages := chatPromptMessages(profile, transcript)
+	tools := ContextToolDefinitions()
+	requests := make([]CompletionRequest, 0, 2)
+	responses := make([]CompletionResponse, 0, 2)
+	usage := Usage{}
+	usageMissing := false
+	var final CompletionResponse
+
+	for round := 0; round <= maxToolRounds; round++ {
+		request := CompletionRequest{
+			Model:           model.Model,
+			Messages:        messages,
+			Tools:           tools,
+			Temperature:     &model.Temperature,
+			MaxOutputTokens: model.MaxOutputTokens,
+		}
+		response, err := s.provider.Complete(ctx, request)
+		if err != nil {
+			return ChatTurnResult{}, fmt.Errorf("complete chat turn: %w", err)
+		}
+		requests = append(requests, request)
+		responses = append(responses, response)
+		if response.UsageAvailable {
+			usage = addUsage(usage, response.Usage)
+		} else {
+			usageMissing = true
+		}
+
+		if len(response.Message.ToolCalls) == 0 {
+			final = response
+			break
+		}
+		if round == maxToolRounds {
+			return ChatTurnResult{}, fmt.Errorf("tool call rounds exceeded %d", maxToolRounds)
+		}
+		messages = append(messages, response.Message)
+		for _, toolCall := range response.Message.ToolCalls {
+			toolResult, err := s.ExecuteTool(ctx, ToolCallInput{
+				ProjectID:     input.ProjectID,
+				SessionID:     input.SessionID,
+				ToolCallID:    toolCall.ID,
+				ToolName:      toolCall.Function.Name,
+				ArgumentsJSON: toolCall.Function.Arguments,
+			})
+			if err != nil {
+				return ChatTurnResult{}, err
+			}
+			toolMetadata, err := marshalJSON(map[string]any{
+				"toolCallId": toolResult.ToolCallID,
+				"toolName":   toolResult.ToolName,
+				"truncated":  toolResult.Truncated,
+			})
+			if err != nil {
+				return ChatTurnResult{}, err
+			}
+			if _, err := s.AppendMessage(ctx, AppendMessageInput{
+				ProjectID:    input.ProjectID,
+				SessionID:    input.SessionID,
+				Role:         MessageRoleTool,
+				BodyMarkdown: toolResult.ModelVisibleMarkdown,
+				MetadataJSON: toolMetadata,
+			}); err != nil {
+				return ChatTurnResult{}, err
+			}
+			messages = append(messages, CompletionMessage{
+				Role:       MessageRoleTool,
+				Content:    toolResult.ModelVisibleMarkdown,
+				ToolCallID: toolResult.ToolCallID,
+			})
+		}
+	}
+
+	if final.Message.Content == "" {
+		return ChatTurnResult{}, fmt.Errorf("provider did not return a final assistant message")
+	}
+	assistantMetadata, err := marshalJSON(map[string]any{
+		"finishReason": final.FinishReason,
+		"completionId": final.ID,
+	})
+	if err != nil {
+		return ChatTurnResult{}, err
+	}
+	assistantMessage, err := s.AppendMessage(ctx, AppendMessageInput{
+		ProjectID:    input.ProjectID,
+		SessionID:    input.SessionID,
+		Role:         MessageRoleAssistant,
+		BodyMarkdown: final.Message.Content,
+		MetadataJSON: assistantMetadata,
+	})
+	if err != nil {
+		return ChatTurnResult{}, err
+	}
+
+	promptRecordID := ""
+	if profile.PromptRecordRetentionDays > 0 {
+		requestJSON, err := marshalJSON(map[string]any{
+			"providerName": providerConfig.Name,
+			"modelName":    model.Model,
+			"requests":     requests,
+		})
+		if err != nil {
+			return ChatTurnResult{}, fmt.Errorf("marshal prompt request: %w", err)
+		}
+		responseJSON, err := marshalJSON(map[string]any{
+			"providerName": providerConfig.Name,
+			"modelName":    model.Model,
+			"responses":    responses,
+		})
+		if err != nil {
+			return ChatTurnResult{}, fmt.Errorf("marshal prompt response: %w", err)
+		}
+		promptRecordID, err = s.storePromptRecord(ctx, session, providerConfig.Name, modelVariantFromStore(model), usage, requestJSON, responseJSON, contextSources)
+		if err != nil {
+			return ChatTurnResult{}, err
+		}
+	}
+	if usageMissing {
+		if err := s.createActivityEvent(ctx, input.ProjectID, input.SessionID, "usage_missing", "Provider response omitted token usage", "{}"); err != nil {
+			return ChatTurnResult{}, err
+		}
+	}
+
+	return ChatTurnResult{
+		UserMessage:      userMessage,
+		AssistantMessage: assistantMessage,
+		PromptRecordID:   promptRecordID,
+	}, nil
+}
+
+func (s *Service) PrunePromptRecords(ctx context.Context, projectID string) (int64, error) {
+	profile, err := s.GetPromptProfile(ctx, projectID)
+	if err != nil {
+		return 0, err
+	}
+	cutoff := nowString()
+	if profile.PromptRecordRetentionDays > 0 {
+		cutoff = time.Now().UTC().Add(-time.Duration(profile.PromptRecordRetentionDays) * 24 * time.Hour).Format(time.RFC3339Nano)
+	}
+	deleted, err := s.queries.DeleteExpiredPromptRecords(ctx, store.DeleteExpiredPromptRecordsParams{
+		ProjectID: projectID,
+		Cutoff:    cutoff,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("delete expired prompt records: %w", err)
+	}
+	return deleted, nil
+}
+
+func (s *Service) providerConfigForModel(ctx context.Context, providerConfigID string) (store.ProviderConfig, error) {
+	var provider store.ProviderConfig
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, author_id, name, base_url, api_key_encrypted, created_at, updated_at
+		FROM provider_configs
+		WHERE id = ?
+	`, providerConfigID).Scan(
+		&provider.ID,
+		&provider.AuthorID,
+		&provider.Name,
+		&provider.BaseUrl,
+		&provider.ApiKeyEncrypted,
+		&provider.CreatedAt,
+		&provider.UpdatedAt,
+	)
+	if err != nil {
+		return store.ProviderConfig{}, fmt.Errorf("get provider config for model: %w", err)
+	}
+	return provider, nil
+}
+
+func chatPromptMessages(profile PromptProfile, transcript []Message) []CompletionMessage {
+	messages := []CompletionMessage{
+		{Role: MessageRoleSystem, Content: fictionAssistantSystemPrompt},
+		{Role: MessageRoleSystem, Content: renderPromptProfile(profile)},
+	}
+	for _, message := range transcript {
+		if message.Role == MessageRoleSystem {
+			continue
+		}
+		messages = append(messages, CompletionMessage{
+			Role:    message.Role,
+			Content: message.BodyMarkdown,
+		})
+	}
+	return messages
+}
+
+func chatContextSources(profile PromptProfile, transcript []Message) ([]ContextSourceSnapshot, error) {
+	profileValue, err := marshalJSON(map[string]any{
+		"id":                        profile.ID,
+		"projectId":                 profile.ProjectID,
+		"genre":                     profile.Genre,
+		"tense":                     profile.Tense,
+		"pov":                       profile.POV,
+		"voice":                     profile.Voice,
+		"instructionsMarkdown":      profile.InstructionsMarkdown,
+		"promptRecordRetentionDays": profile.PromptRecordRetentionDays,
+	})
+	if err != nil {
+		return nil, err
+	}
+	transcriptValue, err := marshalJSON(transcript)
+	if err != nil {
+		return nil, err
+	}
+	toolValue, err := marshalJSON(map[string]any{"tools": ContextToolDefinitions()})
+	if err != nil {
+		return nil, err
+	}
+	providerValue, err := marshalJSON(map[string]any{
+		"wholeProjectInPrompt": false,
+		"instruction":          "Use tools for additional project context instead of assuming the whole project is present in this prompt.",
+	})
+	if err != nil {
+		return nil, err
+	}
+	return []ContextSourceSnapshot{
+		{
+			SourceKey:        "prompt_profile",
+			SourceVersion:    profile.UpdatedAt,
+			RenderedMarkdown: renderPromptProfile(profile),
+			ValueJSON:        profileValue,
+		},
+		{
+			SourceKey:        "transcript",
+			SourceVersion:    transcriptVersion(transcript),
+			RenderedMarkdown: renderTranscript(transcript),
+			ValueJSON:        transcriptValue,
+		},
+		{
+			SourceKey:        "provider_disclosure",
+			RenderedMarkdown: "## Provider Disclosure\n\nUse tools for additional project context instead of assuming the whole project is present in this prompt.",
+			ValueJSON:        providerValue,
+		},
+		{
+			SourceKey:        "tool_catalog",
+			RenderedMarkdown: "## Tool Catalog\n\nProject context tools are available for chat turns.",
+			ValueJSON:        toolValue,
+		},
+	}, nil
+}
+
+func renderTranscript(messages []Message) string {
+	var b strings.Builder
+	b.WriteString("## Transcript\n\n")
+	for _, message := range messages {
+		b.WriteString("### ")
+		b.WriteString(string(message.Role))
+		b.WriteString("\n\n")
+		b.WriteString(message.BodyMarkdown)
+		b.WriteString("\n\n")
+	}
+	return b.String()
+}
+
+func transcriptVersion(messages []Message) string {
+	if len(messages) == 0 {
+		return ""
+	}
+	return messages[len(messages)-1].CreatedAt
+}
+
+func addUsage(left Usage, right Usage) Usage {
+	result := Usage{
+		InputTokens:      left.InputTokens + right.InputTokens,
+		OutputTokens:     left.OutputTokens + right.OutputTokens,
+		CacheReadTokens:  left.CacheReadTokens + right.CacheReadTokens,
+		CacheWriteTokens: left.CacheWriteTokens + right.CacheWriteTokens,
+		TotalTokens:      left.TotalTokens + right.TotalTokens,
+		InputCost:        left.InputCost + right.InputCost,
+		OutputCost:       left.OutputCost + right.OutputCost,
+		CacheReadCost:    left.CacheReadCost + right.CacheReadCost,
+		CacheWriteCost:   left.CacheWriteCost + right.CacheWriteCost,
+	}
+	result.TotalCost = result.InputCost + result.OutputCost + result.CacheReadCost + result.CacheWriteCost
+	return result
+}
+
+func usageWithCosts(usage Usage, model ModelVariant) Usage {
+	usage.InputCost = tokenCost(usage.InputTokens, model.InputPricePerMillion)
+	usage.OutputCost = tokenCost(usage.OutputTokens, model.OutputPricePerMillion)
+	usage.CacheReadCost = tokenCost(usage.CacheReadTokens, model.CacheReadPricePerMillion)
+	usage.CacheWriteCost = tokenCost(usage.CacheWriteTokens, model.CacheWritePricePerMillion)
+	usage.TotalCost = usage.InputCost + usage.OutputCost + usage.CacheReadCost + usage.CacheWriteCost
+	return usage
+}
+
+func (s *Service) storePromptRecord(ctx context.Context, session Session, providerName string, model ModelVariant, usage Usage, requestJSON, responseJSON string, snapshots []ContextSourceSnapshot) (string, error) {
+	usage = usageWithCosts(usage, model)
+	now := nowString()
+	promptRecordID := newID("prompt")
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("begin prompt record transaction: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	queries := s.queries.WithTx(tx)
+	if err := queries.CreatePromptRecord(ctx, store.CreatePromptRecordParams{
+		ID:               promptRecordID,
+		ProjectID:        session.ProjectID,
+		SessionID:        sql.NullString{String: session.ID, Valid: session.ID != ""},
+		ProviderName:     providerName,
+		ModelName:        model.Model,
+		ActionKind:       string(session.ActionKind),
+		RequestJson:      requestJSON,
+		ResponseJson:     responseJSON,
+		InputTokens:      usage.InputTokens,
+		OutputTokens:     usage.OutputTokens,
+		CacheReadTokens:  usage.CacheReadTokens,
+		CacheWriteTokens: usage.CacheWriteTokens,
+		TotalTokens:      usage.TotalTokens,
+		InputCost:        usage.InputCost,
+		OutputCost:       usage.OutputCost,
+		CacheReadCost:    usage.CacheReadCost,
+		CacheWriteCost:   usage.CacheWriteCost,
+		TotalCost:        usage.TotalCost,
+		CreatedAt:        now,
+	}); err != nil {
+		return "", fmt.Errorf("create prompt record: %w", err)
+	}
+	for _, snapshot := range snapshots {
+		if err := queries.CreatePromptContextSnapshot(ctx, store.CreatePromptContextSnapshotParams{
+			ID:               newID("snapshot"),
+			PromptRecordID:   promptRecordID,
+			SourceKey:        snapshot.SourceKey,
+			SourceVersion:    snapshot.SourceVersion,
+			RenderedMarkdown: snapshot.RenderedMarkdown,
+			ValueJson:        snapshot.ValueJSON,
+			CreatedAt:        now,
+		}); err != nil {
+			return "", fmt.Errorf("create prompt context snapshot: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("commit prompt record transaction: %w", err)
+	}
+	committed = true
+	return promptRecordID, nil
+}
+
+func (s *Service) createActivityEvent(ctx context.Context, projectID, sessionID, eventType, summary, metadataJSON string) error {
+	if err := s.queries.CreateActivityEvent(ctx, store.CreateActivityEventParams{
+		ID:           newID("event"),
+		ProjectID:    projectID,
+		SessionID:    sql.NullString{String: sessionID, Valid: sessionID != ""},
+		EventType:    eventType,
+		Summary:      summary,
+		MetadataJson: defaultJSON(metadataJSON),
+		CreatedAt:    nowString(),
+	}); err != nil {
+		return fmt.Errorf("create activity event: %w", err)
+	}
+	return nil
 }
 
 func sessionFromStore(session store.AgentSession) Session {
