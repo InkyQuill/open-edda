@@ -87,6 +87,40 @@ func TestCreateSessionPersistsSkillSelection(t *testing.T) {
 	}
 }
 
+func TestCreateSessionWithInvalidSkillIDDoesNotPersistSession(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	projectOne := createTestProject(t, ctx, projectService, "author-1", "Session Skill Project One")
+	projectTwo := createTestProject(t, ctx, projectService, "author-1", "Session Skill Project Two")
+	service := NewService(db, projectService, nil)
+	skillService := skill.NewService(db)
+	service.SetSkillService(skillService)
+	otherProjectSkill := installPromptSkill(t, ctx, skillService, projectTwo.ID, skill.ImportedSkill{
+		Name:        "other-style-pass",
+		Description: "Use in another project.",
+	})
+
+	_, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:  projectOne.ID,
+		Title:      "Invalid skill session",
+		ActionKind: ActionKindContinuation,
+		ApplyMode:  ApplyModePreview,
+		SkillIDs:   []string{otherProjectSkill.ID},
+	})
+	if err == nil {
+		t.Fatal("CreateSession() error = nil, want invalid skill error")
+	}
+
+	sessions, listErr := service.ListSessions(ctx, ListSessionsInput{ProjectID: projectOne.ID})
+	if listErr != nil {
+		t.Fatalf("ListSessions() error = %v", listErr)
+	}
+	if len(sessions) != 0 {
+		t.Fatalf("sessions after failed CreateSession = %#v, want none", sessions)
+	}
+}
+
 func TestContinuationDirectApplyStoresSelectedSkillIDOnRevision(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()

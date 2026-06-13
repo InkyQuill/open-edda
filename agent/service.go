@@ -48,6 +48,29 @@ func (s *Service) SetSkillService(service SkillProvider) {
 	s.skillService = service
 }
 
+func (s *Service) validateSelectedSkillIDs(ctx context.Context, projectID string, skillIDs []string) error {
+	if s.skillService == nil || len(skillIDs) == 0 {
+		return nil
+	}
+	installed, err := s.skillService.List(ctx, projectID)
+	if err != nil {
+		return fmt.Errorf("list skills: %w", err)
+	}
+	installedIDs := make(map[string]struct{}, len(installed))
+	for _, item := range installed {
+		installedIDs[item.ID] = struct{}{}
+	}
+	for _, skillID := range skillIDs {
+		if strings.TrimSpace(skillID) == "" {
+			return skill.ErrInvalidInput
+		}
+		if _, ok := installedIDs[skillID]; !ok {
+			return skill.ErrInvalidInput
+		}
+	}
+	return nil
+}
+
 func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (Session, error) {
 	if err := validateActionKind(input.ActionKind); err != nil {
 		return Session{}, err
@@ -65,6 +88,9 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		}); err != nil {
 			return Session{}, fmt.Errorf("get model variant for project: %w", err)
 		}
+	}
+	if err := s.validateSelectedSkillIDs(ctx, input.ProjectID, input.SkillIDs); err != nil {
+		return Session{}, err
 	}
 
 	now := nowString()

@@ -61,6 +61,7 @@ type createSessionRequest struct {
 	ActionKind     ActionKind `json:"actionKind"`
 	ModelVariantID string     `json:"modelVariantId"`
 	ApplyMode      ApplyMode  `json:"applyMode"`
+	SkillIDs       []string   `json:"skillIds"`
 }
 
 type chatMessageRequest struct {
@@ -77,6 +78,7 @@ type continuationRequest struct {
 	Insert            bool      `json:"insert"`
 	ContinuationUnits string    `json:"continuationUnits"`
 	ContinuationCount int64     `json:"continuationCount"`
+	SkillIDs          []string  `json:"skillIds"`
 }
 
 type rewriteRequest struct {
@@ -87,6 +89,7 @@ type rewriteRequest struct {
 	ExpectedRevision int64     `json:"expectedRevision"`
 	SelectionStart   int64     `json:"selectionStart"`
 	SelectionEnd     int64     `json:"selectionEnd"`
+	SkillIDs         []string  `json:"skillIds"`
 }
 
 type prunePromptRecordsResponse struct {
@@ -289,6 +292,7 @@ func (h httpHandler) createSession(w http.ResponseWriter, r *http.Request) {
 		ActionKind:     input.ActionKind,
 		ModelVariantID: input.ModelVariantID,
 		ApplyMode:      input.ApplyMode,
+		SkillIDs:       input.SkillIDs,
 	})
 	if err != nil {
 		writeError(w, err)
@@ -341,6 +345,7 @@ func (h httpHandler) runContinuation(w http.ResponseWriter, r *http.Request) {
 		Insert:            input.Insert,
 		ContinuationUnits: input.ContinuationUnits,
 		ContinuationCount: input.ContinuationCount,
+		SkillIDs:          input.SkillIDs,
 	})
 	if err != nil {
 		writeError(w, err)
@@ -368,6 +373,7 @@ func (h httpHandler) runRewrite(w http.ResponseWriter, r *http.Request) {
 		ExpectedRevision: input.ExpectedRevision,
 		SelectionStart:   input.SelectionStart,
 		SelectionEnd:     input.SelectionEnd,
+		SkillIDs:         input.SkillIDs,
 	})
 	if err != nil {
 		writeError(w, err)
@@ -395,6 +401,7 @@ func (h httpHandler) runReadCheck(w http.ResponseWriter, r *http.Request) {
 		ExpectedRevision: input.ExpectedRevision,
 		SelectionStart:   input.SelectionStart,
 		SelectionEnd:     input.SelectionEnd,
+		SkillIDs:         input.SkillIDs,
 	})
 	if err != nil {
 		writeError(w, err)

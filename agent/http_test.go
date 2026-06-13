@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"git.inkyquill.net/inky/writer/project"
+	"git.inkyquill.net/inky/writer/skill"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -93,7 +94,13 @@ func TestProjectAgentHTTPEndpoints(t *testing.T) {
 		quickActionResponse("read-check-1", "Continuity note: check the city name."),
 	}}
 	service := NewService(db, projectService, provider)
+	skillService := skill.NewService(db)
+	service.SetSkillService(skillService)
 	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	selectedSkill := installPromptSkill(t, ctx, skillService, storyProject.ID, skill.ImportedSkill{
+		Name:        "http-style-pass",
+		Description: "Use when HTTP actions need skill guidance.",
+	})
 	handler := newTestAgentHTTP(service)
 
 	profile := putJSON[PromptProfile](t, handler, "/api/projects/"+storyProject.ID+"/agent/prompt-profile", `{
@@ -116,11 +123,13 @@ func TestProjectAgentHTTPEndpoints(t *testing.T) {
 		"title": "Opening chat",
 		"actionKind": "chat",
 		"modelVariantId": "`+model.ID+`",
-		"applyMode": "preview"
+		"applyMode": "preview",
+		"skillIds": ["`+selectedSkill.ID+`"]
 	}`, http.StatusCreated)
 	if session.ActionKind != ActionKindChat || session.ModelVariantID != model.ID {
 		t.Fatalf("session = %#v", session)
 	}
+	assertSessionSkillIDs(t, ctx, skillService, storyProject.ID, session.ID, []string{selectedSkill.ID})
 	sessions := getJSON[[]Session](t, handler, "/api/projects/"+storyProject.ID+"/agent/sessions?limit=5", http.StatusOK)
 	if len(sessions) != 1 || sessions[0].ID != session.ID {
 		t.Fatalf("sessions = %#v, want created session", sessions)
@@ -142,11 +151,16 @@ func TestProjectAgentHTTPEndpoints(t *testing.T) {
 		"applyMode": "preview",
 		"expectedRevision": 1,
 		"continuationUnits": "paragraph",
-		"continuationCount": 1
+		"continuationCount": 1,
+		"skillIds": ["`+selectedSkill.ID+`"]
 	}`, http.StatusOK)
 	if continuation.Candidate.ID == "" || continuation.Candidate.Status != "pending" {
 		t.Fatalf("continuation = %#v", continuation)
 	}
+	if continuation.Candidate.SkillID != selectedSkill.ID {
+		t.Fatalf("continuation candidate skill ID = %q, want %q", continuation.Candidate.SkillID, selectedSkill.ID)
+	}
+	assertSessionSkillIDs(t, ctx, skillService, storyProject.ID, continuation.Session.ID, []string{selectedSkill.ID})
 	accepted := postJSON[AcceptCandidateResult](t, handler, "/api/projects/"+storyProject.ID+"/agent/candidates/"+continuation.Candidate.ID+"/accept", `{}`, http.StatusOK)
 	if accepted.Candidate.Status != "accepted" || !strings.Contains(accepted.Content.BodyMarkdown, "A new paragraph arrived.") {
 		t.Fatalf("accepted = %#v", accepted)
@@ -160,11 +174,16 @@ func TestProjectAgentHTTPEndpoints(t *testing.T) {
 		"applyMode": "preview",
 		"expectedRevision": 2,
 		"selectionStart": `+strconv.Itoa(start)+`,
-		"selectionEnd": `+strconv.Itoa(end)+`
+		"selectionEnd": `+strconv.Itoa(end)+`,
+		"skillIds": ["`+selectedSkill.ID+`"]
 	}`, http.StatusOK)
 	if rewrite.Candidate.ID == "" || rewrite.Candidate.GeneratedMarkdown != "bright city" {
 		t.Fatalf("rewrite = %#v", rewrite)
 	}
+	if rewrite.Candidate.SkillID != selectedSkill.ID {
+		t.Fatalf("rewrite candidate skill ID = %q, want %q", rewrite.Candidate.SkillID, selectedSkill.ID)
+	}
+	assertSessionSkillIDs(t, ctx, skillService, storyProject.ID, rewrite.Session.ID, []string{selectedSkill.ID})
 	rejected := postJSON[GenerationCandidate](t, handler, "/api/projects/"+storyProject.ID+"/agent/candidates/"+rewrite.Candidate.ID+"/reject", `{}`, http.StatusOK)
 	if rejected.Status != "rejected" {
 		t.Fatalf("rejected status = %q, want rejected", rejected.Status)
@@ -176,11 +195,13 @@ func TestProjectAgentHTTPEndpoints(t *testing.T) {
 		"expectedRevision": 2,
 		"selectionStart": 4,
 		"selectionEnd": 15,
-		"guidance": "Check continuity."
+		"guidance": "Check continuity.",
+		"skillIds": ["`+selectedSkill.ID+`"]
 	}`, http.StatusOK)
 	if readCheck.AssistantMessage.BodyMarkdown != "Continuity note: check the city name." || readCheck.Note.Source != "read_and_check" {
 		t.Fatalf("read check = %#v", readCheck)
 	}
+	assertSessionSkillIDs(t, ctx, skillService, storyProject.ID, readCheck.Session.ID, []string{selectedSkill.ID})
 
 	events := getJSON[[]ActivityEvent](t, handler, "/api/projects/"+storyProject.ID+"/agent/activity?limit=10", http.StatusOK)
 	if len(events) == 0 {
@@ -196,6 +217,23 @@ func TestProjectAgentHTTPEndpoints(t *testing.T) {
 	}](t, handler, "/api/projects/"+storyProject.ID+"/agent/prompt-records/prune", `{}`, http.StatusOK)
 	if pruned.Deleted != 0 {
 		t.Fatalf("pruned deleted = %d, want 0 for fresh retained record", pruned.Deleted)
+	}
+}
+
+func assertSessionSkillIDs(t *testing.T, ctx context.Context, service *skill.Service, projectID, sessionID string, want []string) {
+	t.Helper()
+
+	sessionSkills, err := service.ListSessionSkills(ctx, projectID, sessionID)
+	if err != nil {
+		t.Fatalf("ListSessionSkills() error = %v", err)
+	}
+	if len(sessionSkills) != len(want) {
+		t.Fatalf("session skill count = %d, want %d: %#v", len(sessionSkills), len(want), sessionSkills)
+	}
+	for i, skill := range sessionSkills {
+		if skill.ID != want[i] {
+			t.Fatalf("session skill %d = %q, want %q", i, skill.ID, want[i])
+		}
 	}
 }
 
