@@ -18,6 +18,7 @@ import {
   updateProviderConfig,
   upsertPromptProfile,
 } from "./agentApi";
+import { getSkill, importSkill, listSessionSkills, listSkills, selectSessionSkills } from "./skillApi";
 import type {
   ActivityEvent,
   AgentMessage,
@@ -30,6 +31,7 @@ import type {
   ProviderConfigSummary,
 } from "./agentTypes";
 import { listContent, listProjects } from "./api";
+import type { WriterSkill } from "./skillTypes";
 import type { ContentItem, ContentKind, StoryProject } from "./types";
 import "./styles.css";
 
@@ -107,6 +109,10 @@ function sortModelsByName(items: ModelVariant[]): ModelVariant[] {
   return [...items].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function sortSkillsByName(items: WriterSkill[]): WriterSkill[] {
+  return [...items].sort((a, b) => a.displayName.localeCompare(b.displayName));
+}
+
 function usageForSession(records: PromptRecord[], sessionId: string | null): { tokens: number; cost: number } {
   if (!sessionId) {
     return { tokens: 0, cost: 0 };
@@ -151,6 +157,8 @@ export function App() {
   const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
   const [promptRecords, setPromptRecords] = useState<PromptRecord[]>([]);
   const [agentError, setAgentError] = useState<string | null>(null);
+  const [skills, setSkills] = useState<WriterSkill[]>([]);
+  const [skillError, setSkillError] = useState<string | null>(null);
   const latestProjectIdRef = useRef<string | null>(selectedProjectId);
   latestProjectIdRef.current = selectedProjectId;
 
@@ -291,6 +299,34 @@ export function App() {
     };
   }, [selectedProjectId]);
 
+  useEffect(() => {
+    if (!selectedProjectId) {
+      setSkills([]);
+      setSkillError(null);
+      return;
+    }
+
+    const abortController = new AbortController();
+    setSkills([]);
+    setSkillError(null);
+    void listSkills(selectedProjectId, abortController.signal)
+      .then((items) => {
+        setSkills(sortSkillsByName(items));
+        setSkillError(null);
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === "AbortError") {
+          return;
+        }
+        setSkills([]);
+        setSkillError(cause instanceof Error ? cause.message : "Skill list failed");
+      });
+
+    return () => {
+      abortController.abort();
+    };
+  }, [selectedProjectId]);
+
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId],
@@ -328,6 +364,23 @@ export function App() {
           return;
         }
         setAgentError(cause instanceof Error ? cause.message : "Agent refresh failed");
+      });
+  }
+
+  function refreshSkills(projectId: string): void {
+    void listSkills(projectId)
+      .then((items) => {
+        if (latestProjectIdRef.current !== projectId) {
+          return;
+        }
+        setSkills(sortSkillsByName(items));
+        setSkillError(null);
+      })
+      .catch((cause: unknown) => {
+        if (latestProjectIdRef.current !== projectId) {
+          return;
+        }
+        setSkillError(cause instanceof Error ? cause.message : "Skill list failed");
       });
   }
 
@@ -385,6 +438,15 @@ export function App() {
             onProviderChange={setSelectedProviderId}
             onProvidersChange={setProviders}
             onError={setAgentError}
+          />
+
+          <SkillBrowser
+            projectId={selectedProject.id}
+            skills={skills}
+            skillError={skillError}
+            onError={setSkillError}
+            onSkillsChange={setSkills}
+            onRefreshSkills={refreshSkills}
           />
 
           <section className="workspace-shell" aria-label={`${selectedProject.title} workspace`}>
@@ -455,6 +517,7 @@ export function App() {
               promptRecords={promptRecords}
               projectId={selectedProject.id}
               selectedContent={selectedContent}
+              skills={skills}
               sessionSpend={sessionSpend}
               sessions={agentSessions}
               onActiveSessionChange={setActiveChatSessionId}
@@ -486,6 +549,181 @@ type AgentSettingsProps = {
   onProvidersChange: (providers: ProviderConfigSummary[]) => void;
   onError: (message: string | null) => void;
 };
+
+type SkillBrowserProps = {
+  projectId: string;
+  skills: WriterSkill[];
+  skillError: string | null;
+  onError: (message: string | null) => void;
+  onSkillsChange: React.Dispatch<React.SetStateAction<WriterSkill[]>>;
+  onRefreshSkills: (projectId: string) => void;
+};
+
+function SkillBrowser({ projectId, skills, skillError, onError, onSkillsChange, onRefreshSkills }: SkillBrowserProps) {
+  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
+  const [skillDetail, setSkillDetail] = useState<WriterSkill | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+
+  useEffect(() => {
+    setSelectedSkillId((current) => {
+      if (current && skills.some((skill) => skill.id === current)) {
+        return current;
+      }
+      return skills[0]?.id ?? null;
+    });
+  }, [skills]);
+
+  useEffect(() => {
+    if (!selectedSkillId) {
+      setSkillDetail(null);
+      return;
+    }
+
+    const abortController = new AbortController();
+    setSkillDetail(null);
+    void getSkill(projectId, selectedSkillId, abortController.signal)
+      .then((skill) => {
+        setSkillDetail(skill);
+        onError(null);
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === "AbortError") {
+          return;
+        }
+        setSkillDetail(null);
+        onError(cause instanceof Error ? cause.message : "Skill detail failed");
+      });
+
+    return () => {
+      abortController.abort();
+    };
+  }, [projectId, selectedSkillId, onError]);
+
+  function handleImport(event: React.ChangeEvent<HTMLInputElement>): void {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+    setIsImporting(true);
+    void importSkill(projectId, file)
+      .then((skill) => {
+        onSkillsChange((current) => sortSkillsByName([skill, ...current.filter((entry) => entry.id !== skill.id)]));
+        setSelectedSkillId(skill.id);
+        onError(null);
+        onRefreshSkills(projectId);
+      })
+      .catch((cause: unknown) => {
+        onError(cause instanceof Error ? cause.message : "Skill import failed");
+      })
+      .finally(() => setIsImporting(false));
+  }
+
+  return (
+    <section className="skill-browser" aria-label="Skills">
+      <header className="skill-browser-header">
+        <div>
+          <h2>Skills</h2>
+          <p>{skills.length} installed</p>
+        </div>
+        <label className="pill-button">
+          <span>{isImporting ? "Importing..." : "Import .zip"}</span>
+          <input type="file" accept=".zip,application/zip" onChange={handleImport} disabled={isImporting} />
+        </label>
+      </header>
+
+      {skillError ? <p className="agent-error" role="alert">{skillError}</p> : null}
+
+      <div className="skill-browser-grid">
+        <div className="skill-list">
+          {skills.length === 0 ? (
+            <p className="muted">No skills installed.</p>
+          ) : (
+            skills.map((skill) => (
+              <button
+                key={skill.id}
+                className="skill-row"
+                type="button"
+                data-active={skill.id === selectedSkillId}
+                onClick={() => setSelectedSkillId(skill.id)}
+              >
+                <span className="skill-row-title">{skill.displayName}</span>
+                <span className="skill-row-description">{skill.description}</span>
+                <SkillChips skill={skill} />
+              </button>
+            ))
+          )}
+        </div>
+
+        <SkillDetail skill={skillDetail} />
+      </div>
+    </section>
+  );
+}
+
+function SkillChips({ skill, showScriptStatus = true }: { skill: WriterSkill; showScriptStatus?: boolean }) {
+  const hints = skill.routingHints ?? [];
+  return (
+    <span className="skill-chip-row">
+      {hints.slice(0, 4).map((hint, index) => (
+        <span key={`${hint.actionKind}-${hint.contentKind}-${hint.tag}-${index}`} className="skill-badge">
+          {[hint.actionKind, hint.contentKind, hint.tag].filter(Boolean).join(" / ")}
+        </span>
+      ))}
+      {hints.length > 4 ? <span className="skill-badge">+{hints.length - 4}</span> : null}
+      {showScriptStatus && skill.scriptCount > 0 ? <span className="skill-badge skill-badge-warning">Scripts disabled</span> : null}
+    </span>
+  );
+}
+
+function SkillDetail({ skill }: { skill: WriterSkill | null }) {
+  if (!skill) {
+    return (
+      <section className="skill-detail" aria-label="Skill detail">
+        <p className="muted">No skill selected.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="skill-detail" aria-label={`${skill.displayName} detail`}>
+      <header>
+        <div>
+          <h3>{skill.displayName}</h3>
+          <p>{skill.name}</p>
+        </div>
+        {skill.scriptCount > 0 ? <span className="skill-badge skill-badge-warning">Scripts disabled</span> : null}
+      </header>
+      {(skill.routingHints ?? []).length > 0 ? <SkillChips skill={skill} showScriptStatus={false} /> : null}
+      <div className="skill-detail-body">
+        <section>
+          <h4>Instructions</h4>
+          <pre>{skill.instructionsMarkdown || "No instructions."}</pre>
+        </section>
+        <section>
+          <h4>Files</h4>
+          <div className="skill-file-list">
+            {(skill.files ?? []).length === 0 ? (
+              <p className="muted">No files.</p>
+            ) : (
+              (skill.files ?? []).map((file) => (
+                <div key={file.id} className="skill-file-row">
+                  <div>
+                    <strong>{file.relativePath}</strong>
+                    <span>
+                      {file.purpose} · {file.bytes} bytes
+                    </span>
+                  </div>
+                  {file.scriptDisabled ? <span className="skill-badge skill-badge-warning">Script disabled</span> : null}
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      </div>
+    </section>
+  );
+}
 
 function AgentSettings({
   activeModelVariantId,
@@ -812,6 +1050,7 @@ type AgentPanelProps = {
   promptRecords: PromptRecord[];
   projectId: string;
   selectedContent: ContentItem | null;
+  skills: WriterSkill[];
   sessionSpend: { tokens: number; cost: number };
   sessions: AgentSession[];
   onActiveSessionChange: (sessionId: string | null) => void;
@@ -839,6 +1078,7 @@ function AgentPanel({
   promptRecords,
   projectId,
   selectedContent,
+  skills,
   sessionSpend,
   sessions,
   onActiveSessionChange,
@@ -858,6 +1098,7 @@ function AgentPanel({
   const [guidance, setGuidance] = useState("");
   const [previewCandidate, setPreviewCandidate] = useState<GenerationCandidate | null>(null);
   const [readCheckReport, setReadCheckReport] = useState<string | null>(null);
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
 
   const selectedContentId = selectedContent?.id ?? null;
   const activeModelId = activeModel?.id ?? null;
@@ -875,6 +1116,34 @@ function AgentPanel({
   const actionsDisabled = !activeModel || !selectedContent || selectedContent.kind !== "chapter" || isRunningAction;
   const activeSessionRecord = activeSessionId ? newestRecordForSession(promptRecords, activeSessionId) : null;
 
+  useEffect(() => {
+    const installedSkillIds = new Set(skills.map((skill) => skill.id));
+    setSelectedSkillIds((current) => current.filter((skillId) => installedSkillIds.has(skillId)));
+  }, [skills]);
+
+  useEffect(() => {
+    if (!activeSessionId) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    void listSessionSkills(projectId, activeSessionId, abortController.signal)
+      .then((sessionSkills) => {
+        setSelectedSkillIds(sessionSkills.map((skill) => skill.id));
+        onError(null);
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === "AbortError") {
+          return;
+        }
+        onError(cause instanceof Error ? cause.message : "Session skill list failed");
+      });
+
+    return () => {
+      abortController.abort();
+    };
+  }, [projectId, activeSessionId, onError]);
+
   function currentScope(): AgentPanelScope {
     return { projectId, contentId: selectedContentId, modelVariantId: activeModelId };
   }
@@ -886,6 +1155,15 @@ function AgentPanel({
       latest.contentId === scope.contentId &&
       latest.modelVariantId === scope.modelVariantId
     );
+  }
+
+  function toggleSkill(skillId: string, checked: boolean): void {
+    setSelectedSkillIds((current) => {
+      if (checked) {
+        return current.includes(skillId) ? current : [...current, skillId];
+      }
+      return current.filter((entry) => entry !== skillId);
+    });
   }
 
   async function ensureChatSession(scope: AgentPanelScope): Promise<AgentSession | null> {
@@ -903,6 +1181,7 @@ function AgentPanel({
       actionKind: "chat",
       modelVariantId: activeModel.id,
       applyMode,
+      skillIds: selectedSkillIds,
     });
     if (!isCurrentScope(scope)) {
       return null;
@@ -921,6 +1200,12 @@ function AgentPanel({
     const launchScope = currentScope();
     setIsSendingMessage(true);
     void ensureChatSession(launchScope)
+      .then((session) => {
+        if (!session || !isCurrentScope(launchScope)) {
+          return null;
+        }
+        return selectSessionSkills(launchScope.projectId, session.id, selectedSkillIds).then(() => session);
+      })
       .then((session) => {
         if (!session || !isCurrentScope(launchScope)) {
           return null;
@@ -973,6 +1258,7 @@ function AgentPanel({
             insert: false,
             continuationUnits,
             continuationCount,
+            skillIds: selectedSkillIds,
           })
         : action === "rewrite"
           ? runRewrite(launchScope.projectId, {
@@ -983,6 +1269,7 @@ function AgentPanel({
               expectedRevision,
               selectionStart: 0,
               selectionEnd: wholeSelectionEnd,
+              skillIds: selectedSkillIds,
             })
           : runReadAndCheck(launchScope.projectId, {
               contentId: selectedContent.id,
@@ -992,6 +1279,7 @@ function AgentPanel({
               expectedRevision,
               selectionStart: 0,
               selectionEnd: wholeSelectionEnd,
+              skillIds: selectedSkillIds,
             });
 
     void actionRequest
@@ -1100,6 +1388,10 @@ function AgentPanel({
         </span>
       </div>
 
+      {skills.length > 0 ? (
+        <SkillSelector skills={skills} selectedSkillIds={selectedSkillIds} onToggle={toggleSkill} />
+      ) : null}
+
       {showActivity ? <ActivityRows events={activityEvents} records={promptRecords} /> : null}
 
       <section className="chat-box" aria-label="Chat transcript">
@@ -1205,6 +1497,32 @@ function AgentPanel({
         </section>
       ) : null}
     </aside>
+  );
+}
+
+function SkillSelector({
+  skills,
+  selectedSkillIds,
+  onToggle,
+}: {
+  skills: WriterSkill[];
+  selectedSkillIds: string[];
+  onToggle: (skillId: string, checked: boolean) => void;
+}) {
+  return (
+    <fieldset className="skill-selector">
+      <legend>Skills</legend>
+      {skills.map((skill) => (
+        <label key={skill.id}>
+          <input
+            type="checkbox"
+            checked={selectedSkillIds.includes(skill.id)}
+            onChange={(event) => onToggle(skill.id, event.target.checked)}
+          />
+          <span>{skill.displayName}</span>
+        </label>
+      ))}
+    </fieldset>
   );
 }
 
