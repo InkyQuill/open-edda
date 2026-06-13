@@ -363,8 +363,7 @@ func sortedSections(sections []ImportedSection) []ImportedSection {
 }
 
 func normalizeMarkdownBlock(content string) string {
-	content = strings.ReplaceAll(content, "\r\n", "\n")
-	return strings.TrimRight(content, "\n")
+	return strings.TrimRight(content, "\r\n")
 }
 
 func parseElysiumItem(path, content, kind, metadataType string) (ImportedItem, error) {

@@ -250,6 +250,27 @@ func TestExportElysiumLayoutWritesBriefPathsAndMetadataRoundTrips(t *testing.T) 
 	assertMetadataString(t, byPath["synopsis.md"].MetadataJSON, "type", "synopsis")
 }
 
+func TestExportElysiumLayoutPreservesBodyLineEndings(t *testing.T) {
+	root := t.TempDir()
+	if err := ExportElysiumLayout(root, []ImportedItem{
+		{
+			Kind:         string(project.KindChapter),
+			Title:        "Line Endings",
+			BodyMarkdown: "First line\r\nSecond line\r\n",
+			Sections: []ImportedSection{
+				{
+					Heading:      "Notes",
+					BodyMarkdown: "Section first\r\nSection second\r\n",
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("ExportElysiumLayout() error = %v", err)
+	}
+
+	assertFile(t, root, "story/Line Endings.md", "# Line Endings\n---\n---\nFirst line\r\nSecond line\n\n## Notes\nSection first\r\nSection second\n")
+}
+
 func TestExportElysiumLayoutRejectsUnsafeTitles(t *testing.T) {
 	tests := []string{
 		"../Outside",
