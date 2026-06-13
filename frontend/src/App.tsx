@@ -1162,10 +1162,11 @@ function AgentPanel({
     skillSelectionDirtyRef.current = false;
     const loadId = skillSelectionLoadRef.current + 1;
     skillSelectionLoadRef.current = loadId;
-    setSkillSelectionModelId(activeModelId);
+    setSkillSelectionModelId(null);
+    setSelectedSkillIds([]);
 
     if (!activeChatSessionId) {
-      setSelectedSkillIds([]);
+      setSkillSelectionModelId(activeModelId);
       setIsSkillSelectionLoading(false);
       return;
     }
