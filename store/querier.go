@@ -9,6 +9,7 @@ import (
 )
 
 type Querier interface {
+	AddSessionSkill(ctx context.Context, arg AddSessionSkillParams) error
 	CreateActivityEvent(ctx context.Context, arg CreateActivityEventParams) error
 	CreateAgentMessage(ctx context.Context, arg CreateAgentMessageParams) error
 	CreateAgentMessageForProject(ctx context.Context, arg CreateAgentMessageForProjectParams) (int64, error)
@@ -23,12 +24,16 @@ type Querier interface {
 	CreatePromptRecord(ctx context.Context, arg CreatePromptRecordParams) error
 	CreateProviderConfig(ctx context.Context, arg CreateProviderConfigParams) error
 	CreateRevision(ctx context.Context, arg CreateRevisionParams) error
+	CreateSkillFile(ctx context.Context, arg CreateSkillFileParams) error
+	CreateSkillRoutingHint(ctx context.Context, arg CreateSkillRoutingHintParams) error
 	CreateStoryProject(ctx context.Context, arg CreateStoryProjectParams) error
 	CreateToolResultArtifact(ctx context.Context, arg CreateToolResultArtifactParams) error
 	DeleteExpiredPromptRecords(ctx context.Context, arg DeleteExpiredPromptRecordsParams) (int64, error)
 	DeleteModelVariant(ctx context.Context, arg DeleteModelVariantParams) error
 	DeletePromptRecordsByProject(ctx context.Context, projectID string) (int64, error)
 	DeleteProviderConfig(ctx context.Context, arg DeleteProviderConfigParams) error
+	DeleteSkillFiles(ctx context.Context, skillID string) error
+	DeleteSkillRoutingHints(ctx context.Context, skillID string) error
 	GetAgentSession(ctx context.Context, arg GetAgentSessionParams) (AgentSession, error)
 	GetContentItem(ctx context.Context, arg GetContentItemParams) (ContentItem, error)
 	GetGenerationCandidate(ctx context.Context, arg GetGenerationCandidateParams) (GenerationCandidate, error)
@@ -37,6 +42,9 @@ type Querier interface {
 	GetPromptProfile(ctx context.Context, projectID string) (PromptProfile, error)
 	GetProviderConfig(ctx context.Context, arg GetProviderConfigParams) (ProviderConfig, error)
 	GetProviderConfigForProjectModel(ctx context.Context, arg GetProviderConfigForProjectModelParams) (ProviderConfig, error)
+	GetSkillByProjectID(ctx context.Context, arg GetSkillByProjectIDParams) (Skill, error)
+	GetSkillByProjectName(ctx context.Context, arg GetSkillByProjectNameParams) (Skill, error)
+	GetSkillFile(ctx context.Context, arg GetSkillFileParams) (SkillFile, error)
 	GetStoryProject(ctx context.Context, arg GetStoryProjectParams) (StoryProject, error)
 	GetStoryProjectByID(ctx context.Context, id string) (StoryProject, error)
 	ListActivityEvents(ctx context.Context, arg ListActivityEventsParams) ([]ActivityEvent, error)
@@ -54,9 +62,15 @@ type Querier interface {
 	ListPromptRecords(ctx context.Context, arg ListPromptRecordsParams) ([]PromptRecord, error)
 	ListProviderConfigs(ctx context.Context, authorID string) ([]ProviderConfig, error)
 	ListRevisions(ctx context.Context, arg ListRevisionsParams) ([]Revision, error)
+	ListRoutableSkills(ctx context.Context, arg ListRoutableSkillsParams) ([]Skill, error)
+	ListSessionSkills(ctx context.Context, arg ListSessionSkillsParams) ([]Skill, error)
+	ListSkillFiles(ctx context.Context, skillID string) ([]SkillFile, error)
+	ListSkillRoutingHints(ctx context.Context, skillID string) ([]SkillRoutingHint, error)
+	ListSkillsByProject(ctx context.Context, projectID string) ([]Skill, error)
 	ListStoryProjects(ctx context.Context, authorID string) ([]StoryProject, error)
 	ListToolResultArtifacts(ctx context.Context, arg ListToolResultArtifactsParams) ([]ToolResultArtifact, error)
 	ListToolResultArtifactsByProject(ctx context.Context, projectID string) ([]ToolResultArtifact, error)
+	ReplaceSessionSkillsDelete(ctx context.Context, sessionID string) error
 	SearchContent(ctx context.Context, arg SearchContentParams) ([]ContentItem, error)
 	SearchContentCandidates(ctx context.Context, arg SearchContentCandidatesParams) ([]ContentItem, error)
 	TouchAgentSession(ctx context.Context, arg TouchAgentSessionParams) error
@@ -67,6 +81,7 @@ type Querier interface {
 	UpdateModelVariant(ctx context.Context, arg UpdateModelVariantParams) error
 	UpdateProviderConfig(ctx context.Context, arg UpdateProviderConfigParams) error
 	UpsertPromptProfile(ctx context.Context, arg UpsertPromptProfileParams) error
+	UpsertSkill(ctx context.Context, arg UpsertSkillParams) error
 }
 
 var _ Querier = (*Queries)(nil)

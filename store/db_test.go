@@ -121,6 +121,28 @@ func TestAgentCoreTablesExist(t *testing.T) {
 	}
 }
 
+func TestSkillCoreTablesExist(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+
+	tables := []string{
+		"skills",
+		"skill_files",
+		"skill_routing_hints",
+		"agent_session_skills",
+	}
+	for _, table := range tables {
+		var name string
+		err := db.QueryRow(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&name)
+		if err != nil {
+			t.Fatalf("table %s missing: %v", table, err)
+		}
+	}
+	if !tableHasColumn(t, db, "generation_candidates", "skill_id") {
+		t.Fatal("generation_candidates.skill_id missing")
+	}
+}
+
 func TestAgentCoreDownMigrationRemovesRevisionColumns(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()

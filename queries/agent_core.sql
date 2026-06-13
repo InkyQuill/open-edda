@@ -239,8 +239,8 @@ INSERT INTO generation_candidates (
   id, project_id, session_id, content_item_id, action_kind, operation_kind,
   expected_revision, selection_start, selection_end, insert_position,
   original_markdown, generated_markdown, reason, model_variant_id, status,
-  created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+  created_at, updated_at, skill_id
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetGenerationCandidate :one
 SELECT * FROM generation_candidates

@@ -144,8 +144,8 @@ INSERT INTO generation_candidates (
   id, project_id, session_id, content_item_id, action_kind, operation_kind,
   expected_revision, selection_start, selection_end, insert_position,
   original_markdown, generated_markdown, reason, model_variant_id, status,
-  created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  created_at, updated_at, skill_id
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateGenerationCandidateParams struct {
@@ -166,6 +166,7 @@ type CreateGenerationCandidateParams struct {
 	Status            string         `json:"status"`
 	CreatedAt         string         `json:"created_at"`
 	UpdatedAt         string         `json:"updated_at"`
+	SkillID           string         `json:"skill_id"`
 }
 
 func (q *Queries) CreateGenerationCandidate(ctx context.Context, arg CreateGenerationCandidateParams) error {
@@ -187,6 +188,7 @@ func (q *Queries) CreateGenerationCandidate(ctx context.Context, arg CreateGener
 		arg.Status,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+		arg.SkillID,
 	)
 	return err
 }
@@ -485,7 +487,7 @@ func (q *Queries) GetAgentSession(ctx context.Context, arg GetAgentSessionParams
 }
 
 const getGenerationCandidate = `-- name: GetGenerationCandidate :one
-SELECT id, project_id, session_id, content_item_id, action_kind, operation_kind, expected_revision, selection_start, selection_end, insert_position, original_markdown, generated_markdown, reason, model_variant_id, status, created_at, updated_at FROM generation_candidates
+SELECT id, project_id, session_id, content_item_id, action_kind, operation_kind, expected_revision, selection_start, selection_end, insert_position, original_markdown, generated_markdown, reason, model_variant_id, status, created_at, updated_at, skill_id FROM generation_candidates
 WHERE project_id = ? AND id = ?
 `
 
@@ -515,6 +517,7 @@ func (q *Queries) GetGenerationCandidate(ctx context.Context, arg GetGenerationC
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SkillID,
 	)
 	return i, err
 }
@@ -840,7 +843,7 @@ func (q *Queries) ListAgentSessions(ctx context.Context, arg ListAgentSessionsPa
 }
 
 const listGenerationCandidates = `-- name: ListGenerationCandidates :many
-SELECT id, project_id, session_id, content_item_id, action_kind, operation_kind, expected_revision, selection_start, selection_end, insert_position, original_markdown, generated_markdown, reason, model_variant_id, status, created_at, updated_at FROM generation_candidates
+SELECT id, project_id, session_id, content_item_id, action_kind, operation_kind, expected_revision, selection_start, selection_end, insert_position, original_markdown, generated_markdown, reason, model_variant_id, status, created_at, updated_at, skill_id FROM generation_candidates
 WHERE project_id = ?1
   AND session_id = ?2
 ORDER BY created_at DESC
@@ -878,6 +881,7 @@ func (q *Queries) ListGenerationCandidates(ctx context.Context, arg ListGenerati
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.SkillID,
 		); err != nil {
 			return nil, err
 		}

@@ -38,6 +38,12 @@ type AgentSession struct {
 	UpdatedAt      string         `json:"updated_at"`
 }
 
+type AgentSessionSkill struct {
+	SessionID  string `json:"session_id"`
+	SkillID    string `json:"skill_id"`
+	SelectedAt string `json:"selected_at"`
+}
+
 type AttachedNote struct {
 	ID             string         `json:"id"`
 	ProjectID      string         `json:"project_id"`
@@ -113,6 +119,7 @@ type GenerationCandidate struct {
 	Status            string         `json:"status"`
 	CreatedAt         string         `json:"created_at"`
 	UpdatedAt         string         `json:"updated_at"`
+	SkillID           string         `json:"skill_id"`
 }
 
 type ModelVariant struct {
@@ -202,6 +209,44 @@ type Revision struct {
 	ActionKind     string         `json:"action_kind"`
 	ModelVariantID sql.NullString `json:"model_variant_id"`
 	SkillID        string         `json:"skill_id"`
+}
+
+type Skill struct {
+	ID                   string `json:"id"`
+	ProjectID            string `json:"project_id"`
+	Name                 string `json:"name"`
+	DisplayName          string `json:"display_name"`
+	Description          string `json:"description"`
+	InstructionsMarkdown string `json:"instructions_markdown"`
+	SourceType           string `json:"source_type"`
+	SourceLabel          string `json:"source_label"`
+	ScriptCount          int64  `json:"script_count"`
+	ScriptsDisabled      int64  `json:"scripts_disabled"`
+	MetadataJson         string `json:"metadata_json"`
+	InstalledAt          string `json:"installed_at"`
+	UpdatedAt            string `json:"updated_at"`
+}
+
+type SkillFile struct {
+	ID             string `json:"id"`
+	SkillID        string `json:"skill_id"`
+	RelativePath   string `json:"relative_path"`
+	Purpose        string `json:"purpose"`
+	MediaType      string `json:"media_type"`
+	BodyText       string `json:"body_text"`
+	Bytes          int64  `json:"bytes"`
+	ScriptDisabled int64  `json:"script_disabled"`
+	CreatedAt      string `json:"created_at"`
+}
+
+type SkillRoutingHint struct {
+	ID          string `json:"id"`
+	SkillID     string `json:"skill_id"`
+	ActionKind  string `json:"action_kind"`
+	ContentKind string `json:"content_kind"`
+	Tag         string `json:"tag"`
+	Priority    int64  `json:"priority"`
+	CreatedAt   string `json:"created_at"`
 }
 
 type StoryProject struct {
