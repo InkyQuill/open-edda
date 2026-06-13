@@ -28,8 +28,13 @@ WHERE id = ? AND project_id = ?;
 
 -- name: UpdateContentItemBody :execrows
 UPDATE content_items
-SET body_markdown = ?, metadata_json = ?, current_revision = ?, updated_at = ?
-WHERE id = ? AND project_id = ? AND current_revision = ?;
+SET body_markdown = sqlc.arg(body_markdown),
+    metadata_json = sqlc.arg(metadata_json),
+    current_revision = sqlc.arg(next_revision),
+    updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id)
+  AND project_id = sqlc.arg(project_id)
+  AND current_revision = sqlc.arg(expected_revision);
 
 -- name: CreateRevision :exec
 INSERT INTO revisions (
