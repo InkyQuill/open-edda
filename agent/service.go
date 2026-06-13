@@ -751,6 +751,8 @@ func (s *Service) AcceptCandidate(ctx context.Context, input AcceptCandidateInpu
 			if eventErr := s.createActivityEvent(ctx, candidate.ProjectID, candidate.SessionID, "generation_candidate_conflict", "Generation candidate conflicted", "{}"); eventErr != nil {
 				return AcceptCandidateResult{}, eventErr
 			}
+		} else if updateErr := s.transitionCandidateStatus(ctx, input.ProjectID, input.CandidateID, "applying", "pending"); updateErr != nil {
+			return AcceptCandidateResult{}, errors.Join(err, updateErr)
 		}
 		return AcceptCandidateResult{}, err
 	}

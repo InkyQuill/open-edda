@@ -173,6 +173,56 @@ func TestAcceptCandidateSecondAcceptDoesNotMarkAcceptedCandidateConflict(t *test
 	assertRevisionCount(t, ctx, db, chapter.ID, 2)
 }
 
+func TestAcceptCandidateWriteErrorRollsBackToPending(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Continuation Failed Accept Project")
+	provider := &fakeChatProvider{responses: []CompletionResponse{quickActionResponse("completion-1", " inserted")}}
+	service := NewService(db, projectService, provider)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 0)
+	chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Opening", "Existing text.")
+
+	preview, err := service.RunContinuation(ctx, ContinuationInput{
+		ProjectID:        storyProject.ID,
+		ContentID:        chapter.ID,
+		ModelVariantID:   model.ID,
+		ApplyMode:        ApplyModePreview,
+		ExpectedRevision: chapter.CurrentRevision,
+		InsertPosition:   int64(len(chapter.BodyMarkdown) + 100),
+	})
+	if err != nil {
+		t.Fatalf("RunContinuation() error = %v", err)
+	}
+	_, err = service.AcceptCandidate(ctx, AcceptCandidateInput{
+		ProjectID:   storyProject.ID,
+		CandidateID: preview.Candidate.ID,
+	})
+	if err == nil {
+		t.Fatal("AcceptCandidate() error = nil, want write error")
+	}
+	if errors.Is(err, project.ErrConflict) {
+		t.Fatalf("AcceptCandidate() error = %v, want non-conflict write error", err)
+	}
+
+	candidate := mustGetGenerationCandidate(t, ctx, db, storyProject.ID, preview.Candidate.ID)
+	if candidate.Status != "pending" {
+		t.Fatalf("candidate status = %q, want pending", candidate.Status)
+	}
+	rejected, err := service.RejectCandidate(ctx, RejectCandidateInput{
+		ProjectID:   storyProject.ID,
+		CandidateID: preview.Candidate.ID,
+	})
+	if err != nil {
+		t.Fatalf("RejectCandidate() error = %v", err)
+	}
+	if rejected.Status != "rejected" {
+		t.Fatalf("rejected status = %q, want rejected", rejected.Status)
+	}
+	assertRevisionCount(t, ctx, db, chapter.ID, 1)
+}
+
 func TestRewriteDirectApplyReplacesSelectionAndCreatesRevision(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()
