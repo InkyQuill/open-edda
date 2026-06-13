@@ -1646,7 +1646,7 @@ Expected: PASS.
 Start the app:
 
 ```bash
-go run .
+go run -tags sqlite_fts5 .
 ```
 
 In another shell, check health:
