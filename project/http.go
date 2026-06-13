@@ -18,6 +18,10 @@ import (
 
 const placeholderAuthorID = "author-1"
 
+const maxElysiumZipBytes = 10 << 20
+const maxElysiumFiles = 512
+const maxElysiumUncompressedBytes = 50 << 20
+
 type httpHandler struct {
 	service *Service
 }
@@ -92,7 +96,7 @@ func (h httpHandler) createProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h httpHandler) importElysium(w http.ResponseWriter, r *http.Request) {
-	root, err := unzipRequestBody(r)
+	root, err := unzipRequestBody(w, r)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid Elysium zip"})
 		return
@@ -105,53 +109,10 @@ func (h httpHandler) importElysium(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := h.service.CreateProject(r.Context(), CreateProjectInput{
-		AuthorID: placeholderAuthorID,
-		Title:    "Imported Elysium",
-		Language: "en",
-	})
+	project, err := h.service.ImportElysiumProject(r.Context(), placeholderAuthorID, "Imported Elysium", "en", items)
 	if err != nil {
 		writeError(w, err)
 		return
-	}
-
-	for index, item := range items {
-		content, err := h.service.CreateContent(r.Context(), CreateContentInput{
-			ProjectID:    project.ID,
-			Kind:         ContentKind(item.Kind),
-			Title:        item.Title,
-			BodyMarkdown: item.BodyMarkdown,
-			MetadataJSON: item.MetadataJSON,
-			SortOrder:    int64(index),
-			Reason:       "Elysium import",
-			CreatedBy:    "import",
-		})
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		for _, section := range item.Sections {
-			if err := h.service.CreateEntrySection(r.Context(), CreateEntrySectionInput{
-				ContentItemID: content.ID,
-				Heading:       section.Heading,
-				BodyMarkdown:  section.BodyMarkdown,
-				SortOrder:     int64(section.SortOrder),
-			}); err != nil {
-				writeError(w, err)
-				return
-			}
-		}
-		for _, relation := range item.Relations {
-			if err := h.service.CreateEntryRelation(r.Context(), CreateEntryRelationInput{
-				ProjectID:    project.ID,
-				SourceItemID: content.ID,
-				TargetTitle:  relation.TargetTitle,
-				RelationType: relation.RelationType,
-			}); err != nil {
-				writeError(w, err)
-				return
-			}
-		}
 	}
 
 	writeJSON(w, http.StatusCreated, project)
@@ -167,7 +128,7 @@ func (h httpHandler) exportElysium(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]markdownio.ImportedItem, 0, len(content))
 	for _, item := range content {
-		sections, err := h.service.ListEntrySections(r.Context(), item.ID)
+		sections, err := h.service.ListEntrySections(r.Context(), projectID, item.ID)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -191,13 +152,16 @@ func (h httpHandler) exportElysium(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	var body bytes.Buffer
+	if err := zipDirectory(root, &body); err != nil {
+		writeError(w, err)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", `attachment; filename="elysium.zip"`)
 	w.WriteHeader(http.StatusOK)
-	if err := zipDirectory(root, w); err != nil {
-		return
-	}
+	_, _ = w.Write(body.Bytes())
 }
 
 func (h httpHandler) listContent(w http.ResponseWriter, r *http.Request) {
@@ -315,8 +279,8 @@ func importedItemFromContent(item ContentItem, sections []EntrySection, relation
 	}
 }
 
-func unzipRequestBody(r *http.Request) (string, error) {
-	body, err := io.ReadAll(r.Body)
+func unzipRequestBody(w http.ResponseWriter, r *http.Request) (string, error) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxElysiumZipBytes))
 	if err != nil {
 		return "", err
 	}
@@ -336,9 +300,19 @@ func unzipRequestBody(r *http.Request) (string, error) {
 }
 
 func unzipToDirectory(reader *zip.Reader, root string) error {
+	var fileCount int
+	var totalUncompressed uint64
 	for _, file := range reader.File {
 		if !filepath.IsLocal(file.Name) || strings.Contains(file.Name, `\`) {
 			return errors.New("unsafe zip path")
+		}
+		fileCount++
+		if fileCount > maxElysiumFiles {
+			return errors.New("too many files in zip")
+		}
+		totalUncompressed += file.UncompressedSize64
+		if totalUncompressed > maxElysiumUncompressedBytes {
+			return errors.New("zip expands too large")
 		}
 		target := filepath.Join(root, filepath.FromSlash(file.Name))
 		if file.FileInfo().IsDir() {
@@ -359,10 +333,14 @@ func unzipToDirectory(reader *zip.Reader, root string) error {
 			_ = source.Close()
 			return err
 		}
-		_, copyErr := io.Copy(destination, source)
+		limited := &io.LimitedReader{R: source, N: int64(file.UncompressedSize64) + 1}
+		_, copyErr := io.Copy(destination, limited)
 		closeErr := errors.Join(source.Close(), destination.Close())
 		if copyErr != nil {
 			return copyErr
+		}
+		if limited.N == 0 {
+			return errors.New("zip entry exceeds declared size")
 		}
 		if closeErr != nil {
 			return closeErr
@@ -388,15 +366,19 @@ func zipDirectory(root string, writer io.Writer) error {
 		if err != nil {
 			return err
 		}
-		file, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-		_, err = io.Copy(header, file)
-		return err
+		return writeZipFile(header, path)
 	})
 	return errors.Join(err, zipWriter.Close())
+}
+
+func writeZipFile(writer io.Writer, path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(writer, file)
+	closeErr := file.Close()
+	return errors.Join(copyErr, closeErr)
 }
 
 func decodeJSON(r *http.Request, value any) error {

@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"git.inkyquill.net/inky/writer/markdownio"
 	"git.inkyquill.net/inky/writer/store"
 	"github.com/mattn/go-sqlite3"
 )
@@ -49,6 +50,106 @@ func (s *Service) CreateProject(ctx context.Context, input CreateProjectInput) (
 			return StoryProject{}, ErrConflict
 		}
 		return StoryProject{}, fmt.Errorf("create story project: %w", err)
+	}
+
+	return project, nil
+}
+
+func (s *Service) ImportElysiumProject(ctx context.Context, authorID string, title string, language string, items []markdownio.ImportedItem) (StoryProject, error) {
+	now := nowString()
+	project := StoryProject{
+		ID:       newID("project"),
+		Title:    title,
+		Slug:     slugify(title),
+		Language: language,
+	}
+
+	if err := s.inTx(ctx, func(queries *store.Queries) error {
+		if err := queries.CreateStoryProject(ctx, store.CreateStoryProjectParams{
+			ID:        project.ID,
+			AuthorID:  authorID,
+			Title:     project.Title,
+			Slug:      project.Slug,
+			Language:  project.Language,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}); err != nil {
+			if isSQLiteConstraint(err, sqlite3.ErrConstraintUnique) {
+				return ErrConflict
+			}
+			return fmt.Errorf("create story project: %w", err)
+		}
+
+		for index, imported := range items {
+			item := ContentItem{
+				ID:              newID("content"),
+				ProjectID:       project.ID,
+				Kind:            ContentKind(imported.Kind),
+				Title:           imported.Title,
+				Slug:            slugify(imported.Title),
+				BodyMarkdown:    imported.BodyMarkdown,
+				MetadataJSON:    defaultJSON(imported.MetadataJSON),
+				SortOrder:       int64(index),
+				CurrentRevision: 1,
+			}
+			if err := queries.CreateContentItem(ctx, store.CreateContentItemParams{
+				ID:              item.ID,
+				ProjectID:       item.ProjectID,
+				Kind:            string(item.Kind),
+				Title:           item.Title,
+				Slug:            item.Slug,
+				BodyMarkdown:    item.BodyMarkdown,
+				MetadataJson:    item.MetadataJSON,
+				SortOrder:       item.SortOrder,
+				CurrentRevision: item.CurrentRevision,
+				CreatedAt:       now,
+				UpdatedAt:       now,
+			}); err != nil {
+				if isSQLiteConstraint(err, sqlite3.ErrConstraintUnique) {
+					return ErrConflict
+				}
+				return fmt.Errorf("create content item: %w", err)
+			}
+			if err := queries.CreateRevision(ctx, store.CreateRevisionParams{
+				ID:             newID("revision"),
+				ContentItemID:  item.ID,
+				RevisionNumber: item.CurrentRevision,
+				BodyMarkdown:   item.BodyMarkdown,
+				MetadataJson:   item.MetadataJSON,
+				Reason:         "Elysium import",
+				CreatedBy:      "import",
+				CreatedAt:      now,
+			}); err != nil {
+				return fmt.Errorf("create initial revision: %w", err)
+			}
+			for _, section := range imported.Sections {
+				if err := queries.CreateEntrySection(ctx, store.CreateEntrySectionParams{
+					ID:            newID("section"),
+					ContentItemID: item.ID,
+					Heading:       section.Heading,
+					BodyMarkdown:  section.BodyMarkdown,
+					SortOrder:     int64(section.SortOrder),
+				}); err != nil {
+					return fmt.Errorf("create entry section: %w", err)
+				}
+			}
+			for _, relation := range imported.Relations {
+				if err := queries.CreateEntryRelation(ctx, store.CreateEntryRelationParams{
+					ID:           newID("relation"),
+					ProjectID:    project.ID,
+					SourceItemID: item.ID,
+					TargetItemID: sql.NullString{},
+					TargetTitle:  relation.TargetTitle,
+					RelationType: relation.RelationType,
+					CreatedAt:    now,
+				}); err != nil {
+					return fmt.Errorf("create entry relation: %w", err)
+				}
+			}
+		}
+		return nil
+	}); err != nil {
+		return StoryProject{}, err
 	}
 
 	return project, nil
@@ -250,6 +351,12 @@ func (s *Service) UpdateContent(ctx context.Context, input UpdateContentInput) (
 }
 
 func (s *Service) CreateEntrySection(ctx context.Context, input CreateEntrySectionInput) error {
+	if _, err := s.queries.GetContentItem(ctx, store.GetContentItemParams{
+		ID:        input.ContentItemID,
+		ProjectID: input.ProjectID,
+	}); err != nil {
+		return fmt.Errorf("get content item: %w", err)
+	}
 	if err := s.queries.CreateEntrySection(ctx, store.CreateEntrySectionParams{
 		ID:            newID("section"),
 		ContentItemID: input.ContentItemID,
@@ -262,8 +369,11 @@ func (s *Service) CreateEntrySection(ctx context.Context, input CreateEntrySecti
 	return nil
 }
 
-func (s *Service) ListEntrySections(ctx context.Context, contentID string) ([]EntrySection, error) {
-	sections, err := s.queries.ListEntrySections(ctx, contentID)
+func (s *Service) ListEntrySections(ctx context.Context, projectID, contentID string) ([]EntrySection, error) {
+	sections, err := s.queries.ListEntrySections(ctx, store.ListEntrySectionsParams{
+		ContentItemID: contentID,
+		ProjectID:     projectID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list entry sections: %w", err)
 	}

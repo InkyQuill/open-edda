@@ -68,6 +68,7 @@ type CreateContentInput struct {
 }
 
 type CreateEntrySectionInput struct {
+	ProjectID     string
 	ContentItemID string
 	Heading       string
 	BodyMarkdown  string

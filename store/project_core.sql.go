@@ -324,13 +324,21 @@ func (q *Queries) ListEntryRelations(ctx context.Context, arg ListEntryRelations
 }
 
 const listEntrySections = `-- name: ListEntrySections :many
-SELECT id, content_item_id, heading, body_markdown, sort_order FROM entry_sections
-WHERE content_item_id = ?
-ORDER BY sort_order ASC
+SELECT entry_sections.id, entry_sections.content_item_id, entry_sections.heading, entry_sections.body_markdown, entry_sections.sort_order
+FROM entry_sections
+JOIN content_items ON content_items.id = entry_sections.content_item_id
+WHERE entry_sections.content_item_id = ?1
+  AND content_items.project_id = ?2
+ORDER BY entry_sections.sort_order ASC
 `
 
-func (q *Queries) ListEntrySections(ctx context.Context, contentItemID string) ([]EntrySection, error) {
-	rows, err := q.db.QueryContext(ctx, listEntrySections, contentItemID)
+type ListEntrySectionsParams struct {
+	ContentItemID string `json:"content_item_id"`
+	ProjectID     string `json:"project_id"`
+}
+
+func (q *Queries) ListEntrySections(ctx context.Context, arg ListEntrySectionsParams) ([]EntrySection, error) {
+	rows, err := q.db.QueryContext(ctx, listEntrySections, arg.ContentItemID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}

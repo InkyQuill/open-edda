@@ -258,6 +258,49 @@ func TestImportElysiumProject(t *testing.T) {
 	}
 }
 
+func TestImportElysiumRollbackOnFailure(t *testing.T) {
+	handler := newTestApp(t)
+	body := zipEntries(t, map[string]string{
+		"story/One.md": "# Same\n\nFirst.",
+		"story/Two.md": "# Same\n\nSecond.",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/import/elysium", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/zip")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusConflict, rec.Body.String())
+	}
+	listReq := httptest.NewRequest(http.MethodGet, "/api/projects", nil)
+	listRec := httptest.NewRecorder()
+	handler.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list projects status = %d, want %d; body = %s", listRec.Code, http.StatusOK, listRec.Body.String())
+	}
+	var projects []project.StoryProject
+	if err := json.NewDecoder(listRec.Body).Decode(&projects); err != nil {
+		t.Fatalf("decode projects: %v", err)
+	}
+	if len(projects) != 2 {
+		t.Fatalf("projects len = %d, want original seed projects only", len(projects))
+	}
+}
+
+func TestImportElysiumRejectsOversizedZip(t *testing.T) {
+	handler := newTestApp(t)
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/import/elysium", bytes.NewReader(bytes.Repeat([]byte("x"), 10<<20+1)))
+	req.Header.Set("Content-Type", "application/zip")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
 func TestExportElysiumProject(t *testing.T) {
 	handler := newTestApp(t)
 	content := createTestContent(t, handler, "project-1", "Chapter 1")
@@ -335,6 +378,26 @@ func zippedElysiumFixture(t *testing.T) []byte {
 		return nil
 	}); err != nil {
 		t.Fatalf("zip fixture: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+	return buffer.Bytes()
+}
+
+func zipEntries(t *testing.T, entries map[string]string) []byte {
+	t.Helper()
+
+	var buffer bytes.Buffer
+	writer := zip.NewWriter(&buffer)
+	for name, content := range entries {
+		entry, err := writer.Create(name)
+		if err != nil {
+			t.Fatalf("create zip entry: %v", err)
+		}
+		if _, err := entry.Write([]byte(content)); err != nil {
+			t.Fatalf("write zip entry: %v", err)
+		}
 	}
 	if err := writer.Close(); err != nil {
 		t.Fatalf("close zip: %v", err)

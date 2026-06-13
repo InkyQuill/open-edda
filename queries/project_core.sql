@@ -64,9 +64,12 @@ INSERT INTO entry_sections (id, content_item_id, heading, body_markdown, sort_or
 VALUES (?, ?, ?, ?, ?);
 
 -- name: ListEntrySections :many
-SELECT * FROM entry_sections
-WHERE content_item_id = ?
-ORDER BY sort_order ASC;
+SELECT entry_sections.*
+FROM entry_sections
+JOIN content_items ON content_items.id = entry_sections.content_item_id
+WHERE entry_sections.content_item_id = sqlc.arg(content_item_id)
+  AND content_items.project_id = sqlc.arg(project_id)
+ORDER BY entry_sections.sort_order ASC;
 
 -- name: CreateEntryRelation :exec
 INSERT INTO entry_relations (
