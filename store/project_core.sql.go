@@ -410,39 +410,6 @@ func (q *Queries) ListEntrySections(ctx context.Context, arg ListEntrySectionsPa
 	return items, nil
 }
 
-const updateEntrySectionBody = `-- name: UpdateEntrySectionBody :execrows
-UPDATE entry_sections
-SET body_markdown = ?1
-WHERE content_item_id = ?2
-  AND heading = ?3
-  AND EXISTS (
-    SELECT 1
-    FROM content_items
-    WHERE content_items.id = entry_sections.content_item_id
-      AND content_items.project_id = ?4
-  )
-`
-
-type UpdateEntrySectionBodyParams struct {
-	BodyMarkdown  string `json:"body_markdown"`
-	ContentItemID string `json:"content_item_id"`
-	Heading       string `json:"heading"`
-	ProjectID     string `json:"project_id"`
-}
-
-func (q *Queries) UpdateEntrySectionBody(ctx context.Context, arg UpdateEntrySectionBodyParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, updateEntrySectionBody,
-		arg.BodyMarkdown,
-		arg.ContentItemID,
-		arg.Heading,
-		arg.ProjectID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const listProjectContentItems = `-- name: ListProjectContentItems :many
 SELECT id, project_id, kind, title, slug, body_markdown, metadata_json, sort_order, current_revision, created_at, updated_at FROM content_items
 WHERE project_id = ?
@@ -699,6 +666,39 @@ func (q *Queries) UpdateContentItemBody(ctx context.Context, arg UpdateContentIt
 		arg.ID,
 		arg.ProjectID,
 		arg.ExpectedRevision,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateEntrySectionBody = `-- name: UpdateEntrySectionBody :execrows
+UPDATE entry_sections
+SET body_markdown = ?1
+WHERE content_item_id = ?2
+  AND heading = ?3
+  AND EXISTS (
+    SELECT 1
+    FROM content_items
+    WHERE content_items.id = entry_sections.content_item_id
+      AND content_items.project_id = ?4
+  )
+`
+
+type UpdateEntrySectionBodyParams struct {
+	BodyMarkdown  string `json:"body_markdown"`
+	ContentItemID string `json:"content_item_id"`
+	Heading       string `json:"heading"`
+	ProjectID     string `json:"project_id"`
+}
+
+func (q *Queries) UpdateEntrySectionBody(ctx context.Context, arg UpdateEntrySectionBodyParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateEntrySectionBody,
+		arg.BodyMarkdown,
+		arg.ContentItemID,
+		arg.Heading,
+		arg.ProjectID,
 	)
 	if err != nil {
 		return 0, err

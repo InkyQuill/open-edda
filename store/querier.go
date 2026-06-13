@@ -27,6 +27,7 @@ type Querier interface {
 	CreateToolResultArtifact(ctx context.Context, arg CreateToolResultArtifactParams) error
 	DeleteExpiredPromptRecords(ctx context.Context, arg DeleteExpiredPromptRecordsParams) (int64, error)
 	DeleteModelVariant(ctx context.Context, arg DeleteModelVariantParams) error
+	DeletePromptRecordsByProject(ctx context.Context, projectID string) (int64, error)
 	DeleteProviderConfig(ctx context.Context, arg DeleteProviderConfigParams) error
 	GetAgentSession(ctx context.Context, arg GetAgentSessionParams) (AgentSession, error)
 	GetContentItem(ctx context.Context, arg GetContentItemParams) (ContentItem, error)
@@ -35,6 +36,7 @@ type Querier interface {
 	GetModelVariantForProject(ctx context.Context, arg GetModelVariantForProjectParams) (ModelVariant, error)
 	GetPromptProfile(ctx context.Context, projectID string) (PromptProfile, error)
 	GetProviderConfig(ctx context.Context, arg GetProviderConfigParams) (ProviderConfig, error)
+	GetProviderConfigForProjectModel(ctx context.Context, arg GetProviderConfigForProjectModelParams) (ProviderConfig, error)
 	GetStoryProject(ctx context.Context, arg GetStoryProjectParams) (StoryProject, error)
 	GetStoryProjectByID(ctx context.Context, id string) (StoryProject, error)
 	ListActivityEvents(ctx context.Context, arg ListActivityEventsParams) ([]ActivityEvent, error)

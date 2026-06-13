@@ -429,6 +429,19 @@ func (q *Queries) DeleteModelVariant(ctx context.Context, arg DeleteModelVariant
 	return err
 }
 
+const deletePromptRecordsByProject = `-- name: DeletePromptRecordsByProject :execrows
+DELETE FROM prompt_records
+WHERE project_id = ?
+`
+
+func (q *Queries) DeletePromptRecordsByProject(ctx context.Context, projectID string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deletePromptRecordsByProject, projectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteProviderConfig = `-- name: DeleteProviderConfig :exec
 DELETE FROM provider_configs
 WHERE id = ?1
@@ -617,6 +630,35 @@ type GetProviderConfigParams struct {
 
 func (q *Queries) GetProviderConfig(ctx context.Context, arg GetProviderConfigParams) (ProviderConfig, error) {
 	row := q.db.QueryRowContext(ctx, getProviderConfig, arg.ID, arg.AuthorID)
+	var i ProviderConfig
+	err := row.Scan(
+		&i.ID,
+		&i.AuthorID,
+		&i.Name,
+		&i.BaseUrl,
+		&i.ApiKeyEncrypted,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getProviderConfigForProjectModel = `-- name: GetProviderConfigForProjectModel :one
+SELECT provider_configs.id, provider_configs.author_id, provider_configs.name, provider_configs.base_url, provider_configs.api_key_encrypted, provider_configs.created_at, provider_configs.updated_at
+FROM provider_configs
+JOIN model_variants ON model_variants.provider_config_id = provider_configs.id
+JOIN story_projects ON story_projects.author_id = provider_configs.author_id
+WHERE story_projects.id = ?1
+  AND model_variants.id = ?2
+`
+
+type GetProviderConfigForProjectModelParams struct {
+	ProjectID      string `json:"project_id"`
+	ModelVariantID string `json:"model_variant_id"`
+}
+
+func (q *Queries) GetProviderConfigForProjectModel(ctx context.Context, arg GetProviderConfigForProjectModelParams) (ProviderConfig, error) {
+	row := q.db.QueryRowContext(ctx, getProviderConfigForProjectModel, arg.ProjectID, arg.ModelVariantID)
 	var i ProviderConfig
 	err := row.Scan(
 		&i.ID,

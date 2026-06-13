@@ -184,6 +184,148 @@ func TestRunChatTurnStoresMessagesToolActivityAndPromptRecord(t *testing.T) {
 	assertSnapshotSource(t, snapshots, "transcript")
 }
 
+func TestRunChatTurnFollowUpDoesNotSendOrphanToolMessages(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Follow Up Project")
+	provider := &fakeChatProvider{
+		responses: []CompletionResponse{
+			{
+				ID: "completion-tool",
+				Message: CompletionMessage{
+					Role: MessageRoleAssistant,
+					ToolCalls: []CompletionToolCall{
+						{
+							ID:   "tool-call-follow-up",
+							Type: "function",
+							Function: CompletionToolCallFunction{
+								Name:      "project_map",
+								Arguments: `{}`,
+							},
+						},
+					},
+				},
+				FinishReason:   "tool_calls",
+				UsageAvailable: true,
+			},
+			{
+				ID: "completion-final",
+				Message: CompletionMessage{
+					Role:    MessageRoleAssistant,
+					Content: "I checked the map.",
+				},
+				FinishReason:   "stop",
+				UsageAvailable: true,
+			},
+			{
+				ID: "completion-follow-up",
+				Message: CompletionMessage{
+					Role:    MessageRoleAssistant,
+					Content: "The follow-up has a valid transcript.",
+				},
+				FinishReason:   "stop",
+				UsageAvailable: true,
+			},
+		},
+	}
+	service := NewService(db, projectService, provider)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	session := createChatTurnTestSessionWithModel(t, ctx, service, storyProject.ID, model.ID)
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 30)
+
+	if _, err := service.RunChatTurn(ctx, ChatTurnInput{
+		ProjectID:    storyProject.ID,
+		SessionID:    session.ID,
+		BodyMarkdown: "Inspect the project.",
+	}); err != nil {
+		t.Fatalf("RunChatTurn(first) error = %v", err)
+	}
+	if _, err := service.RunChatTurn(ctx, ChatTurnInput{
+		ProjectID:    storyProject.ID,
+		SessionID:    session.ID,
+		BodyMarkdown: "Now answer from the previous context.",
+	}); err != nil {
+		t.Fatalf("RunChatTurn(follow-up) error = %v", err)
+	}
+
+	if len(provider.requests) != 3 {
+		t.Fatalf("provider request count = %d, want 3", len(provider.requests))
+	}
+	followUpMessages := provider.requests[2].Messages
+	for _, message := range followUpMessages {
+		if message.Role == MessageRoleTool {
+			t.Fatalf("follow-up request contains orphan tool message: %#v", followUpMessages)
+		}
+		if len(message.ToolCalls) > 0 {
+			t.Fatalf("follow-up request contains historical tool call message: %#v", followUpMessages)
+		}
+	}
+}
+
+func TestRunChatTurnPromptRecordFailureDoesNotFailStoredAssistantTurn(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Prompt Record Failure Project")
+	provider := &fakeChatProvider{
+		responses: []CompletionResponse{
+			{
+				ID: "completion-final",
+				Message: CompletionMessage{
+					Role:    MessageRoleAssistant,
+					Content: "The assistant response is durable.",
+				},
+				FinishReason:   "stop",
+				UsageAvailable: true,
+			},
+		},
+	}
+	service := NewService(db, projectService, provider)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	session := createChatTurnTestSessionWithModel(t, ctx, service, storyProject.ID, model.ID)
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 30)
+	if _, err := db.ExecContext(ctx, `
+		CREATE TRIGGER fail_prompt_record_insert
+		BEFORE INSERT ON prompt_records
+		BEGIN
+			SELECT RAISE(FAIL, 'prompt record insert failed');
+		END;
+	`); err != nil {
+		t.Fatalf("create prompt record failure trigger: %v", err)
+	}
+
+	result, err := service.RunChatTurn(ctx, ChatTurnInput{
+		ProjectID:    storyProject.ID,
+		SessionID:    session.ID,
+		BodyMarkdown: "Please answer.",
+	})
+	if err != nil {
+		t.Fatalf("RunChatTurn() error = %v, want nil after assistant response is stored", err)
+	}
+	if result.AssistantMessage.BodyMarkdown != "The assistant response is durable." {
+		t.Fatalf("assistant body = %q", result.AssistantMessage.BodyMarkdown)
+	}
+	if result.PromptRecordID != "" {
+		t.Fatalf("PromptRecordID = %q, want empty after prompt record failure", result.PromptRecordID)
+	}
+
+	messages, err := service.ListMessages(ctx, storyProject.ID, session.ID)
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	if len(messages) != 2 || messages[1].Role != MessageRoleAssistant {
+		t.Fatalf("messages = %#v, want stored user and assistant", messages)
+	}
+	events, err := store.New(db).ListActivityEvents(ctx, store.ListActivityEventsParams{ProjectID: storyProject.ID, Limit: 10})
+	if err != nil {
+		t.Fatalf("ListActivityEvents() error = %v", err)
+	}
+	if !hasEventType(events, "prompt_record_failed") {
+		t.Fatalf("events did not include prompt_record_failed: %#v", events)
+	}
+}
+
 func TestRunChatTurnStoresZeroUsageAndEventWhenProviderOmitsUsage(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()

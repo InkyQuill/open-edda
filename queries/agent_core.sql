@@ -64,6 +64,14 @@ JOIN story_projects ON story_projects.author_id = provider_configs.author_id
 WHERE story_projects.id = sqlc.arg(project_id)
   AND model_variants.id = sqlc.arg(model_variant_id);
 
+-- name: GetProviderConfigForProjectModel :one
+SELECT provider_configs.*
+FROM provider_configs
+JOIN model_variants ON model_variants.provider_config_id = provider_configs.id
+JOIN story_projects ON story_projects.author_id = provider_configs.author_id
+WHERE story_projects.id = sqlc.arg(project_id)
+  AND model_variants.id = sqlc.arg(model_variant_id);
+
 -- name: UpdateModelVariant :exec
 UPDATE model_variants
 SET name = sqlc.arg(name),
@@ -194,6 +202,10 @@ LIMIT sqlc.arg(limit);
 DELETE FROM prompt_records
 WHERE project_id = sqlc.arg(project_id)
   AND created_at < sqlc.arg(cutoff);
+
+-- name: DeletePromptRecordsByProject :execrows
+DELETE FROM prompt_records
+WHERE project_id = ?;
 
 -- name: CreatePromptContextSnapshot :exec
 INSERT INTO prompt_context_snapshots (

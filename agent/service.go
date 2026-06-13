@@ -390,9 +390,12 @@ func (s *Service) RunChatTurn(ctx context.Context, input ChatTurnInput) (ChatTur
 	if err != nil {
 		return ChatTurnResult{}, fmt.Errorf("get model variant for project: %w", err)
 	}
-	providerConfig, err := s.providerConfigForModel(ctx, model.ProviderConfigID)
+	providerConfig, err := s.queries.GetProviderConfigForProjectModel(ctx, store.GetProviderConfigForProjectModelParams{
+		ProjectID:      input.ProjectID,
+		ModelVariantID: session.ModelVariantID,
+	})
 	if err != nil {
-		return ChatTurnResult{}, err
+		return ChatTurnResult{}, fmt.Errorf("get provider config for project model: %w", err)
 	}
 	profile, err := s.GetPromptProfile(ctx, input.ProjectID)
 	if err != nil {
@@ -522,24 +525,27 @@ func (s *Service) RunChatTurn(ctx context.Context, input ChatTurnInput) (ChatTur
 			"requests":     requests,
 		})
 		if err != nil {
-			return ChatTurnResult{}, fmt.Errorf("marshal prompt request: %w", err)
-		}
-		responseJSON, err := marshalJSON(map[string]any{
-			"providerName": providerConfig.Name,
-			"modelName":    model.Model,
-			"responses":    responses,
-		})
-		if err != nil {
-			return ChatTurnResult{}, fmt.Errorf("marshal prompt response: %w", err)
-		}
-		promptRecordID, err = s.storePromptRecord(ctx, session, providerConfig.Name, modelVariantFromStore(model), usage, requestJSON, responseJSON, contextSources)
-		if err != nil {
-			return ChatTurnResult{}, err
+			s.recordPostResponseFailure(ctx, input.ProjectID, input.SessionID, "prompt_record_failed", "Failed to marshal prompt record request", err)
+		} else {
+			responseJSON, err := marshalJSON(map[string]any{
+				"providerName": providerConfig.Name,
+				"modelName":    model.Model,
+				"responses":    responses,
+			})
+			if err != nil {
+				s.recordPostResponseFailure(ctx, input.ProjectID, input.SessionID, "prompt_record_failed", "Failed to marshal prompt record response", err)
+			} else {
+				promptRecordID, err = s.storePromptRecord(ctx, session, providerConfig.Name, modelVariantFromStore(model), usage, requestJSON, responseJSON, contextSources)
+				if err != nil {
+					promptRecordID = ""
+					s.recordPostResponseFailure(ctx, input.ProjectID, input.SessionID, "prompt_record_failed", "Failed to store prompt record", err)
+				}
+			}
 		}
 	}
 	if usageMissing {
 		if err := s.createActivityEvent(ctx, input.ProjectID, input.SessionID, "usage_missing", "Provider response omitted token usage", "{}"); err != nil {
-			return ChatTurnResult{}, err
+			s.recordPostResponseFailure(ctx, input.ProjectID, input.SessionID, "usage_missing_failed", "Failed to store missing-usage event", err)
 		}
 	}
 
@@ -556,11 +562,11 @@ func (s *Service) PrunePromptRecords(ctx context.Context, projectID string) (int
 		return 0, err
 	}
 	if profile.PromptRecordRetentionDays == 0 {
-		result, err := s.db.ExecContext(ctx, `DELETE FROM prompt_records WHERE project_id = ?`, projectID)
+		deleted, err := s.queries.DeletePromptRecordsByProject(ctx, projectID)
 		if err != nil {
 			return 0, fmt.Errorf("delete project prompt records: %w", err)
 		}
-		return result.RowsAffected()
+		return deleted, nil
 	}
 	cutoff := nowString()
 	if profile.PromptRecordRetentionDays > 0 {
@@ -576,34 +582,13 @@ func (s *Service) PrunePromptRecords(ctx context.Context, projectID string) (int
 	return deleted, nil
 }
 
-func (s *Service) providerConfigForModel(ctx context.Context, providerConfigID string) (store.ProviderConfig, error) {
-	var provider store.ProviderConfig
-	err := s.db.QueryRowContext(ctx, `
-		SELECT id, author_id, name, base_url, api_key_encrypted, created_at, updated_at
-		FROM provider_configs
-		WHERE id = ?
-	`, providerConfigID).Scan(
-		&provider.ID,
-		&provider.AuthorID,
-		&provider.Name,
-		&provider.BaseUrl,
-		&provider.ApiKeyEncrypted,
-		&provider.CreatedAt,
-		&provider.UpdatedAt,
-	)
-	if err != nil {
-		return store.ProviderConfig{}, fmt.Errorf("get provider config for model: %w", err)
-	}
-	return provider, nil
-}
-
 func chatPromptMessages(profile PromptProfile, transcript []Message) []CompletionMessage {
 	messages := []CompletionMessage{
 		{Role: MessageRoleSystem, Content: fictionAssistantSystemPrompt},
 		{Role: MessageRoleSystem, Content: renderPromptProfile(profile)},
 	}
 	for _, message := range transcript {
-		if message.Role == MessageRoleSystem {
+		if message.Role == MessageRoleSystem || message.Role == MessageRoleTool {
 			continue
 		}
 		messages = append(messages, CompletionMessage{
@@ -785,6 +770,14 @@ func (s *Service) createActivityEvent(ctx context.Context, projectID, sessionID,
 		return fmt.Errorf("create activity event: %w", err)
 	}
 	return nil
+}
+
+func (s *Service) recordPostResponseFailure(ctx context.Context, projectID, sessionID, eventType, summary string, cause error) {
+	metadataJSON, err := marshalJSON(map[string]any{"error": cause.Error()})
+	if err != nil {
+		metadataJSON = "{}"
+	}
+	_ = s.createActivityEvent(ctx, projectID, sessionID, eventType, summary, metadataJSON)
 }
 
 func sessionFromStore(session store.AgentSession) Session {
