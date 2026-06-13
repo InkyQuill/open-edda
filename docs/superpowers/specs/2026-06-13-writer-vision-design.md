@@ -123,6 +123,10 @@ V1 retrieval uses:
 
 Embeddings can be added later if structured and lexical retrieval prove insufficient.
 
+Prompt context should be assembled from named Context Sources rather than one ad hoc string. Each source has a stable key, deterministic rendering, and a stored snapshot for the Agent Session. Stable sources include the prompt profile, layered Writing Briefs, project map, selected content window, available tool names, provider/model disclosure, and later Skill guidance. When a source changes during a session, the backend admits the new rendered value only at the next provider-turn boundary and records that admission as session context history. This preserves debuggability while avoiding stale invisible prompt changes.
+
+Tool results returned to the model are bounded. The backend stores the complete structured result for audit/debug use, but the model-visible result is a size-limited Markdown/JSON projection that identifies when it was truncated. This prevents one broad search or large Story Bible read from flooding the next provider turn.
+
 ### Continuation
 
 Continuation generates new prose at the cursor or chapter end. The author can choose a word or sentence target and optional guidance. Without guidance, the model infers a plausible next direction from the chapter, Writing Brief, and project context.
@@ -195,6 +199,17 @@ Provider Disclosure is visible but not noisy. Settings show the configured provi
 Activity Trails are compact by default, such as an `actions: 32` pill, and expand to show readable details: which project items were read, which action ran, which skill was used, which model variant was used, and which content item changed.
 
 Prompt Records are separate advanced/debug records of raw assembled model inputs and outputs. They are subject to retention controls and must never include provider secrets.
+
+Provider usage accounting is part of Prompt Records and Activity Trails. Writer stores provider-neutral token buckets: uncached input, output, cache read, cache write, total tokens, and per-bucket estimated cost. This is required for OpenAI-compatible providers with prompt-cache reporting, including DeepSeek-style APIs where cache-hit tokens are billed differently from ordinary input tokens. Model variants therefore store per-million-token prices for input, output, cache read, and cache write, plus provider compatibility metadata such as the request token field and thinking/reasoning format.
+
+## Research Notes
+
+Two existing agent systems informed the Agent Core design:
+
+- OpenCode separates durable session history from provider-turn System Context, using stable Context Sources and safe provider-turn boundaries. Writer adopts the useful part: named prompt context sources with stored snapshots and deterministic admission, but keeps the implementation smaller and project-specific.
+- OpenCode also bounds model-visible tool output and stores full output separately. Writer applies the same principle to retrieval/read tools so a large Story Bible or search result cannot dominate the next prompt.
+- Pi keeps provider usage in normalized buckets: input, output, cache read, cache write, total tokens, and cost for each bucket. Writer adopts this accounting shape because it maps cleanly to DeepSeek/OpenAI-compatible cache usage and makes spend visible without provider-specific UI.
+- Pi’s agent loop treats model calls, tool execution, and follow-up turns as explicit events. Writer does not need Pi’s full streaming loop in Milestone 2, but Activity Trails should use similarly explicit events for provider turn started/finished, tool called, tool result bounded, structured write applied, candidate accepted/rejected, and prompt record stored.
 
 ## Roadmap
 

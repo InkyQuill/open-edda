@@ -19,7 +19,9 @@ Agent Core must support:
 - OpenAI-compatible provider configuration and model variants.
 - Chat sessions per Story Project.
 - Prompt assembly from project settings, writing briefs, selected chapter/selection, and tool-accessible project context.
+- Named prompt context sources with stored snapshots per provider turn.
 - Structured context tools: project map, content search, read content, read story bible section, read revisions metadata.
+- Bounded model-visible tool results with complete structured results retained for debugging.
 - Structured write tools: append to chapter, insert into chapter, replace selected range, update Story Bible Entry body, update Entry Section body.
 - Continuation, Rewrite, and Read and Check quick actions.
 - Explicit per-action apply mode: `preview` or `direct_apply`.
@@ -29,12 +31,13 @@ Agent Core must support:
 - Activity Trails as compact events.
 - Prompt Records for raw assembled request/response debugging without provider secrets.
 - Prompt Record retention controls.
+- Provider-neutral usage and cost accounting with DeepSeek-compatible cache-read/cache-write buckets.
 
 ## File Map
 
 Create:
 
-- `migrations/00002_agent_core.sql` - provider, model variant, session, message, activity, prompt record, prompt profile, candidate tables, and agent revision label columns.
+- `migrations/00002_agent_core.sql` - provider, model variant, session, message, context snapshot, bounded tool result, activity, prompt record, prompt profile, candidate tables, and agent revision label columns.
 - `queries/agent_core.sql` - sqlc queries for Agent Core tables.
 - `agent/types.go` - domain types for provider config, model variants, sessions, messages, actions, context bundles, structured writes, activity events, and prompt records.
 - `agent/service.go` - orchestration service for sessions, chat turns, quick actions, prompt assembly, tool execution, and structured writes.
@@ -67,13 +70,17 @@ Modify:
 - Provider calls are synchronous HTTP requests in this milestone. Streaming can wrap the same provider interface later.
 - Provider secrets are stored in SQLite for the first self-hosted version. They must never be returned by API responses or written into Prompt Records.
 - A model variant is the author-facing unit used by actions. It references a provider config and contains model name plus generation defaults.
+- Model variants also store pricing and compatibility metadata: input/output/cache-read/cache-write prices per million tokens, optional context window, optional maximum output tokens, optional request token field, and optional thinking/reasoning format. This follows Pi's useful accounting shape and makes DeepSeek/OpenAI-compatible cache-hit pricing visible.
 - Prompt Records store JSON request and response bodies for debugging. They include provider name, model name, action kind, and session ID, but not API keys.
+- Prompt Records also store normalized usage buckets and estimated per-bucket costs. The provider client normalizes OpenAI-compatible usage fields into uncached input, output, cache read, cache write, and total tokens before cost calculation.
 - Activity Trails are normalized, compact events. The UI can collapse them into an `actions: N` pill later; this milestone exposes the data.
 - Direct Apply uses existing revision creation. Preview mode stores a `generation_candidates` row and does not change content until the author accepts it.
 - Preview accept is a backend action, not just a UI action. It reuses the candidate's stored operation and original `expectedRevision`, then either commits one structured write or returns a conflict.
 - Read and Check creates an Agent Session assistant message and an Attached Note linked to the checked chapter/selection.
 - Tool calls are executed server-side. The frontend never receives provider credentials.
 - Skill retrieval is intentionally limited to the future Skill Core tables. Agent Core reserves `skill_id` fields in revision/activity metadata but does not load skill instructions or assets yet.
+- Prompt context is built from named context sources. Each provider turn stores the rendered context source snapshots used for that request so Prompt Records can be audited without guessing which prompt profile, brief layers, project map, selected content window, provider disclosure, or tool definitions were effective.
+- Tool results keep two forms: a complete structured result retained in the database and a bounded model-visible projection. The bounded projection must clearly say when it was truncated.
 
 ---
 
@@ -105,6 +112,8 @@ func TestAgentCoreTablesExist(t *testing.T) {
 		"activity_events",
 		"prompt_records",
 		"generation_candidates",
+		"prompt_context_snapshots",
+		"tool_result_artifacts",
 	}
 	for _, table := range tables {
 		var name string
@@ -152,6 +161,14 @@ CREATE TABLE model_variants (
   model TEXT NOT NULL,
   temperature REAL NOT NULL DEFAULT 0.7,
   max_output_tokens INTEGER NOT NULL DEFAULT 2048,
+  context_window_tokens INTEGER NOT NULL DEFAULT 0,
+  input_price_per_million REAL NOT NULL DEFAULT 0,
+  output_price_per_million REAL NOT NULL DEFAULT 0,
+  cache_read_price_per_million REAL NOT NULL DEFAULT 0,
+  cache_write_price_per_million REAL NOT NULL DEFAULT 0,
+  request_token_field TEXT NOT NULL DEFAULT 'max_tokens',
+  reasoning_format TEXT NOT NULL DEFAULT '',
+  compatibility_json TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   UNIQUE(provider_config_id, name)
@@ -210,6 +227,40 @@ CREATE TABLE prompt_records (
   action_kind TEXT NOT NULL,
   request_json TEXT NOT NULL,
   response_json TEXT NOT NULL,
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+  total_tokens INTEGER NOT NULL DEFAULT 0,
+  input_cost REAL NOT NULL DEFAULT 0,
+  output_cost REAL NOT NULL DEFAULT 0,
+  cache_read_cost REAL NOT NULL DEFAULT 0,
+  cache_write_cost REAL NOT NULL DEFAULT 0,
+  total_cost REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE prompt_context_snapshots (
+  id TEXT PRIMARY KEY,
+  prompt_record_id TEXT NOT NULL REFERENCES prompt_records(id) ON DELETE CASCADE,
+  source_key TEXT NOT NULL,
+  source_version TEXT NOT NULL DEFAULT '',
+  rendered_markdown TEXT NOT NULL,
+  value_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  UNIQUE(prompt_record_id, source_key)
+);
+
+CREATE TABLE tool_result_artifacts (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES story_projects(id) ON DELETE CASCADE,
+  session_id TEXT REFERENCES agent_sessions(id) ON DELETE SET NULL,
+  tool_call_id TEXT NOT NULL,
+  tool_name TEXT NOT NULL,
+  full_result_json TEXT NOT NULL,
+  model_visible_markdown TEXT NOT NULL,
+  truncated INTEGER NOT NULL CHECK(truncated IN (0, 1)),
+  full_result_bytes INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
 
@@ -245,14 +296,18 @@ CREATE INDEX idx_agent_messages_session_created ON agent_messages(session_id, cr
 CREATE INDEX idx_activity_events_project_created ON activity_events(project_id, created_at DESC);
 CREATE INDEX idx_prompt_records_project_created ON prompt_records(project_id, created_at DESC);
 CREATE INDEX idx_generation_candidates_project_session ON generation_candidates(project_id, session_id, created_at DESC);
+CREATE INDEX idx_tool_result_artifacts_project_session ON tool_result_artifacts(project_id, session_id, created_at DESC);
 
 -- +goose Down
 DROP INDEX IF EXISTS idx_prompt_records_project_created;
 DROP INDEX IF EXISTS idx_generation_candidates_project_session;
+DROP INDEX IF EXISTS idx_tool_result_artifacts_project_session;
 DROP INDEX IF EXISTS idx_activity_events_project_created;
 DROP INDEX IF EXISTS idx_agent_messages_session_created;
 DROP INDEX IF EXISTS idx_agent_sessions_project_updated;
 DROP INDEX IF EXISTS idx_model_variants_provider_name;
+DROP TABLE IF EXISTS prompt_context_snapshots;
+DROP TABLE IF EXISTS tool_result_artifacts;
 DROP TABLE IF EXISTS prompt_records;
 DROP TABLE IF EXISTS generation_candidates;
 DROP TABLE IF EXISTS activity_events;
@@ -275,6 +330,8 @@ Create `queries/agent_core.sql` with CRUD queries for:
 - Activity events: create and list by project with limit.
 - Prompt records: create and list by project with limit.
 - Generation candidates: create, get by project/candidate, mark accepted/rejected/conflict, list by session.
+- Prompt context snapshots: create and list by prompt record.
+- Tool result artifacts: create and list by session.
 
 Use explicit sqlc names:
 
@@ -300,7 +357,7 @@ WHERE session_id = ?
 ORDER BY created_at ASC;
 ```
 
-Add these explicit query names in the same style: `CreateProviderConfig`, `ListProviderConfigs`, `GetProviderConfig`, `UpdateProviderConfig`, `DeleteProviderConfig`, `CreateModelVariant`, `ListModelVariantsByProvider`, `ListModelVariantsByAuthor`, `GetModelVariant`, `UpdateModelVariant`, `DeleteModelVariant`, `UpsertPromptProfile`, `GetPromptProfile`, `CreateAgentSession`, `ListAgentSessions`, `GetAgentSession`, `TouchAgentSession`, `CreateAgentMessage`, `ListAgentMessages`, `CreateActivityEvent`, `ListActivityEvents`, `CreatePromptRecord`, `ListPromptRecords`, `DeleteExpiredPromptRecords`, `CreateGenerationCandidate`, `GetGenerationCandidate`, `ListGenerationCandidates`, and `UpdateGenerationCandidateStatus`.
+Add these explicit query names in the same style: `CreateProviderConfig`, `ListProviderConfigs`, `GetProviderConfig`, `UpdateProviderConfig`, `DeleteProviderConfig`, `CreateModelVariant`, `ListModelVariantsByProvider`, `ListModelVariantsByAuthor`, `GetModelVariant`, `UpdateModelVariant`, `DeleteModelVariant`, `UpsertPromptProfile`, `GetPromptProfile`, `CreateAgentSession`, `ListAgentSessions`, `GetAgentSession`, `TouchAgentSession`, `CreateAgentMessage`, `ListAgentMessages`, `CreateActivityEvent`, `ListActivityEvents`, `CreatePromptRecord`, `ListPromptRecords`, `DeleteExpiredPromptRecords`, `CreatePromptContextSnapshot`, `ListPromptContextSnapshots`, `CreateToolResultArtifact`, `ListToolResultArtifacts`, `CreateGenerationCandidate`, `GetGenerationCandidate`, `ListGenerationCandidates`, and `UpdateGenerationCandidateStatus`.
 
 - [ ] **Step 5: Generate sqlc code**
 
@@ -454,7 +511,8 @@ Test that the service can:
 
 - Save a provider config with `name`, `baseURL`, and API key.
 - Return provider configs without the API key.
-- Create two model variants for one provider.
+- Create two model variants for one provider with pricing fields: `inputPricePerMillion`, `outputPricePerMillion`, `cacheReadPricePerMillion`, and `cacheWritePricePerMillion`.
+- Save compatibility metadata for a DeepSeek-like variant: `requestTokenField: "max_tokens"`, `reasoningFormat: "deepseek"`, `contextWindowTokens`, and `maxOutputTokens`.
 - Select a model variant by ID for an action.
 
 - [ ] **Step 2: Add provider client tests**
@@ -466,6 +524,23 @@ Use `httptest.Server` to assert the OpenAI-compatible client sends:
 - JSON body containing `model`, `messages`, `tools`, `tool_choice`, `temperature`, and `max_tokens`.
 
 Return a minimal assistant response and assert it is parsed.
+
+Add a DeepSeek/OpenAI-compatible usage fixture:
+
+```json
+{
+  "usage": {
+    "prompt_tokens": 1000,
+    "completion_tokens": 200,
+    "prompt_tokens_details": {
+      "cached_tokens": 700,
+      "cache_write_tokens": 0
+    }
+  }
+}
+```
+
+Assert normalized usage is `input=300`, `output=200`, `cacheRead=700`, `cacheWrite=0`, `totalTokens=1200`, and cost uses the four per-million pricing fields from the model variant.
 
 - [ ] **Step 3: Implement Provider interface**
 
@@ -479,9 +554,36 @@ type Provider interface {
 
 Define `CompletionRequest`, `CompletionMessage`, `CompletionTool`, `CompletionToolCall`, and `CompletionResponse` using OpenAI-compatible names internally but project-owned types externally.
 
+`CompletionResponse` must include:
+
+```go
+type Usage struct {
+	InputTokens      int64   `json:"inputTokens"`
+	OutputTokens     int64   `json:"outputTokens"`
+	CacheReadTokens  int64   `json:"cacheReadTokens"`
+	CacheWriteTokens int64   `json:"cacheWriteTokens"`
+	TotalTokens      int64   `json:"totalTokens"`
+	InputCost        float64 `json:"inputCost"`
+	OutputCost       float64 `json:"outputCost"`
+	CacheReadCost    float64 `json:"cacheReadCost"`
+	CacheWriteCost   float64 `json:"cacheWriteCost"`
+	TotalCost        float64 `json:"totalCost"`
+}
+```
+
 - [ ] **Step 4: Implement HTTP client**
 
 Implement `OpenAICompatibleClient` with base URL normalization, context-aware HTTP requests, bearer auth, non-2xx error handling, and JSON decoding.
+
+The client must parse OpenAI-compatible usage fields:
+
+- `usage.prompt_tokens`
+- `usage.completion_tokens`
+- `usage.prompt_tokens_details.cached_tokens`
+- `usage.prompt_cache_hit_tokens`
+- `usage.prompt_tokens_details.cache_write_tokens`
+
+Normalize `inputTokens = max(0, prompt_tokens - cacheReadTokens - cacheWriteTokens)`. Calculate costs as `tokens * price_per_million / 1_000_000`.
 
 - [ ] **Step 5: Implement config service methods**
 
@@ -543,6 +645,7 @@ Assert assembled Continuation prompt includes:
 - target chapter title,
 - cursor location summary,
 - instruction to use tools for additional context rather than assuming the whole project is in prompt.
+- context source keys for each rendered section, including `prompt_profile`, `writing_briefs`, `target_content_window`, `provider_disclosure`, and `tool_catalog`.
 
 - [ ] **Step 3: Implement prompt profile service methods**
 
@@ -557,6 +660,7 @@ Add `GetPromptProfile`, `UpsertPromptProfile`, and conversion helpers.
 - user action message,
 - tool definitions,
 - prompt metadata JSON.
+- context source snapshots.
 
 Prompt assembly must load layered Writing Briefs in deterministic order:
 
@@ -564,6 +668,8 @@ Prompt assembly must load layered Writing Briefs in deterministic order:
 2. Project-wide `writing_brief` content items whose metadata JSON has no `contentItemId`.
 3. Target-content `writing_brief` items whose metadata JSON has `contentItemId` equal to the target Chapter ID.
 4. User guidance for the current action.
+
+Each rendered context source must have a stable key, optional source version, rendered Markdown, and JSON value. These snapshots are later stored with the Prompt Record.
 
 The system prompt must include:
 
@@ -611,6 +717,7 @@ Test these tool names:
 - `list_revisions`
 
 Each tool must create an activity event containing event type, summary, and metadata.
+Each tool must create a `tool_result_artifacts` row with complete result JSON and bounded model-visible Markdown.
 
 `search_content` must support metadata filters in addition to FTS query text. The test must create content with metadata such as `{"type":"character","status":"draft","tags":["alchemy"]}` and assert a search with filters returns matching items only.
 
@@ -634,6 +741,14 @@ The `search_content` schema must expose `query`, optional `kind`, optional `meta
 - [ ] **Step 4: Implement tool execution**
 
 `ExecuteTool(ctx, input ToolCallInput) (ToolResult, error)` validates project/session scope, runs the matching project service method, records an activity event, and returns JSON Markdown-friendly output.
+
+Tool output bounding rules:
+
+- default maximum: 2,000 lines or 50 KiB UTF-8, whichever is reached first,
+- preserve the beginning and end for search/list results,
+- preserve the requested section/body first for direct reads,
+- set `truncated=true` when the model-visible projection differs from the full JSON,
+- include a short note in the model-visible Markdown when truncation happened.
 
 - [ ] **Step 5: Verify**
 
@@ -741,6 +856,8 @@ Use a fake provider that first returns a tool call and then returns a final assi
 - assistant message is stored,
 - activity event is stored,
 - prompt record is stored,
+- prompt context snapshots are stored for that prompt record,
+- prompt record stores input/output/cache-read/cache-write tokens and per-bucket costs,
 - request JSON does not contain provider secret.
 - prompt records older than the profile retention window are deleted when `PrunePromptRecords` runs.
 
@@ -755,11 +872,13 @@ Use a fake provider that first returns a tool call and then returns a final assi
 5. Execute tool calls if present.
 6. Call provider again with tool results, up to `maxToolRounds = 4`.
 7. Store final assistant message.
-8. Store prompt record and activity events.
+8. Store prompt record, context snapshots, normalized usage/cost, and activity events.
 
 - [ ] **Step 3: Implement prompt record redaction**
 
 Prompt records must include raw provider request/response JSON, but never API keys or auth headers. Store only provider display name and model name.
+
+Prompt records must copy `Usage` from `CompletionResponse`. If a provider omits usage, store zeros and emit an activity event `usage_missing` so the UI can avoid pretending the call was free.
 
 - [ ] **Step 4: Implement prompt record retention**
 
@@ -969,6 +1088,7 @@ Add a compact settings area that lets the author:
 - create/update one provider config,
 - create/list model variants,
 - select active model variant.
+- edit model pricing fields for input, output, cache read, and cache write per million tokens.
 - edit prompt profile fields: genre, tense, point of view, voice, writing instructions, and Prompt Record retention days.
 
 Do not show provider API keys after save.
@@ -984,6 +1104,7 @@ For the selected project/content item, add:
 - apply mode checkbox/select remembered in React state,
 - quick action buttons for Continuation, Rewrite, Read and Check,
 - current provider/model label,
+- current session/request spend summary,
 - activity count pill that expands to event rows.
 
 - [ ] **Step 5: Add quick action controls**
@@ -997,6 +1118,8 @@ Continuation controls:
 Rewrite and Read and Check controls can use the whole previewed content until Galley Editor selection integration exists.
 
 Preview results must show generated text and Accept/Reject buttons. Accept calls the candidate accept endpoint; Reject calls the candidate reject endpoint. Direct Apply results must refresh the selected content item after success.
+
+The activity expansion must show provider/model, tokens, and estimated cost when available. Cost should display as an estimate because OpenAI-compatible providers can change pricing outside Writer's local model variant configuration.
 
 - [ ] **Step 6: Verify frontend**
 
@@ -1084,6 +1207,9 @@ Spec coverage:
 - Agent-created revision labels for action/model/session/skill: Tasks 1 and 6.
 - Activity Trails: Tasks 1, 5, 7, 9, 10.
 - Prompt Records and retention controls: Tasks 1, 7, 9, 10.
+- Provider-neutral token/cost accounting including DeepSeek cache reads: Tasks 1, 3, 7, 10.
+- Prompt context source snapshots: Tasks 1, 4, 7.
+- Bounded tool result artifacts: Tasks 1 and 5.
 - Provider Disclosure: Task 10.
 
 Deferred by design:
