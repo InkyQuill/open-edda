@@ -1,6 +1,36 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ContentItem, ContentKind, StoryProject } from "./types";
+import {
+  acceptCandidate,
+  createModelVariant,
+  createProviderConfig,
+  createSession,
+  createSessionMessage,
+  getPromptProfile,
+  listActivity,
+  listModelVariants,
+  listPromptRecords,
+  listProviderConfigs,
+  listSessions,
+  rejectCandidate,
+  runContinuation,
+  runReadAndCheck,
+  runRewrite,
+  updateProviderConfig,
+  upsertPromptProfile,
+} from "./agentApi";
+import type {
+  ActivityEvent,
+  AgentMessage,
+  AgentSession,
+  ApplyMode,
+  GenerationCandidate,
+  ModelVariant,
+  PromptProfileRequest,
+  PromptRecord,
+  ProviderConfigSummary,
+} from "./agentTypes";
 import { listContent, listProjects } from "./api";
+import type { ContentItem, ContentKind, StoryProject } from "./types";
 import "./styles.css";
 
 const contentKinds: Array<{ kind: ContentKind; label: string }> = [
@@ -9,6 +39,95 @@ const contentKinds: Array<{ kind: ContentKind; label: string }> = [
   { kind: "writing_brief", label: "Briefs" },
   { kind: "project_note", label: "Notes" },
 ];
+
+const emptyPromptProfile: PromptProfileRequest = {
+  genre: "",
+  tense: "",
+  pov: "",
+  voice: "",
+  instructionsMarkdown: "",
+  promptRecordRetentionDays: 30,
+};
+
+const emptyProviderForm = { name: "", baseUrl: "", apiKey: "" };
+
+const emptyModelForm = {
+  name: "",
+  model: "",
+  temperature: 0.4,
+  maxOutputTokens: 4096,
+  contextWindowTokens: 64000,
+  inputPricePerMillion: 0,
+  outputPricePerMillion: 0,
+  cacheReadPricePerMillion: 0,
+  cacheWritePricePerMillion: 0,
+  requestTokenField: "max_tokens",
+  reasoningFormat: "",
+  compatibilityJson: "{}",
+};
+
+const textEncoder = new TextEncoder();
+
+function byteLength(value: string): number {
+  return textEncoder.encode(value).length;
+}
+
+function formatMoney(value: number): string {
+  if (value <= 0) {
+    return "$0.0000";
+  }
+  return `$${value.toFixed(value < 0.01 ? 6 : 4)}`;
+}
+
+function modelLabel(model: ModelVariant | null, providers: ProviderConfigSummary[]): string {
+  if (!model) {
+    return "No model selected";
+  }
+  const provider = providers.find((entry) => entry.id === model.providerConfigId);
+  return `${provider?.name ?? "Provider"} / ${model.name} (${model.model})`;
+}
+
+function parseCompatibilityJson(raw: string): unknown {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return {};
+  }
+  return JSON.parse(trimmed) as unknown;
+}
+
+function updateContentInList(items: ContentItem[], updated: ContentItem): ContentItem[] {
+  return items.map((item) => (item.id === updated.id ? updated : item));
+}
+
+function sortProvidersByName(items: ProviderConfigSummary[]): ProviderConfigSummary[] {
+  return [...items].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function sortModelsByName(items: ModelVariant[]): ModelVariant[] {
+  return [...items].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function usageForSession(records: PromptRecord[], sessionId: string | null): { tokens: number; cost: number } {
+  if (!sessionId) {
+    return { tokens: 0, cost: 0 };
+  }
+  return records.reduce(
+    (total, record) => {
+      if (record.sessionId !== sessionId) {
+        return total;
+      }
+      return {
+        tokens: total.tokens + record.usage.totalTokens,
+        cost: total.cost + record.usage.totalCost,
+      };
+    },
+    { tokens: 0, cost: 0 },
+  );
+}
+
+function newestRecordForSession(records: PromptRecord[], sessionId: string): PromptRecord | null {
+  return records.find((record) => record.sessionId === sessionId) ?? null;
+}
 
 export function App() {
   const [projects, setProjects] = useState<StoryProject[]>([]);
@@ -20,6 +139,18 @@ export function App() {
   const [isContentLoading, setIsContentLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
+
+  const [providers, setProviders] = useState<ProviderConfigSummary[]>([]);
+  const [models, setModels] = useState<ModelVariant[]>([]);
+  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
+  const [activeModelVariantId, setActiveModelVariantId] = useState<string | null>(null);
+  const [promptProfile, setPromptProfile] = useState<PromptProfileRequest>(emptyPromptProfile);
+  const [agentSessions, setAgentSessions] = useState<AgentSession[]>([]);
+  const [activeChatSessionId, setActiveChatSessionId] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<AgentMessage[]>([]);
+  const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
+  const [promptRecords, setPromptRecords] = useState<PromptRecord[]>([]);
+  const [agentError, setAgentError] = useState<string | null>(null);
 
   useEffect(() => {
     void listProjects()
@@ -73,6 +204,91 @@ export function App() {
     };
   }, [selectedProjectId, selectedKind]);
 
+  useEffect(() => {
+    const abortController = new AbortController();
+    void listProviderConfigs(abortController.signal)
+      .then((items) => {
+        setProviders(items);
+        setSelectedProviderId((current) => current ?? items[0]?.id ?? null);
+        setAgentError(null);
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === "AbortError") {
+          return;
+        }
+        setAgentError(cause instanceof Error ? cause.message : "Provider list failed");
+      });
+    return () => {
+      abortController.abort();
+    };
+  }, []);
+
+  const providerIds = useMemo(() => providers.map((provider) => provider.id).join("\n"), [providers]);
+
+  useEffect(() => {
+    const ids = providerIds ? providerIds.split("\n") : [];
+    if (ids.length === 0) {
+      setModels([]);
+      setActiveModelVariantId(null);
+      return;
+    }
+
+    const abortController = new AbortController();
+    void Promise.all(ids.map((providerId) => listModelVariants(providerId, abortController.signal)))
+      .then((groups) => {
+        const nextModels = groups.flat();
+        setModels(nextModels);
+        setActiveModelVariantId((current) => current ?? nextModels[0]?.id ?? null);
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === "AbortError") {
+          return;
+        }
+        setAgentError(cause instanceof Error ? cause.message : "Model list failed");
+      });
+    return () => {
+      abortController.abort();
+    };
+  }, [providerIds]);
+
+  useEffect(() => {
+    if (!selectedProjectId) {
+      setPromptProfile(emptyPromptProfile);
+      setAgentSessions([]);
+      setActiveChatSessionId(null);
+      setChatMessages([]);
+      setActivityEvents([]);
+      setPromptRecords([]);
+      return;
+    }
+
+    const abortController = new AbortController();
+    setChatMessages([]);
+    setAgentError(null);
+    void Promise.allSettled([
+      getPromptProfile(selectedProjectId, abortController.signal),
+      listSessions(selectedProjectId, 12, abortController.signal),
+      listActivity(selectedProjectId, 30, abortController.signal),
+      listPromptRecords(selectedProjectId, 30, abortController.signal),
+    ]).then(([profileResult, sessionsResult, activityResult, recordsResult]) => {
+      if (abortController.signal.aborted) {
+        return;
+      }
+      setPromptProfile(profileResult.status === "fulfilled" ? profileResult.value : emptyPromptProfile);
+      const sessions = sessionsResult.status === "fulfilled" ? sessionsResult.value : [];
+      setAgentSessions(sessions);
+      setActiveChatSessionId(sessions.find((session) => session.actionKind === "chat")?.id ?? null);
+      setActivityEvents(activityResult.status === "fulfilled" ? activityResult.value : []);
+      setPromptRecords(recordsResult.status === "fulfilled" ? recordsResult.value : []);
+      if (sessionsResult.status === "rejected" || activityResult.status === "rejected" || recordsResult.status === "rejected") {
+        setAgentError("Some agent data could not be loaded.");
+      }
+    });
+    return () => {
+      abortController.abort();
+    };
+  }, [selectedProjectId]);
+
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId],
@@ -81,6 +297,36 @@ export function App() {
     () => contentItems.find((item) => item.id === selectedContentId) ?? null,
     [contentItems, selectedContentId],
   );
+  const activeModel = useMemo(
+    () => models.find((model) => model.id === activeModelVariantId) ?? null,
+    [activeModelVariantId, models],
+  );
+  const selectedProviderModels = useMemo(
+    () => models.filter((model) => model.providerConfigId === selectedProviderId),
+    [models, selectedProviderId],
+  );
+  const currentModelLabel = modelLabel(activeModel, providers);
+  const sessionSpend = useMemo(
+    () => usageForSession(promptRecords, activeChatSessionId),
+    [activeChatSessionId, promptRecords],
+  );
+
+  function refreshAgentTrail(projectId: string): void {
+    void Promise.all([listActivity(projectId, 30), listPromptRecords(projectId, 30), listSessions(projectId, 12)])
+      .then(([events, records, sessions]) => {
+        setActivityEvents(events);
+        setPromptRecords(records);
+        setAgentSessions(sessions);
+      })
+      .catch((cause: unknown) => {
+        setAgentError(cause instanceof Error ? cause.message : "Agent refresh failed");
+      });
+  }
+
+  function setUpdatedContent(content: ContentItem): void {
+    setContentItems((items) => updateContentInList(items, content));
+    setSelectedContentId(content.id);
+  }
 
   return (
     <main className="app-shell">
@@ -116,64 +362,781 @@ export function App() {
       </section>
 
       {selectedProject ? (
-        <section className="workspace-shell" aria-label={`${selectedProject.title} workspace`}>
-          <aside className="workspace-nav" aria-label="Content type">
-            {contentKinds.map((entry) => (
-              <button
-                key={entry.kind}
-                type="button"
-                data-active={entry.kind === selectedKind}
-                aria-pressed={entry.kind === selectedKind}
-                onClick={() => setSelectedKind(entry.kind)}
-              >
-                {entry.label}
-              </button>
-            ))}
-          </aside>
+        <>
+          <AgentSettings
+            activeModelVariantId={activeModelVariantId}
+            models={models}
+            promptProfile={promptProfile}
+            providers={providers}
+            selectedProjectId={selectedProject.id}
+            selectedProviderId={selectedProviderId}
+            selectedProviderModels={selectedProviderModels}
+            onActiveModelChange={setActiveModelVariantId}
+            onModelsChange={setModels}
+            onProfileChange={setPromptProfile}
+            onProviderChange={setSelectedProviderId}
+            onProvidersChange={setProviders}
+            onError={setAgentError}
+          />
 
-          <section className="content-list" aria-label="Project content">
-            <header>
-              <h2>{contentKinds.find((entry) => entry.kind === selectedKind)?.label}</h2>
-              <p>{selectedProject.title}</p>
-            </header>
-            {isContentLoading ? (
-              <p>Loading content...</p>
-            ) : contentError ? (
-              <p role="alert">Could not load content.</p>
-            ) : contentItems.length === 0 ? (
-              <p>No content in this section yet.</p>
-            ) : (
-              contentItems.map((item) => (
+          <section className="workspace-shell" aria-label={`${selectedProject.title} workspace`}>
+            <aside className="workspace-nav" aria-label="Content type">
+              {contentKinds.map((entry) => (
                 <button
-                  key={item.id}
-                  className="content-row"
+                  key={entry.kind}
                   type="button"
-                  data-active={item.id === selectedContentId}
-                  aria-pressed={item.id === selectedContentId}
-                  onClick={() => setSelectedContentId(item.id)}
+                  data-active={entry.kind === selectedKind}
+                  aria-pressed={entry.kind === selectedKind}
+                  onClick={() => setSelectedKind(entry.kind)}
                 >
-                  <span>{item.title}</span>
-                  <small>Revision {item.currentRevision}</small>
+                  {entry.label}
+                </button>
+              ))}
+            </aside>
+
+            <section className="content-list" aria-label="Project content">
+              <header>
+                <h2>{contentKinds.find((entry) => entry.kind === selectedKind)?.label}</h2>
+                <p>{selectedProject.title}</p>
+              </header>
+              {isContentLoading ? (
+                <p>Loading content...</p>
+              ) : contentError ? (
+                <p role="alert">Could not load content.</p>
+              ) : contentItems.length === 0 ? (
+                <p>No content in this section yet.</p>
+              ) : (
+                contentItems.map((item) => (
+                  <button
+                    key={item.id}
+                    className="content-row"
+                    type="button"
+                    data-active={item.id === selectedContentId}
+                    aria-pressed={item.id === selectedContentId}
+                    onClick={() => setSelectedContentId(item.id)}
+                  >
+                    <span>{item.title}</span>
+                    <small>Revision {item.currentRevision}</small>
+                  </button>
+                ))
+              )}
+            </section>
+
+            <section className="detail-panel" aria-label="Content detail">
+              {selectedContent ? (
+                <>
+                  <header>
+                    <h2>{selectedContent.title}</h2>
+                    <p>{selectedContent.kind.replaceAll("_", " ")}</p>
+                  </header>
+                  <textarea readOnly value={selectedContent.bodyMarkdown} aria-label={`${selectedContent.title} markdown`} />
+                </>
+              ) : (
+                <p>Select an item to preview its Markdown.</p>
+              )}
+            </section>
+
+            <AgentPanel
+              activeSessionId={activeChatSessionId}
+              activeModel={activeModel}
+              activityEvents={activityEvents}
+              agentError={agentError}
+              chatMessages={chatMessages}
+              currentModelLabel={currentModelLabel}
+              promptRecords={promptRecords}
+              projectId={selectedProject.id}
+              selectedContent={selectedContent}
+              sessionSpend={sessionSpend}
+              sessions={agentSessions}
+              onActiveSessionChange={setActiveChatSessionId}
+              onChatMessagesChange={setChatMessages}
+              onContentUpdate={setUpdatedContent}
+              onError={setAgentError}
+              onRefreshTrail={refreshAgentTrail}
+              onSessionsChange={setAgentSessions}
+            />
+          </section>
+        </>
+      ) : null}
+    </main>
+  );
+}
+
+type AgentSettingsProps = {
+  activeModelVariantId: string | null;
+  models: ModelVariant[];
+  promptProfile: PromptProfileRequest;
+  providers: ProviderConfigSummary[];
+  selectedProjectId: string;
+  selectedProviderId: string | null;
+  selectedProviderModels: ModelVariant[];
+  onActiveModelChange: (modelId: string | null) => void;
+  onModelsChange: (models: ModelVariant[]) => void;
+  onProfileChange: (profile: PromptProfileRequest) => void;
+  onProviderChange: (providerId: string | null) => void;
+  onProvidersChange: (providers: ProviderConfigSummary[]) => void;
+  onError: (message: string | null) => void;
+};
+
+function AgentSettings({
+  activeModelVariantId,
+  models,
+  promptProfile,
+  providers,
+  selectedProjectId,
+  selectedProviderId,
+  selectedProviderModels,
+  onActiveModelChange,
+  onModelsChange,
+  onProfileChange,
+  onProviderChange,
+  onProvidersChange,
+  onError,
+}: AgentSettingsProps) {
+  const [providerMode, setProviderMode] = useState<"create" | "update">("create");
+  const [providerForm, setProviderForm] = useState(emptyProviderForm);
+  const [modelForm, setModelForm] = useState(emptyModelForm);
+  const [isSavingProvider, setIsSavingProvider] = useState(false);
+  const [isSavingModel, setIsSavingModel] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  const selectedProvider = providers.find((provider) => provider.id === selectedProviderId) ?? null;
+
+  useEffect(() => {
+    if (providerMode === "update" && selectedProvider) {
+      setProviderForm({ name: selectedProvider.name, baseUrl: selectedProvider.baseUrl, apiKey: "" });
+    }
+    if (providerMode === "create") {
+      setProviderForm(emptyProviderForm);
+    }
+  }, [providerMode, selectedProvider?.id, selectedProvider?.baseUrl, selectedProvider?.name]);
+
+  function handleProviderSubmit(event: React.FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    setIsSavingProvider(true);
+    const action =
+      providerMode === "update" && selectedProvider
+        ? updateProviderConfig(selectedProvider.id, { baseUrl: providerForm.baseUrl, apiKey: providerForm.apiKey })
+        : createProviderConfig(providerForm);
+
+    void action
+      .then((provider) => {
+        const nextProviders =
+          providerMode === "update"
+            ? providers.map((entry) => (entry.id === provider.id ? provider : entry))
+            : sortProvidersByName([...providers, provider]);
+        onProvidersChange(nextProviders);
+        onProviderChange(provider.id);
+        setProviderMode("update");
+        setProviderForm({ name: provider.name, baseUrl: provider.baseUrl, apiKey: "" });
+        onError(null);
+      })
+      .catch((cause: unknown) => {
+        onError(cause instanceof Error ? cause.message : "Provider save failed");
+      })
+      .finally(() => setIsSavingProvider(false));
+  }
+
+  function handleModelSubmit(event: React.FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    if (!selectedProviderId) {
+      onError("Select or create a provider before adding a model.");
+      return;
+    }
+    setIsSavingModel(true);
+    let compatibilityJson: unknown;
+    try {
+      compatibilityJson = parseCompatibilityJson(modelForm.compatibilityJson);
+    } catch {
+      onError("Compatibility JSON is invalid.");
+      setIsSavingModel(false);
+      return;
+    }
+    void createModelVariant(selectedProviderId, { ...modelForm, compatibilityJson })
+      .then((model) => {
+        onModelsChange(sortModelsByName([...models, model]));
+        onActiveModelChange(model.id);
+        setModelForm(emptyModelForm);
+        onError(null);
+      })
+      .catch((cause: unknown) => {
+        onError(cause instanceof Error ? cause.message : "Model save failed");
+      })
+      .finally(() => setIsSavingModel(false));
+  }
+
+  function handleProfileSubmit(event: React.FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    setIsSavingProfile(true);
+    void upsertPromptProfile(selectedProjectId, promptProfile)
+      .then((profile) => {
+        onProfileChange({
+          genre: profile.genre,
+          tense: profile.tense,
+          pov: profile.pov,
+          voice: profile.voice,
+          instructionsMarkdown: profile.instructionsMarkdown,
+          promptRecordRetentionDays: profile.promptRecordRetentionDays,
+        });
+        onError(null);
+      })
+      .catch((cause: unknown) => {
+        onError(cause instanceof Error ? cause.message : "Prompt profile save failed");
+      })
+      .finally(() => setIsSavingProfile(false));
+  }
+
+  return (
+    <section className="agent-settings" aria-label="Agent settings">
+      <header className="agent-settings-header">
+        <div>
+          <h2>Agent settings</h2>
+          <p>{models.length === 0 ? "No configured model variant." : `${models.length} model variant available.`}</p>
+        </div>
+        <label className="field inline-field">
+          <span>Active model</span>
+          <select
+            value={activeModelVariantId ?? ""}
+            onChange={(event) => onActiveModelChange(event.target.value || null)}
+            disabled={models.length === 0}
+          >
+            <option value="">No model</option>
+            {models.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.name} / {model.model}
+              </option>
+            ))}
+          </select>
+        </label>
+      </header>
+
+      <div className="settings-grid">
+        <form className="settings-card" onSubmit={handleProviderSubmit}>
+          <header>
+            <h3>Provider</h3>
+            <select value={providerMode} onChange={(event) => setProviderMode(event.target.value as "create" | "update")}>
+              <option value="create">Create</option>
+              <option value="update" disabled={!selectedProvider}>
+                Update selected
+              </option>
+            </select>
+          </header>
+          <label className="field">
+            <span>Provider config</span>
+            <select value={selectedProviderId ?? ""} onChange={(event) => onProviderChange(event.target.value || null)}>
+              <option value="">Select provider</option>
+              {providers.map((provider) => (
+                <option key={provider.id} value={provider.id}>
+                  {provider.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="field-row">
+            <label className="field">
+              <span>Name</span>
+              <input
+                value={providerForm.name}
+                onChange={(event) => setProviderForm((form) => ({ ...form, name: event.target.value }))}
+                disabled={providerMode === "update"}
+                required={providerMode === "create"}
+              />
+            </label>
+            <label className="field">
+              <span>Base URL</span>
+              <input
+                value={providerForm.baseUrl}
+                onChange={(event) => setProviderForm((form) => ({ ...form, baseUrl: event.target.value }))}
+                placeholder="https://api.provider.test"
+                required
+              />
+            </label>
+          </div>
+          <label className="field">
+            <span>API key</span>
+            <input
+              type="password"
+              value={providerForm.apiKey}
+              onChange={(event) => setProviderForm((form) => ({ ...form, apiKey: event.target.value }))}
+              placeholder="Stored after save; never displayed"
+              required
+            />
+          </label>
+          <button type="submit" disabled={isSavingProvider}>
+            {isSavingProvider ? "Saving..." : "Save provider"}
+          </button>
+        </form>
+
+        <form className="settings-card" onSubmit={handleModelSubmit}>
+          <header>
+            <h3>Model variant</h3>
+            <span>{selectedProviderModels.length} listed</span>
+          </header>
+          <div className="model-list">
+            {selectedProviderModels.length === 0 ? (
+              <p>No variants for this provider.</p>
+            ) : (
+              selectedProviderModels.map((model) => (
+                <button
+                  key={model.id}
+                  type="button"
+                  data-active={model.id === activeModelVariantId}
+                  onClick={() => onActiveModelChange(model.id)}
+                >
+                  <span>{model.name}</span>
+                  <small>
+                    {model.model} · in {model.inputPricePerMillion}/out {model.outputPricePerMillion}
+                  </small>
                 </button>
               ))
             )}
-          </section>
+          </div>
+          <div className="field-row">
+            <label className="field">
+              <span>Name</span>
+              <input value={modelForm.name} onChange={(event) => setModelForm((form) => ({ ...form, name: event.target.value }))} required />
+            </label>
+            <label className="field">
+              <span>Model</span>
+              <input value={modelForm.model} onChange={(event) => setModelForm((form) => ({ ...form, model: event.target.value }))} required />
+            </label>
+          </div>
+          <div className="field-row price-row">
+            <NumberField label="Input / 1M" value={modelForm.inputPricePerMillion} onChange={(value) => setModelForm((form) => ({ ...form, inputPricePerMillion: value }))} />
+            <NumberField label="Output / 1M" value={modelForm.outputPricePerMillion} onChange={(value) => setModelForm((form) => ({ ...form, outputPricePerMillion: value }))} />
+            <NumberField label="Cache read / 1M" value={modelForm.cacheReadPricePerMillion} onChange={(value) => setModelForm((form) => ({ ...form, cacheReadPricePerMillion: value }))} />
+            <NumberField label="Cache write / 1M" value={modelForm.cacheWritePricePerMillion} onChange={(value) => setModelForm((form) => ({ ...form, cacheWritePricePerMillion: value }))} />
+          </div>
+          <div className="field-row">
+            <NumberField label="Temperature" value={modelForm.temperature} step={0.1} onChange={(value) => setModelForm((form) => ({ ...form, temperature: value }))} />
+            <NumberField label="Max output" value={modelForm.maxOutputTokens} step={1} onChange={(value) => setModelForm((form) => ({ ...form, maxOutputTokens: value }))} />
+            <NumberField label="Context" value={modelForm.contextWindowTokens} step={1} onChange={(value) => setModelForm((form) => ({ ...form, contextWindowTokens: value }))} />
+          </div>
+          <div className="field-row">
+            <label className="field">
+              <span>Token field</span>
+              <input value={modelForm.requestTokenField} onChange={(event) => setModelForm((form) => ({ ...form, requestTokenField: event.target.value }))} />
+            </label>
+            <label className="field">
+              <span>Reasoning format</span>
+              <input value={modelForm.reasoningFormat} onChange={(event) => setModelForm((form) => ({ ...form, reasoningFormat: event.target.value }))} />
+            </label>
+          </div>
+          <label className="field">
+            <span>Compatibility JSON</span>
+            <input value={modelForm.compatibilityJson} onChange={(event) => setModelForm((form) => ({ ...form, compatibilityJson: event.target.value }))} />
+          </label>
+          <button type="submit" disabled={isSavingModel || !selectedProviderId}>
+            {isSavingModel ? "Adding..." : "Add model variant"}
+          </button>
+        </form>
 
-          <section className="detail-panel" aria-label="Content detail">
-            {selectedContent ? (
-              <>
-                <header>
-                  <h2>{selectedContent.title}</h2>
-                  <p>{selectedContent.kind.replaceAll("_", " ")}</p>
-                </header>
-                <textarea readOnly value={selectedContent.bodyMarkdown} aria-label={`${selectedContent.title} markdown`} />
-              </>
-            ) : (
-              <p>Select an item to preview its Markdown.</p>
-            )}
-          </section>
+        <form className="settings-card prompt-card" onSubmit={handleProfileSubmit}>
+          <header>
+            <h3>Prompt profile</h3>
+            <span>{promptProfile.promptRecordRetentionDays} day records</span>
+          </header>
+          <div className="field-row">
+            <label className="field">
+              <span>Genre</span>
+              <input value={promptProfile.genre} onChange={(event) => onProfileChange({ ...promptProfile, genre: event.target.value })} />
+            </label>
+            <label className="field">
+              <span>Tense</span>
+              <input value={promptProfile.tense} onChange={(event) => onProfileChange({ ...promptProfile, tense: event.target.value })} />
+            </label>
+            <label className="field">
+              <span>Point of view</span>
+              <input value={promptProfile.pov} onChange={(event) => onProfileChange({ ...promptProfile, pov: event.target.value })} />
+            </label>
+            <label className="field">
+              <span>Voice</span>
+              <input value={promptProfile.voice} onChange={(event) => onProfileChange({ ...promptProfile, voice: event.target.value })} />
+            </label>
+          </div>
+          <label className="field">
+            <span>Writing instructions</span>
+            <textarea
+              value={promptProfile.instructionsMarkdown}
+              onChange={(event) => onProfileChange({ ...promptProfile, instructionsMarkdown: event.target.value })}
+            />
+          </label>
+          <NumberField
+            label="Prompt Record retention days"
+            value={promptProfile.promptRecordRetentionDays}
+            step={1}
+            onChange={(value) => onProfileChange({ ...promptProfile, promptRecordRetentionDays: value })}
+          />
+          <button type="submit" disabled={isSavingProfile}>
+            {isSavingProfile ? "Saving..." : "Save prompt profile"}
+          </button>
+        </form>
+      </div>
+    </section>
+  );
+}
+
+type NumberFieldProps = {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  step?: number;
+};
+
+function NumberField({ label, value, onChange, step = 0.01 }: NumberFieldProps) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <input type="number" min="0" step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} />
+    </label>
+  );
+}
+
+type AgentPanelProps = {
+  activeSessionId: string | null;
+  activeModel: ModelVariant | null;
+  activityEvents: ActivityEvent[];
+  agentError: string | null;
+  chatMessages: AgentMessage[];
+  currentModelLabel: string;
+  promptRecords: PromptRecord[];
+  projectId: string;
+  selectedContent: ContentItem | null;
+  sessionSpend: { tokens: number; cost: number };
+  sessions: AgentSession[];
+  onActiveSessionChange: (sessionId: string | null) => void;
+  onChatMessagesChange: (messages: AgentMessage[]) => void;
+  onContentUpdate: (content: ContentItem) => void;
+  onError: (message: string | null) => void;
+  onRefreshTrail: (projectId: string) => void;
+  onSessionsChange: (sessions: AgentSession[]) => void;
+};
+
+function AgentPanel({
+  activeSessionId,
+  activeModel,
+  activityEvents,
+  agentError,
+  chatMessages,
+  currentModelLabel,
+  promptRecords,
+  projectId,
+  selectedContent,
+  sessionSpend,
+  sessions,
+  onActiveSessionChange,
+  onChatMessagesChange,
+  onContentUpdate,
+  onError,
+  onRefreshTrail,
+  onSessionsChange,
+}: AgentPanelProps) {
+  const [applyMode, setApplyMode] = useState<ApplyMode>("preview");
+  const [messageInput, setMessageInput] = useState("");
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [isRunningAction, setIsRunningAction] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
+  const [continuationUnits, setContinuationUnits] = useState<"word" | "sentence">("word");
+  const [continuationCount, setContinuationCount] = useState(120);
+  const [guidance, setGuidance] = useState("");
+  const [previewCandidate, setPreviewCandidate] = useState<GenerationCandidate | null>(null);
+  const [readCheckReport, setReadCheckReport] = useState<string | null>(null);
+
+  const activeChatSession = sessions.find((session) => session.actionKind === "chat" && session.modelVariantId === activeModel?.id) ?? null;
+  const actionsDisabled = !activeModel || !selectedContent || selectedContent.kind !== "chapter" || isRunningAction;
+  const activeSessionRecord = activeSessionId ? newestRecordForSession(promptRecords, activeSessionId) : null;
+
+  async function ensureChatSession(): Promise<AgentSession> {
+    if (activeChatSession) {
+      onActiveSessionChange(activeChatSession.id);
+      return activeChatSession;
+    }
+    if (!activeModel) {
+      throw new Error("Select a model variant before chatting.");
+    }
+    const session = await createSession(projectId, {
+      title: selectedContent ? `Chat: ${selectedContent.title}` : "Workspace chat",
+      actionKind: "chat",
+      modelVariantId: activeModel.id,
+      applyMode,
+    });
+    onSessionsChange([session, ...sessions]);
+    onActiveSessionChange(session.id);
+    return session;
+  }
+
+  function handleChatSubmit(event: React.FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    const body = messageInput.trim();
+    if (!body) {
+      return;
+    }
+    setIsSendingMessage(true);
+    void ensureChatSession()
+      .then((session) => createSessionMessage(projectId, session.id, body))
+      .then((result) => {
+        onChatMessagesChange([...chatMessages, result.userMessage, result.assistantMessage]);
+        setMessageInput("");
+        onError(null);
+        onRefreshTrail(projectId);
+      })
+      .catch((cause: unknown) => {
+        onError(cause instanceof Error ? cause.message : "Chat turn failed");
+      })
+      .finally(() => setIsSendingMessage(false));
+  }
+
+  function handleQuickAction(action: "continuation" | "rewrite" | "read_check"): void {
+    if (!activeModel || !selectedContent) {
+      onError("Select a chapter and model variant before running an action.");
+      return;
+    }
+    const expectedRevision = selectedContent.currentRevision;
+    const wholeSelectionEnd = byteLength(selectedContent.bodyMarkdown);
+    setIsRunningAction(true);
+    setPreviewCandidate(null);
+    setReadCheckReport(null);
+
+    const actionRequest =
+      action === "continuation"
+        ? runContinuation(projectId, {
+            contentId: selectedContent.id,
+            modelVariantId: activeModel.id,
+            applyMode,
+            guidance,
+            expectedRevision,
+            insertPosition: wholeSelectionEnd,
+            insert: false,
+            continuationUnits,
+            continuationCount,
+          })
+        : action === "rewrite"
+          ? runRewrite(projectId, {
+              contentId: selectedContent.id,
+              modelVariantId: activeModel.id,
+              applyMode,
+              guidance,
+              expectedRevision,
+              selectionStart: 0,
+              selectionEnd: wholeSelectionEnd,
+            })
+          : runReadAndCheck(projectId, {
+              contentId: selectedContent.id,
+              modelVariantId: activeModel.id,
+              applyMode,
+              guidance,
+              expectedRevision,
+              selectionStart: 0,
+              selectionEnd: wholeSelectionEnd,
+            });
+
+    void actionRequest
+      .then((result) => {
+        if ("candidate" in result && result.candidate) {
+          setPreviewCandidate(result.candidate);
+        }
+        if ("content" in result && result.content) {
+          onContentUpdate(result.content);
+        }
+        if ("assistantMessage" in result) {
+          setReadCheckReport(result.assistantMessage.bodyMarkdown);
+        }
+        onActiveSessionChange(result.session.id);
+        onSessionsChange([result.session, ...sessions.filter((session) => session.id !== result.session.id)]);
+        onError(null);
+        onRefreshTrail(projectId);
+      })
+      .catch((cause: unknown) => {
+        onError(cause instanceof Error ? cause.message : "Quick action failed");
+      })
+      .finally(() => setIsRunningAction(false));
+  }
+
+  function handleAccept(candidate: GenerationCandidate): void {
+    setIsRunningAction(true);
+    void acceptCandidate(projectId, candidate.id)
+      .then((result) => {
+        onContentUpdate(result.content);
+        setPreviewCandidate(null);
+        onError(null);
+        onRefreshTrail(projectId);
+      })
+      .catch((cause: unknown) => {
+        onError(cause instanceof Error ? cause.message : "Accept candidate failed");
+      })
+      .finally(() => setIsRunningAction(false));
+  }
+
+  function handleReject(candidate: GenerationCandidate): void {
+    setIsRunningAction(true);
+    void rejectCandidate(projectId, candidate.id)
+      .then(() => {
+        setPreviewCandidate(null);
+        onError(null);
+        onRefreshTrail(projectId);
+      })
+      .catch((cause: unknown) => {
+        onError(cause instanceof Error ? cause.message : "Reject candidate failed");
+      })
+      .finally(() => setIsRunningAction(false));
+  }
+
+  return (
+    <aside className="agent-panel" aria-label="Agent panel">
+      <header className="agent-panel-header">
+        <div>
+          <h2>Agent</h2>
+          <p>{currentModelLabel}</p>
+        </div>
+        <button className="pill-button" type="button" onClick={() => setShowActivity((value) => !value)} aria-expanded={showActivity}>
+          Activity {activityEvents.length}
+        </button>
+      </header>
+
+      {!activeModel ? <p className="agent-warning">Configure and select a model variant to enable Agent actions.</p> : null}
+      {agentError ? <p className="agent-error" role="alert">{agentError}</p> : null}
+
+      <div className="agent-spend">
+        <span>Session: {sessionSpend.tokens} tokens, est. {formatMoney(sessionSpend.cost)}</span>
+        <span>
+          Last request:{" "}
+          {activeSessionRecord ? `${activeSessionRecord.usage.totalTokens} tokens, est. ${formatMoney(activeSessionRecord.usage.totalCost)}` : "none"}
+        </span>
+      </div>
+
+      {showActivity ? <ActivityRows events={activityEvents} records={promptRecords} /> : null}
+
+      <section className="chat-box" aria-label="Chat transcript">
+        <div className="chat-transcript">
+          {chatMessages.length === 0 ? (
+            <p>No chat messages in this browser session.</p>
+          ) : (
+            chatMessages.map((message) => (
+              <article key={message.id} className="chat-message" data-role={message.role}>
+                <strong>{message.role}</strong>
+                <p>{message.bodyMarkdown}</p>
+              </article>
+            ))
+          )}
+        </div>
+        <form className="chat-form" onSubmit={handleChatSubmit}>
+          <textarea
+            value={messageInput}
+            onChange={(event) => setMessageInput(event.target.value)}
+            placeholder="Ask about this project..."
+            disabled={!activeModel || isSendingMessage}
+          />
+          <button type="submit" disabled={!activeModel || isSendingMessage || messageInput.trim() === ""}>
+            {isSendingMessage ? "Sending..." : "Send"}
+          </button>
+        </form>
+      </section>
+
+      <section className="quick-actions" aria-label="Quick actions">
+        <header>
+          <h3>Quick actions</h3>
+          <span>{currentModelLabel}</span>
+        </header>
+        <label className="field inline-field">
+          <span>Apply mode</span>
+          <select value={applyMode} onChange={(event) => setApplyMode(event.target.value as ApplyMode)}>
+            <option value="preview">Preview</option>
+            <option value="direct_apply">Direct apply</option>
+          </select>
+        </label>
+        <div className="field-row">
+          <label className="field">
+            <span>Target type</span>
+            <select value={continuationUnits} onChange={(event) => setContinuationUnits(event.target.value as "word" | "sentence")}>
+              <option value="word">Words</option>
+              <option value="sentence">Sentences</option>
+            </select>
+          </label>
+          <NumberField label="Target count" value={continuationCount} step={1} onChange={setContinuationCount} />
+        </div>
+        <label className="field">
+          <span>Guidance</span>
+          <textarea value={guidance} onChange={(event) => setGuidance(event.target.value)} />
+        </label>
+        <div className="action-buttons">
+          <button type="button" disabled={actionsDisabled} onClick={() => handleQuickAction("continuation")}>
+            Continuation
+          </button>
+          <button type="button" disabled={actionsDisabled} onClick={() => handleQuickAction("rewrite")}>
+            Rewrite
+          </button>
+          <button type="button" disabled={actionsDisabled} onClick={() => handleQuickAction("read_check")}>
+            Read and Check
+          </button>
+        </div>
+        {selectedContent && selectedContent.kind !== "chapter" ? <p className="muted">Quick actions currently target chapters.</p> : null}
+      </section>
+
+      {previewCandidate ? (
+        <section className="preview-result" aria-label="Preview result">
+          <header>
+            <h3>{previewCandidate.actionKind.replace("_", " ")} preview</h3>
+            <span>{previewCandidate.status}</span>
+          </header>
+          {previewCandidate.originalMarkdown ? (
+            <details>
+              <summary>Original text</summary>
+              <pre>{previewCandidate.originalMarkdown}</pre>
+            </details>
+          ) : null}
+          <pre>{previewCandidate.generatedMarkdown}</pre>
+          <div className="action-buttons">
+            <button type="button" disabled={isRunningAction} onClick={() => handleAccept(previewCandidate)}>
+              Accept
+            </button>
+            <button type="button" disabled={isRunningAction} onClick={() => handleReject(previewCandidate)}>
+              Reject
+            </button>
+          </div>
         </section>
       ) : null}
-    </main>
+
+      {readCheckReport ? (
+        <section className="preview-result" aria-label="Read and check result">
+          <header>
+            <h3>Read and Check</h3>
+            <span>note stored</span>
+          </header>
+          <pre>{readCheckReport}</pre>
+          <button type="button" onClick={() => setReadCheckReport(null)}>
+            Dismiss
+          </button>
+        </section>
+      ) : null}
+    </aside>
+  );
+}
+
+function ActivityRows({ events, records }: { events: ActivityEvent[]; records: PromptRecord[] }) {
+  return (
+    <div className="activity-rows">
+      {events.length === 0 ? (
+        <p>No activity yet.</p>
+      ) : (
+        events.map((event) => {
+          const record = event.sessionId ? newestRecordForSession(records, event.sessionId) : null;
+          return (
+            <article key={event.id} className="activity-row">
+              <div>
+                <strong>{event.summary}</strong>
+                <span>{event.eventType}</span>
+              </div>
+              {record ? (
+                <small>
+                  {record.providerName} / {record.modelName} · {record.usage.totalTokens} tokens · est. {formatMoney(record.usage.totalCost)}
+                </small>
+              ) : (
+                <small>No usage estimate</small>
+              )}
+            </article>
+          );
+        })
+      )}
+    </div>
   );
 }
