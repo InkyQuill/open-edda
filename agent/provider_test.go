@@ -3,10 +3,13 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestOpenAICompatibleClientSendsChatCompletionRequest(t *testing.T) {
@@ -108,6 +111,58 @@ func TestOpenAICompatibleClientSendsChatCompletionRequest(t *testing.T) {
 	}
 }
 
+func TestOpenAICompatibleClientSendsExplicitZeroTemperature(t *testing.T) {
+	var capturedBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&capturedBody); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"choices": [
+				{"message": {"role": "assistant", "content": "Done."}}
+			]
+		}`))
+	}))
+	t.Cleanup(server.Close)
+
+	temperature := 0.0
+	client := NewOpenAICompatibleClient(server.URL, "test-key", ModelVariant{
+		Model:           "deepseek-chat",
+		Temperature:     0.7,
+		MaxOutputTokens: 128,
+	})
+
+	_, err := client.Complete(context.Background(), CompletionRequest{
+		Messages:    []CompletionMessage{{Role: "user", Content: "Use exact wording."}},
+		Temperature: &temperature,
+	})
+	if err != nil {
+		t.Fatalf("Complete() error = %v", err)
+	}
+
+	assertJSONField(t, capturedBody, "temperature", 0.0)
+}
+
+func TestOpenAICompatibleClientRejectsResponseWithoutChoices(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[]}`))
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewOpenAICompatibleClient(server.URL, "test-key", ModelVariant{Model: "deepseek-chat"})
+	_, err := client.Complete(context.Background(), CompletionRequest{
+		Messages: []CompletionMessage{{Role: "user", Content: "Continue."}},
+	})
+	if err == nil {
+		t.Fatal("Complete() error = nil, want missing choices error")
+	}
+	if !strings.Contains(err.Error(), "choices") {
+		t.Fatalf("Complete() error = %q, want choices validation error", err)
+	}
+}
+
 func TestOpenAICompatibleClientNormalizesDeepSeekUsageAndCosts(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -161,6 +216,157 @@ func TestOpenAICompatibleClientNormalizesDeepSeekUsageAndCosts(t *testing.T) {
 	assertFloatNear(t, response.Usage.CacheReadCost, 700*0.07/1_000_000)
 	assertFloatNear(t, response.Usage.CacheWriteCost, 0)
 	assertFloatNear(t, response.Usage.TotalCost, (300*0.27+200*1.10+700*0.07)/1_000_000)
+}
+
+func TestOpenAICompatibleClientNormalizesUsageEdgeCases(t *testing.T) {
+	tests := []struct {
+		name      string
+		usageJSON string
+		want      Usage
+	}{
+		{
+			name: "prompt cache hit tokens map to cache read",
+			usageJSON: `{
+				"prompt_tokens": 100,
+				"completion_tokens": 20,
+				"prompt_cache_hit_tokens": 30
+			}`,
+			want: Usage{
+				InputTokens:     70,
+				OutputTokens:    20,
+				CacheReadTokens: 30,
+				TotalTokens:     120,
+			},
+		},
+		{
+			name: "cache write tokens reduce input",
+			usageJSON: `{
+				"prompt_tokens": 100,
+				"completion_tokens": 20,
+				"prompt_tokens_details": {
+					"cache_write_tokens": 40
+				}
+			}`,
+			want: Usage{
+				InputTokens:      60,
+				OutputTokens:     20,
+				CacheWriteTokens: 40,
+				TotalTokens:      120,
+			},
+		},
+		{
+			name: "cache tokens greater than prompt clamp input",
+			usageJSON: `{
+				"prompt_tokens": 100,
+				"completion_tokens": 20,
+				"prompt_cache_hit_tokens": 80,
+				"prompt_tokens_details": {
+					"cache_write_tokens": 50
+				}
+			}`,
+			want: Usage{
+				InputTokens:      0,
+				OutputTokens:     20,
+				CacheReadTokens:  80,
+				CacheWriteTokens: 50,
+				TotalTokens:      120,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{
+					"choices": [
+						{"message": {"role": "assistant", "content": "Done."}}
+					],
+					"usage": ` + tt.usageJSON + `
+				}`))
+			}))
+			t.Cleanup(server.Close)
+
+			client := NewOpenAICompatibleClient(server.URL, "test-key", ModelVariant{Model: "deepseek-chat"})
+			response, err := client.Complete(context.Background(), CompletionRequest{
+				Messages: []CompletionMessage{{Role: "user", Content: "Continue."}},
+			})
+			if err != nil {
+				t.Fatalf("Complete() error = %v", err)
+			}
+			if response.Usage.InputTokens != tt.want.InputTokens ||
+				response.Usage.OutputTokens != tt.want.OutputTokens ||
+				response.Usage.CacheReadTokens != tt.want.CacheReadTokens ||
+				response.Usage.CacheWriteTokens != tt.want.CacheWriteTokens ||
+				response.Usage.TotalTokens != tt.want.TotalTokens {
+				t.Fatalf("usage = %#v, want %#v", response.Usage, tt.want)
+			}
+		})
+	}
+}
+
+func TestOpenAICompatibleClientReturnsNon2xxStatusAndBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "provider unavailable", http.StatusBadGateway)
+	}))
+	t.Cleanup(server.Close)
+
+	client := NewOpenAICompatibleClient(server.URL, "test-key", ModelVariant{Model: "deepseek-chat"})
+	_, err := client.Complete(context.Background(), CompletionRequest{
+		Messages: []CompletionMessage{{Role: "user", Content: "Continue."}},
+	})
+	if err == nil {
+		t.Fatal("Complete() error = nil, want non-2xx error")
+	}
+	if !strings.Contains(err.Error(), "status 502") || !strings.Contains(err.Error(), "provider unavailable") {
+		t.Fatalf("Complete() error = %q, want status and body", err)
+	}
+}
+
+func TestOpenAICompatibleClientSurfacesContextCancellation(t *testing.T) {
+	requestStarted := make(chan struct{})
+	releaseHandler := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		close(requestStarted)
+		select {
+		case <-r.Context().Done():
+		case <-releaseHandler:
+		}
+	}))
+	t.Cleanup(func() {
+		close(releaseHandler)
+		server.Close()
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	client := NewOpenAICompatibleClient(server.URL, "test-key", ModelVariant{Model: "deepseek-chat"})
+	errc := make(chan error, 1)
+	go func() {
+		_, err := client.Complete(ctx, CompletionRequest{
+			Messages: []CompletionMessage{{Role: "user", Content: "Continue."}},
+		})
+		errc <- err
+	}()
+
+	select {
+	case <-requestStarted:
+	case <-time.After(time.Second):
+		t.Fatal("request did not reach test server")
+	}
+	cancel()
+
+	var err error
+	select {
+	case err = <-errc:
+	case <-time.After(time.Second):
+		t.Fatal("Complete() did not return after context cancellation")
+	}
+	if err == nil {
+		t.Fatal("Complete() error = nil, want context cancellation error")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Complete() error = %v, want context.Canceled", err)
+	}
 }
 
 func assertFloatNear(t *testing.T, got, want float64) {

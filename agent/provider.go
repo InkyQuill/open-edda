@@ -20,7 +20,7 @@ type CompletionRequest struct {
 	Messages        []CompletionMessage
 	Tools           []CompletionTool
 	ToolChoice      any
-	Temperature     float64
+	Temperature     *float64
 	MaxOutputTokens int64
 }
 
@@ -112,15 +112,16 @@ func (c *OpenAICompatibleClient) Complete(ctx context.Context, request Completio
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
 		return CompletionResponse{}, fmt.Errorf("decode completion response: %w", err)
 	}
+	if len(decoded.Choices) == 0 {
+		return CompletionResponse{}, fmt.Errorf("decode completion response: missing choices")
+	}
 
 	result := CompletionResponse{
-		ID:    decoded.ID,
-		Model: decoded.Model,
-		Usage: normalizeUsage(decoded.Usage, c.modelVariant),
-	}
-	if len(decoded.Choices) > 0 {
-		result.Message = decoded.Choices[0].Message
-		result.FinishReason = decoded.Choices[0].FinishReason
+		ID:           decoded.ID,
+		Model:        decoded.Model,
+		Message:      decoded.Choices[0].Message,
+		FinishReason: decoded.Choices[0].FinishReason,
+		Usage:        normalizeUsage(decoded.Usage, c.modelVariant),
 	}
 	return result, nil
 }
@@ -135,8 +136,8 @@ func (c *OpenAICompatibleClient) requestBody(request CompletionRequest) (map[str
 	}
 
 	temperature := request.Temperature
-	if temperature == 0 {
-		temperature = c.modelVariant.Temperature
+	if temperature == nil {
+		temperature = &c.modelVariant.Temperature
 	}
 	maxOutputTokens := request.MaxOutputTokens
 	if maxOutputTokens == 0 {
@@ -146,7 +147,7 @@ func (c *OpenAICompatibleClient) requestBody(request CompletionRequest) (map[str
 	body := map[string]any{
 		"model":       model,
 		"messages":    request.Messages,
-		"temperature": temperature,
+		"temperature": *temperature,
 	}
 	if len(request.Tools) > 0 {
 		body["tools"] = request.Tools
