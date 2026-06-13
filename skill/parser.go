@@ -15,6 +15,7 @@ import (
 const (
 	maxSkillArchiveBytes int64 = 5 << 20
 	maxSkillFileBytes    int64 = 512 << 10
+	maxSkillArchiveFiles       = 256
 )
 
 type entry struct {
@@ -49,14 +50,25 @@ func ParseSkillArchive(reader io.ReaderAt, size int64, sourceLabel string) (Impo
 	}
 
 	entries := make([]entry, 0, len(zr.File))
+	var declaredBytes int64
 	for _, file := range zr.File {
 		if file.FileInfo().IsDir() {
 			continue
+		}
+		if len(entries)+1 > maxSkillArchiveFiles {
+			return ImportedSkill{}, fmt.Errorf("skill archive contains more than %d files", maxSkillArchiveFiles)
+		}
+		if file.UncompressedSize64 > uint64(maxSkillFileBytes) {
+			return ImportedSkill{}, fmt.Errorf("file %s exceeds %d bytes", file.Name, maxSkillFileBytes)
+		}
+		if file.UncompressedSize64 > uint64(maxSkillArchiveBytes) || declaredBytes+int64(file.UncompressedSize64) > maxSkillArchiveBytes {
+			return ImportedSkill{}, fmt.Errorf("skill archive contents exceed %d bytes", maxSkillArchiveBytes)
 		}
 		relativePath, err := safeRelativePath(file.Name)
 		if err != nil {
 			return ImportedSkill{}, err
 		}
+		declaredBytes += int64(file.UncompressedSize64)
 		entries = append(entries, entry{path: relativePath, file: file})
 	}
 
@@ -66,12 +78,17 @@ func ParseSkillArchive(reader io.ReaderAt, size int64, sourceLabel string) (Impo
 	var frontmatter skillFrontmatter
 	var hasSkillFile bool
 	var scriptCount int64
+	var actualBytes int64
 
 	for _, item := range entries {
 		relativePath := stripCommonRoot(item.path, root)
 		body, err := readZipText(item.file)
 		if err != nil {
 			return ImportedSkill{}, fmt.Errorf("read %s: %w", item.path, err)
+		}
+		actualBytes += int64(len(body))
+		if actualBytes > maxSkillArchiveBytes {
+			return ImportedSkill{}, fmt.Errorf("skill archive contents exceed %d bytes", maxSkillArchiveBytes)
 		}
 
 		purpose, scriptDisabled := classifySkillFile(relativePath)

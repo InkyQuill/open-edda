@@ -3,6 +3,7 @@ package skill
 import (
 	"archive/zip"
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -71,6 +72,45 @@ func TestParseSkillArchiveRejectsUnsafePaths(t *testing.T) {
 	_, err := ParseSkillArchive(bytes.NewReader(buf.Bytes()), int64(buf.Len()), "unsafe.zip")
 	if err == nil {
 		t.Fatal("ParseSkillArchive() error = nil, want unsafe path error")
+	}
+}
+
+func TestParseSkillArchiveRejectsAggregateUncompressedBytes(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	writeZipFile(t, zw, "SKILL.md", "---\nname: too-large\n---\n")
+	body := strings.Repeat("a", int(maxSkillFileBytes))
+	for i := 0; i < 10; i++ {
+		writeZipFile(t, zw, fmt.Sprintf("data/chunk-%02d.txt", i), body)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+
+	_, err := ParseSkillArchive(bytes.NewReader(buf.Bytes()), int64(buf.Len()), "too-large.zip")
+	if err == nil {
+		t.Fatal("ParseSkillArchive() error = nil, want aggregate size error")
+	}
+}
+
+func TestParseSkillArchiveRejectsTooManyFiles(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	writeZipFile(t, zw, "SKILL.md", "---\nname: too-many\n---\n")
+	for i := 0; i < 257; i++ {
+		writeZipFile(t, zw, fmt.Sprintf("data/file-%03d.txt", i), "")
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+
+	_, err := ParseSkillArchive(bytes.NewReader(buf.Bytes()), int64(buf.Len()), "too-many.zip")
+	if err == nil {
+		t.Fatal("ParseSkillArchive() error = nil, want file count error")
 	}
 }
 
