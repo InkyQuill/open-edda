@@ -461,7 +461,7 @@ func (q *Queries) SearchContent(ctx context.Context, arg SearchContentParams) ([
 	return items, nil
 }
 
-const updateContentItemBody = `-- name: UpdateContentItemBody :exec
+const updateContentItemBody = `-- name: UpdateContentItemBody :execrows
 UPDATE content_items
 SET body_markdown = ?, metadata_json = ?, current_revision = ?, updated_at = ?
 WHERE id = ? AND project_id = ? AND current_revision = ?
@@ -477,8 +477,8 @@ type UpdateContentItemBodyParams struct {
 	CurrentRevision_2 int64  `json:"current_revision_2"`
 }
 
-func (q *Queries) UpdateContentItemBody(ctx context.Context, arg UpdateContentItemBodyParams) error {
-	_, err := q.db.ExecContext(ctx, updateContentItemBody,
+func (q *Queries) UpdateContentItemBody(ctx context.Context, arg UpdateContentItemBodyParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateContentItemBody,
 		arg.BodyMarkdown,
 		arg.MetadataJson,
 		arg.CurrentRevision,
@@ -487,5 +487,8 @@ func (q *Queries) UpdateContentItemBody(ctx context.Context, arg UpdateContentIt
 		arg.ProjectID,
 		arg.CurrentRevision_2,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

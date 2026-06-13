@@ -22,7 +22,7 @@ type Querier interface {
 	ListRevisions(ctx context.Context, contentItemID string) ([]Revision, error)
 	ListStoryProjects(ctx context.Context, authorID string) ([]StoryProject, error)
 	SearchContent(ctx context.Context, arg SearchContentParams) ([]ContentItem, error)
-	UpdateContentItemBody(ctx context.Context, arg UpdateContentItemBodyParams) error
+	UpdateContentItemBody(ctx context.Context, arg UpdateContentItemBodyParams) (int64, error)
 }
 
 var _ Querier = (*Queries)(nil)

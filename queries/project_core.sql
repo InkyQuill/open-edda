@@ -26,7 +26,7 @@ ORDER BY sort_order ASC, title ASC;
 SELECT * FROM content_items
 WHERE id = ? AND project_id = ?;
 
--- name: UpdateContentItemBody :exec
+-- name: UpdateContentItemBody :execrows
 UPDATE content_items
 SET body_markdown = ?, metadata_json = ?, current_revision = ?, updated_at = ?
 WHERE id = ? AND project_id = ? AND current_revision = ?;
