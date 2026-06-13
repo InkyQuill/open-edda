@@ -66,6 +66,45 @@ func (q *Queries) CreateAgentMessage(ctx context.Context, arg CreateAgentMessage
 	return err
 }
 
+const createAgentMessageForProject = `-- name: CreateAgentMessageForProject :exec
+INSERT INTO agent_messages (
+  id, session_id, role, body_markdown, metadata_json, created_at
+)
+SELECT
+  ?1,
+  agent_sessions.id,
+  ?2,
+  ?3,
+  ?4,
+  ?5
+FROM agent_sessions
+WHERE agent_sessions.id = ?6
+  AND agent_sessions.project_id = ?7
+`
+
+type CreateAgentMessageForProjectParams struct {
+	ID           string `json:"id"`
+	Role         string `json:"role"`
+	BodyMarkdown string `json:"body_markdown"`
+	MetadataJson string `json:"metadata_json"`
+	CreatedAt    string `json:"created_at"`
+	SessionID    string `json:"session_id"`
+	ProjectID    string `json:"project_id"`
+}
+
+func (q *Queries) CreateAgentMessageForProject(ctx context.Context, arg CreateAgentMessageForProjectParams) error {
+	_, err := q.db.ExecContext(ctx, createAgentMessageForProject,
+		arg.ID,
+		arg.Role,
+		arg.BodyMarkdown,
+		arg.MetadataJson,
+		arg.CreatedAt,
+		arg.SessionID,
+		arg.ProjectID,
+	)
+	return err
+}
+
 const createAgentSession = `-- name: CreateAgentSession :exec
 INSERT INTO agent_sessions (
   id, project_id, title, action_kind, model_variant_id, apply_mode, created_at, updated_at
@@ -367,21 +406,36 @@ func (q *Queries) DeleteExpiredPromptRecords(ctx context.Context, arg DeleteExpi
 
 const deleteModelVariant = `-- name: DeleteModelVariant :exec
 DELETE FROM model_variants
-WHERE id = ?
+WHERE model_variants.id = ?1
+  AND provider_config_id IN (
+    SELECT provider_configs.id FROM provider_configs
+    WHERE provider_configs.author_id = ?2
+  )
 `
 
-func (q *Queries) DeleteModelVariant(ctx context.Context, id string) error {
-	_, err := q.db.ExecContext(ctx, deleteModelVariant, id)
+type DeleteModelVariantParams struct {
+	ID       string `json:"id"`
+	AuthorID string `json:"author_id"`
+}
+
+func (q *Queries) DeleteModelVariant(ctx context.Context, arg DeleteModelVariantParams) error {
+	_, err := q.db.ExecContext(ctx, deleteModelVariant, arg.ID, arg.AuthorID)
 	return err
 }
 
 const deleteProviderConfig = `-- name: DeleteProviderConfig :exec
 DELETE FROM provider_configs
-WHERE id = ?
+WHERE id = ?1
+  AND author_id = ?2
 `
 
-func (q *Queries) DeleteProviderConfig(ctx context.Context, id string) error {
-	_, err := q.db.ExecContext(ctx, deleteProviderConfig, id)
+type DeleteProviderConfigParams struct {
+	ID       string `json:"id"`
+	AuthorID string `json:"author_id"`
+}
+
+func (q *Queries) DeleteProviderConfig(ctx context.Context, arg DeleteProviderConfigParams) error {
+	_, err := q.db.ExecContext(ctx, deleteProviderConfig, arg.ID, arg.AuthorID)
 	return err
 }
 
@@ -447,12 +501,20 @@ func (q *Queries) GetGenerationCandidate(ctx context.Context, arg GetGenerationC
 }
 
 const getModelVariant = `-- name: GetModelVariant :one
-SELECT id, provider_config_id, name, model, temperature, max_output_tokens, context_window_tokens, input_price_per_million, output_price_per_million, cache_read_price_per_million, cache_write_price_per_million, request_token_field, reasoning_format, compatibility_json, created_at, updated_at FROM model_variants
-WHERE id = ?
+SELECT model_variants.id, model_variants.provider_config_id, model_variants.name, model_variants.model, model_variants.temperature, model_variants.max_output_tokens, model_variants.context_window_tokens, model_variants.input_price_per_million, model_variants.output_price_per_million, model_variants.cache_read_price_per_million, model_variants.cache_write_price_per_million, model_variants.request_token_field, model_variants.reasoning_format, model_variants.compatibility_json, model_variants.created_at, model_variants.updated_at
+FROM model_variants
+JOIN provider_configs ON provider_configs.id = model_variants.provider_config_id
+WHERE model_variants.id = ?1
+  AND provider_configs.author_id = ?2
 `
 
-func (q *Queries) GetModelVariant(ctx context.Context, id string) (ModelVariant, error) {
-	row := q.db.QueryRowContext(ctx, getModelVariant, id)
+type GetModelVariantParams struct {
+	ID       string `json:"id"`
+	AuthorID string `json:"author_id"`
+}
+
+func (q *Queries) GetModelVariant(ctx context.Context, arg GetModelVariantParams) (ModelVariant, error) {
+	row := q.db.QueryRowContext(ctx, getModelVariant, arg.ID, arg.AuthorID)
 	var i ModelVariant
 	err := row.Scan(
 		&i.ID,
@@ -500,11 +562,17 @@ func (q *Queries) GetPromptProfile(ctx context.Context, projectID string) (Promp
 
 const getProviderConfig = `-- name: GetProviderConfig :one
 SELECT id, author_id, name, base_url, api_key_encrypted, created_at, updated_at FROM provider_configs
-WHERE id = ?
+WHERE id = ?1
+  AND author_id = ?2
 `
 
-func (q *Queries) GetProviderConfig(ctx context.Context, id string) (ProviderConfig, error) {
-	row := q.db.QueryRowContext(ctx, getProviderConfig, id)
+type GetProviderConfigParams struct {
+	ID       string `json:"id"`
+	AuthorID string `json:"author_id"`
+}
+
+func (q *Queries) GetProviderConfig(ctx context.Context, arg GetProviderConfigParams) (ProviderConfig, error) {
+	row := q.db.QueryRowContext(ctx, getProviderConfig, arg.ID, arg.AuthorID)
 	var i ProviderConfig
 	err := row.Scan(
 		&i.ID,
@@ -569,6 +637,50 @@ ORDER BY created_at ASC
 
 func (q *Queries) ListAgentMessages(ctx context.Context, sessionID string) ([]AgentMessage, error) {
 	rows, err := q.db.QueryContext(ctx, listAgentMessages, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AgentMessage
+	for rows.Next() {
+		var i AgentMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.Role,
+			&i.BodyMarkdown,
+			&i.MetadataJson,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAgentMessagesForProject = `-- name: ListAgentMessagesForProject :many
+SELECT agent_messages.id, agent_messages.session_id, agent_messages.role, agent_messages.body_markdown, agent_messages.metadata_json, agent_messages.created_at
+FROM agent_messages
+JOIN agent_sessions ON agent_sessions.id = agent_messages.session_id
+WHERE agent_messages.session_id = ?1
+  AND agent_sessions.project_id = ?2
+ORDER BY agent_messages.created_at ASC
+`
+
+type ListAgentMessagesForProjectParams struct {
+	SessionID string `json:"session_id"`
+	ProjectID string `json:"project_id"`
+}
+
+func (q *Queries) ListAgentMessagesForProject(ctx context.Context, arg ListAgentMessagesForProjectParams) ([]AgentMessage, error) {
+	rows, err := q.db.QueryContext(ctx, listAgentMessagesForProject, arg.SessionID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -963,6 +1075,46 @@ func (q *Queries) ListToolResultArtifacts(ctx context.Context, arg ListToolResul
 	return items, nil
 }
 
+const listToolResultArtifactsByProject = `-- name: ListToolResultArtifactsByProject :many
+SELECT id, project_id, session_id, tool_call_id, tool_name, full_result_json, model_visible_markdown, truncated, full_result_bytes, created_at FROM tool_result_artifacts
+WHERE project_id = ?
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListToolResultArtifactsByProject(ctx context.Context, projectID string) ([]ToolResultArtifact, error) {
+	rows, err := q.db.QueryContext(ctx, listToolResultArtifactsByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ToolResultArtifact
+	for rows.Next() {
+		var i ToolResultArtifact
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.SessionID,
+			&i.ToolCallID,
+			&i.ToolName,
+			&i.FullResultJson,
+			&i.ModelVisibleMarkdown,
+			&i.Truncated,
+			&i.FullResultBytes,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const touchAgentSession = `-- name: TouchAgentSession :exec
 UPDATE agent_sessions
 SET updated_at = ?1
@@ -1021,7 +1173,11 @@ SET name = ?1,
     reasoning_format = ?11,
     compatibility_json = ?12,
     updated_at = ?13
-WHERE id = ?14
+WHERE model_variants.id = ?14
+  AND provider_config_id IN (
+    SELECT provider_configs.id FROM provider_configs
+    WHERE provider_configs.author_id = ?15
+  )
 `
 
 type UpdateModelVariantParams struct {
@@ -1039,6 +1195,7 @@ type UpdateModelVariantParams struct {
 	CompatibilityJson         string  `json:"compatibility_json"`
 	UpdatedAt                 string  `json:"updated_at"`
 	ID                        string  `json:"id"`
+	AuthorID                  string  `json:"author_id"`
 }
 
 func (q *Queries) UpdateModelVariant(ctx context.Context, arg UpdateModelVariantParams) error {
@@ -1057,6 +1214,7 @@ func (q *Queries) UpdateModelVariant(ctx context.Context, arg UpdateModelVariant
 		arg.CompatibilityJson,
 		arg.UpdatedAt,
 		arg.ID,
+		arg.AuthorID,
 	)
 	return err
 }
@@ -1067,6 +1225,7 @@ SET base_url = ?1,
     api_key_encrypted = ?2,
     updated_at = ?3
 WHERE id = ?4
+  AND author_id = ?5
 `
 
 type UpdateProviderConfigParams struct {
@@ -1074,6 +1233,7 @@ type UpdateProviderConfigParams struct {
 	ApiKeyEncrypted string `json:"api_key_encrypted"`
 	UpdatedAt       string `json:"updated_at"`
 	ID              string `json:"id"`
+	AuthorID        string `json:"author_id"`
 }
 
 func (q *Queries) UpdateProviderConfig(ctx context.Context, arg UpdateProviderConfigParams) error {
@@ -1082,6 +1242,7 @@ func (q *Queries) UpdateProviderConfig(ctx context.Context, arg UpdateProviderCo
 		arg.ApiKeyEncrypted,
 		arg.UpdatedAt,
 		arg.ID,
+		arg.AuthorID,
 	)
 	return err
 }

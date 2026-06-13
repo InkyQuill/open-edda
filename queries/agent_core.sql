@@ -10,18 +10,21 @@ ORDER BY name ASC;
 
 -- name: GetProviderConfig :one
 SELECT * FROM provider_configs
-WHERE id = ?;
+WHERE id = sqlc.arg(id)
+  AND author_id = sqlc.arg(author_id);
 
 -- name: UpdateProviderConfig :exec
 UPDATE provider_configs
 SET base_url = sqlc.arg(base_url),
     api_key_encrypted = sqlc.arg(api_key_encrypted),
     updated_at = sqlc.arg(updated_at)
-WHERE id = sqlc.arg(id);
+WHERE id = sqlc.arg(id)
+  AND author_id = sqlc.arg(author_id);
 
 -- name: DeleteProviderConfig :exec
 DELETE FROM provider_configs
-WHERE id = ?;
+WHERE id = sqlc.arg(id)
+  AND author_id = sqlc.arg(author_id);
 
 -- name: CreateModelVariant :exec
 INSERT INTO model_variants (
@@ -44,8 +47,11 @@ WHERE provider_configs.author_id = ?
 ORDER BY provider_configs.name ASC, model_variants.name ASC;
 
 -- name: GetModelVariant :one
-SELECT * FROM model_variants
-WHERE id = ?;
+SELECT model_variants.*
+FROM model_variants
+JOIN provider_configs ON provider_configs.id = model_variants.provider_config_id
+WHERE model_variants.id = sqlc.arg(id)
+  AND provider_configs.author_id = sqlc.arg(author_id);
 
 -- name: UpdateModelVariant :exec
 UPDATE model_variants
@@ -62,11 +68,19 @@ SET name = sqlc.arg(name),
     reasoning_format = sqlc.arg(reasoning_format),
     compatibility_json = sqlc.arg(compatibility_json),
     updated_at = sqlc.arg(updated_at)
-WHERE id = sqlc.arg(id);
+WHERE model_variants.id = sqlc.arg(id)
+  AND provider_config_id IN (
+    SELECT provider_configs.id FROM provider_configs
+    WHERE provider_configs.author_id = sqlc.arg(author_id)
+  );
 
 -- name: DeleteModelVariant :exec
 DELETE FROM model_variants
-WHERE id = ?;
+WHERE model_variants.id = sqlc.arg(id)
+  AND provider_config_id IN (
+    SELECT provider_configs.id FROM provider_configs
+    WHERE provider_configs.author_id = sqlc.arg(author_id)
+  );
 
 -- name: UpsertPromptProfile :exec
 INSERT INTO prompt_profiles (
@@ -116,6 +130,29 @@ INSERT INTO agent_messages (
 SELECT * FROM agent_messages
 WHERE session_id = ?
 ORDER BY created_at ASC;
+
+-- name: CreateAgentMessageForProject :exec
+INSERT INTO agent_messages (
+  id, session_id, role, body_markdown, metadata_json, created_at
+)
+SELECT
+  sqlc.arg(id),
+  agent_sessions.id,
+  sqlc.arg(role),
+  sqlc.arg(body_markdown),
+  sqlc.arg(metadata_json),
+  sqlc.arg(created_at)
+FROM agent_sessions
+WHERE agent_sessions.id = sqlc.arg(session_id)
+  AND agent_sessions.project_id = sqlc.arg(project_id);
+
+-- name: ListAgentMessagesForProject :many
+SELECT agent_messages.*
+FROM agent_messages
+JOIN agent_sessions ON agent_sessions.id = agent_messages.session_id
+WHERE agent_messages.session_id = sqlc.arg(session_id)
+  AND agent_sessions.project_id = sqlc.arg(project_id)
+ORDER BY agent_messages.created_at ASC;
 
 -- name: CreateActivityEvent :exec
 INSERT INTO activity_events (
@@ -167,6 +204,11 @@ INSERT INTO tool_result_artifacts (
 SELECT * FROM tool_result_artifacts
 WHERE project_id = sqlc.arg(project_id)
   AND session_id = sqlc.arg(session_id)
+ORDER BY created_at DESC;
+
+-- name: ListToolResultArtifactsByProject :many
+SELECT * FROM tool_result_artifacts
+WHERE project_id = ?
 ORDER BY created_at DESC;
 
 -- name: CreateGenerationCandidate :exec

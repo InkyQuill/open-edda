@@ -11,6 +11,7 @@ import (
 type Querier interface {
 	CreateActivityEvent(ctx context.Context, arg CreateActivityEventParams) error
 	CreateAgentMessage(ctx context.Context, arg CreateAgentMessageParams) error
+	CreateAgentMessageForProject(ctx context.Context, arg CreateAgentMessageForProjectParams) error
 	CreateAgentSession(ctx context.Context, arg CreateAgentSessionParams) error
 	CreateContentItem(ctx context.Context, arg CreateContentItemParams) error
 	CreateEntryRelation(ctx context.Context, arg CreateEntryRelationParams) error
@@ -24,18 +25,19 @@ type Querier interface {
 	CreateStoryProject(ctx context.Context, arg CreateStoryProjectParams) error
 	CreateToolResultArtifact(ctx context.Context, arg CreateToolResultArtifactParams) error
 	DeleteExpiredPromptRecords(ctx context.Context, arg DeleteExpiredPromptRecordsParams) error
-	DeleteModelVariant(ctx context.Context, id string) error
-	DeleteProviderConfig(ctx context.Context, id string) error
+	DeleteModelVariant(ctx context.Context, arg DeleteModelVariantParams) error
+	DeleteProviderConfig(ctx context.Context, arg DeleteProviderConfigParams) error
 	GetAgentSession(ctx context.Context, arg GetAgentSessionParams) (AgentSession, error)
 	GetContentItem(ctx context.Context, arg GetContentItemParams) (ContentItem, error)
 	GetGenerationCandidate(ctx context.Context, arg GetGenerationCandidateParams) (GenerationCandidate, error)
-	GetModelVariant(ctx context.Context, id string) (ModelVariant, error)
+	GetModelVariant(ctx context.Context, arg GetModelVariantParams) (ModelVariant, error)
 	GetPromptProfile(ctx context.Context, projectID string) (PromptProfile, error)
-	GetProviderConfig(ctx context.Context, id string) (ProviderConfig, error)
+	GetProviderConfig(ctx context.Context, arg GetProviderConfigParams) (ProviderConfig, error)
 	GetStoryProject(ctx context.Context, arg GetStoryProjectParams) (StoryProject, error)
 	GetStoryProjectByID(ctx context.Context, id string) (StoryProject, error)
 	ListActivityEvents(ctx context.Context, arg ListActivityEventsParams) ([]ActivityEvent, error)
 	ListAgentMessages(ctx context.Context, sessionID string) ([]AgentMessage, error)
+	ListAgentMessagesForProject(ctx context.Context, arg ListAgentMessagesForProjectParams) ([]AgentMessage, error)
 	ListAgentSessions(ctx context.Context, arg ListAgentSessionsParams) ([]AgentSession, error)
 	ListContentItems(ctx context.Context, arg ListContentItemsParams) ([]ContentItem, error)
 	ListEntryRelations(ctx context.Context, arg ListEntryRelationsParams) ([]EntryRelation, error)
@@ -50,6 +52,7 @@ type Querier interface {
 	ListRevisions(ctx context.Context, arg ListRevisionsParams) ([]Revision, error)
 	ListStoryProjects(ctx context.Context, authorID string) ([]StoryProject, error)
 	ListToolResultArtifacts(ctx context.Context, arg ListToolResultArtifactsParams) ([]ToolResultArtifact, error)
+	ListToolResultArtifactsByProject(ctx context.Context, projectID string) ([]ToolResultArtifact, error)
 	SearchContent(ctx context.Context, arg SearchContentParams) ([]ContentItem, error)
 	TouchAgentSession(ctx context.Context, arg TouchAgentSessionParams) error
 	UpdateContentItemBody(ctx context.Context, arg UpdateContentItemBodyParams) (int64, error)

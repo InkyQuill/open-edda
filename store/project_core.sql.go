@@ -104,19 +104,23 @@ func (q *Queries) CreateEntrySection(ctx context.Context, arg CreateEntrySection
 const createRevision = `-- name: CreateRevision :exec
 INSERT INTO revisions (
   id, content_item_id, revision_number, body_markdown, metadata_json,
-  reason, created_by, created_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  reason, created_by, created_at, agent_session_id, action_kind, model_variant_id, skill_id
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateRevisionParams struct {
-	ID             string `json:"id"`
-	ContentItemID  string `json:"content_item_id"`
-	RevisionNumber int64  `json:"revision_number"`
-	BodyMarkdown   string `json:"body_markdown"`
-	MetadataJson   string `json:"metadata_json"`
-	Reason         string `json:"reason"`
-	CreatedBy      string `json:"created_by"`
-	CreatedAt      string `json:"created_at"`
+	ID             string         `json:"id"`
+	ContentItemID  string         `json:"content_item_id"`
+	RevisionNumber int64          `json:"revision_number"`
+	BodyMarkdown   string         `json:"body_markdown"`
+	MetadataJson   string         `json:"metadata_json"`
+	Reason         string         `json:"reason"`
+	CreatedBy      string         `json:"created_by"`
+	CreatedAt      string         `json:"created_at"`
+	AgentSessionID sql.NullString `json:"agent_session_id"`
+	ActionKind     string         `json:"action_kind"`
+	ModelVariantID sql.NullString `json:"model_variant_id"`
+	SkillID        string         `json:"skill_id"`
 }
 
 func (q *Queries) CreateRevision(ctx context.Context, arg CreateRevisionParams) error {
@@ -129,6 +133,10 @@ func (q *Queries) CreateRevision(ctx context.Context, arg CreateRevisionParams) 
 		arg.Reason,
 		arg.CreatedBy,
 		arg.CreatedAt,
+		arg.AgentSessionID,
+		arg.ActionKind,
+		arg.ModelVariantID,
+		arg.SkillID,
 	)
 	return err
 }

@@ -143,6 +143,265 @@ func TestAgentCoreDownMigrationRemovesRevisionColumns(t *testing.T) {
 	}
 }
 
+func TestAgentCoreQueriesScopeProviderAndModelByAuthor(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	queries := New(db)
+	ctx := context.Background()
+
+	seedAgentCoreAuthors(t, db)
+	now := "2026-06-13T00:00:00Z"
+	if err := queries.CreateProviderConfig(ctx, CreateProviderConfigParams{
+		ID:              "provider-1",
+		AuthorID:        "author-1",
+		Name:            "OpenAI",
+		BaseUrl:         "https://api.openai.example/v1",
+		ApiKeyEncrypted: "secret-1",
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}); err != nil {
+		t.Fatalf("create provider config: %v", err)
+	}
+	if err := queries.CreateModelVariant(ctx, CreateModelVariantParams{
+		ID:                        "model-1",
+		ProviderConfigID:          "provider-1",
+		Name:                      "Default",
+		Model:                     "gpt-test",
+		Temperature:               0.7,
+		MaxOutputTokens:           2048,
+		ContextWindowTokens:       128000,
+		InputPricePerMillion:      1,
+		OutputPricePerMillion:     2,
+		CacheReadPricePerMillion:  0.1,
+		CacheWritePricePerMillion: 0.2,
+		RequestTokenField:         "max_tokens",
+		ReasoningFormat:           "",
+		CompatibilityJson:         "{}",
+		CreatedAt:                 now,
+		UpdatedAt:                 now,
+	}); err != nil {
+		t.Fatalf("create model variant: %v", err)
+	}
+
+	if _, err := queries.GetProviderConfig(ctx, GetProviderConfigParams{ID: "provider-1", AuthorID: "author-2"}); err != sql.ErrNoRows {
+		t.Fatalf("GetProviderConfig() with wrong author error = %v, want sql.ErrNoRows", err)
+	}
+	if err := queries.UpdateProviderConfig(ctx, UpdateProviderConfigParams{
+		BaseUrl:         "https://wrong-author.example/v1",
+		ApiKeyEncrypted: "wrong-secret",
+		UpdatedAt:       now,
+		ID:              "provider-1",
+		AuthorID:        "author-2",
+	}); err != nil {
+		t.Fatalf("update provider config with wrong author: %v", err)
+	}
+	provider, err := queries.GetProviderConfig(ctx, GetProviderConfigParams{ID: "provider-1", AuthorID: "author-1"})
+	if err != nil {
+		t.Fatalf("get provider config with owner: %v", err)
+	}
+	if provider.BaseUrl == "https://wrong-author.example/v1" {
+		t.Fatal("wrong author updated provider config")
+	}
+	if err := queries.DeleteProviderConfig(ctx, DeleteProviderConfigParams{ID: "provider-1", AuthorID: "author-2"}); err != nil {
+		t.Fatalf("delete provider config with wrong author: %v", err)
+	}
+	if _, err := queries.GetProviderConfig(ctx, GetProviderConfigParams{ID: "provider-1", AuthorID: "author-1"}); err != nil {
+		t.Fatalf("wrong author deleted provider config: %v", err)
+	}
+
+	if _, err := queries.GetModelVariant(ctx, GetModelVariantParams{ID: "model-1", AuthorID: "author-2"}); err != sql.ErrNoRows {
+		t.Fatalf("GetModelVariant() with wrong author error = %v, want sql.ErrNoRows", err)
+	}
+	if err := queries.UpdateModelVariant(ctx, UpdateModelVariantParams{
+		Name:                      "Wrong author",
+		Model:                     "wrong-model",
+		Temperature:               1,
+		MaxOutputTokens:           1,
+		ContextWindowTokens:       1,
+		InputPricePerMillion:      1,
+		OutputPricePerMillion:     1,
+		CacheReadPricePerMillion:  1,
+		CacheWritePricePerMillion: 1,
+		RequestTokenField:         "max_tokens",
+		ReasoningFormat:           "",
+		CompatibilityJson:         "{}",
+		UpdatedAt:                 now,
+		ID:                        "model-1",
+		AuthorID:                  "author-2",
+	}); err != nil {
+		t.Fatalf("update model variant with wrong author: %v", err)
+	}
+	model, err := queries.GetModelVariant(ctx, GetModelVariantParams{ID: "model-1", AuthorID: "author-1"})
+	if err != nil {
+		t.Fatalf("get model variant with owner: %v", err)
+	}
+	if model.Model == "wrong-model" {
+		t.Fatal("wrong author updated model variant")
+	}
+	if err := queries.DeleteModelVariant(ctx, DeleteModelVariantParams{ID: "model-1", AuthorID: "author-2"}); err != nil {
+		t.Fatalf("delete model variant with wrong author: %v", err)
+	}
+	if _, err := queries.GetModelVariant(ctx, GetModelVariantParams{ID: "model-1", AuthorID: "author-1"}); err != nil {
+		t.Fatalf("wrong author deleted model variant: %v", err)
+	}
+}
+
+func TestCreateRevisionStoresAgentAttribution(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	queries := New(db)
+	ctx := context.Background()
+
+	seedProjectScopedContent(t, db)
+	now := "2026-06-13T00:00:00Z"
+	if err := queries.CreateProviderConfig(ctx, CreateProviderConfigParams{
+		ID:              "provider-1",
+		AuthorID:        "author-1",
+		Name:            "OpenAI",
+		BaseUrl:         "https://api.openai.example/v1",
+		ApiKeyEncrypted: "secret-1",
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}); err != nil {
+		t.Fatalf("create provider config: %v", err)
+	}
+	if err := queries.CreateModelVariant(ctx, CreateModelVariantParams{
+		ID:                        "model-1",
+		ProviderConfigID:          "provider-1",
+		Name:                      "Default",
+		Model:                     "gpt-test",
+		Temperature:               0.7,
+		MaxOutputTokens:           2048,
+		ContextWindowTokens:       128000,
+		InputPricePerMillion:      1,
+		OutputPricePerMillion:     2,
+		CacheReadPricePerMillion:  0.1,
+		CacheWritePricePerMillion: 0.2,
+		RequestTokenField:         "max_tokens",
+		ReasoningFormat:           "",
+		CompatibilityJson:         "{}",
+		CreatedAt:                 now,
+		UpdatedAt:                 now,
+	}); err != nil {
+		t.Fatalf("create model variant: %v", err)
+	}
+	if err := queries.CreateAgentSession(ctx, CreateAgentSessionParams{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Title:          "Rewrite",
+		ActionKind:     "rewrite",
+		ModelVariantID: sql.NullString{String: "model-1", Valid: true},
+		ApplyMode:      "preview",
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}); err != nil {
+		t.Fatalf("create agent session: %v", err)
+	}
+	if err := queries.CreateRevision(ctx, CreateRevisionParams{
+		ID:             "revision-1",
+		ContentItemID:  "item-1",
+		RevisionNumber: 1,
+		BodyMarkdown:   "Body",
+		MetadataJson:   "{}",
+		Reason:         "Agent rewrite",
+		CreatedBy:      "agent",
+		CreatedAt:      now,
+		AgentSessionID: sql.NullString{String: "session-1", Valid: true},
+		ActionKind:     "rewrite",
+		ModelVariantID: sql.NullString{String: "model-1", Valid: true},
+		SkillID:        "skill-1",
+	}); err != nil {
+		t.Fatalf("create revision: %v", err)
+	}
+
+	revisions, err := queries.ListRevisions(ctx, ListRevisionsParams{
+		ContentItemID: "item-1",
+		ProjectID:     "project-1",
+	})
+	if err != nil {
+		t.Fatalf("list revisions: %v", err)
+	}
+	if len(revisions) != 1 {
+		t.Fatalf("ListRevisions() returned %d revisions, want 1", len(revisions))
+	}
+	revision := revisions[0]
+	if !revision.AgentSessionID.Valid || revision.AgentSessionID.String != "session-1" {
+		t.Fatalf("AgentSessionID = %#v, want session-1", revision.AgentSessionID)
+	}
+	if revision.ActionKind != "rewrite" {
+		t.Fatalf("ActionKind = %q, want rewrite", revision.ActionKind)
+	}
+	if !revision.ModelVariantID.Valid || revision.ModelVariantID.String != "model-1" {
+		t.Fatalf("ModelVariantID = %#v, want model-1", revision.ModelVariantID)
+	}
+	if revision.SkillID != "skill-1" {
+		t.Fatalf("SkillID = %q, want skill-1", revision.SkillID)
+	}
+}
+
+func TestListToolResultArtifactsByProjectIncludesProjectLevelArtifacts(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	queries := New(db)
+	ctx := context.Background()
+
+	seedProjectScopedContent(t, db)
+	now := "2026-06-13T00:00:00Z"
+	if err := queries.CreateAgentSession(ctx, CreateAgentSessionParams{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Title:          "Chat",
+		ActionKind:     "chat",
+		ModelVariantID: sql.NullString{},
+		ApplyMode:      "preview",
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}); err != nil {
+		t.Fatalf("create agent session: %v", err)
+	}
+	for _, artifact := range []CreateToolResultArtifactParams{
+		{
+			ID:                   "artifact-session",
+			ProjectID:            "project-1",
+			SessionID:            sql.NullString{String: "session-1", Valid: true},
+			ToolCallID:           "tool-call-1",
+			ToolName:             "read_content",
+			FullResultJson:       "{}",
+			ModelVisibleMarkdown: "visible",
+			Truncated:            0,
+			FullResultBytes:      2,
+			CreatedAt:            now,
+		},
+		{
+			ID:                   "artifact-project",
+			ProjectID:            "project-1",
+			SessionID:            sql.NullString{},
+			ToolCallID:           "tool-call-2",
+			ToolName:             "project_map",
+			FullResultJson:       "{}",
+			ModelVisibleMarkdown: "visible",
+			Truncated:            0,
+			FullResultBytes:      2,
+			CreatedAt:            "2026-06-13T00:00:01Z",
+		},
+	} {
+		if err := queries.CreateToolResultArtifact(ctx, artifact); err != nil {
+			t.Fatalf("create tool result artifact %s: %v", artifact.ID, err)
+		}
+	}
+
+	artifacts, err := queries.ListToolResultArtifactsByProject(ctx, "project-1")
+	if err != nil {
+		t.Fatalf("list tool result artifacts by project: %v", err)
+	}
+	if len(artifacts) != 2 {
+		t.Fatalf("ListToolResultArtifactsByProject() returned %d artifacts, want 2", len(artifacts))
+	}
+	if artifacts[0].ID != "artifact-project" || artifacts[1].ID != "artifact-session" {
+		t.Fatalf("artifact order = [%s, %s], want [artifact-project, artifact-session]", artifacts[0].ID, artifacts[1].ID)
+	}
+}
+
 func TestSearchContentUsesFTSIndex(t *testing.T) {
 	db := openMigratedProjectCoreDB(t)
 	defer db.Close()
@@ -329,6 +588,19 @@ func seedProjectScopedContent(t *testing.T, db *sql.DB) {
 			('item-2', 'project-2', 'story_bible_entry', 'Item Two', 'item-two', 'Body two', '{}', 1, 1, '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z');
 	`); err != nil {
 		t.Fatalf("seed project-scoped content: %v", err)
+	}
+}
+
+func seedAgentCoreAuthors(t *testing.T, db *sql.DB) {
+	t.Helper()
+
+	if _, err := db.Exec(`
+		INSERT INTO authors (id, email, password_hash, created_at)
+		VALUES
+			('author-1', 'author-1@example.com', 'hash', '2026-06-13T00:00:00Z'),
+			('author-2', 'author-2@example.com', 'hash', '2026-06-13T00:00:00Z');
+	`); err != nil {
+		t.Fatalf("seed agent core authors: %v", err)
 	}
 }
 

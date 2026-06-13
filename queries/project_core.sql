@@ -48,8 +48,8 @@ WHERE id = sqlc.arg(id)
 -- name: CreateRevision :exec
 INSERT INTO revisions (
   id, content_item_id, revision_number, body_markdown, metadata_json,
-  reason, created_by, created_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+  reason, created_by, created_at, agent_session_id, action_kind, model_variant_id, skill_id
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: ListRevisions :many
 SELECT revisions.*

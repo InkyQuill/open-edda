@@ -119,6 +119,10 @@ func (s *Service) ImportElysiumProject(ctx context.Context, authorID string, tit
 				Reason:         "Elysium import",
 				CreatedBy:      "import",
 				CreatedAt:      now,
+				AgentSessionID: sql.NullString{},
+				ActionKind:     "",
+				ModelVariantID: sql.NullString{},
+				SkillID:        "",
 			}); err != nil {
 				return fmt.Errorf("create initial revision: %w", err)
 			}
@@ -219,6 +223,10 @@ func (s *Service) CreateContent(ctx context.Context, input CreateContentInput) (
 			Reason:         emptyDefault(input.Reason, "initial content"),
 			CreatedBy:      createdBy,
 			CreatedAt:      now,
+			AgentSessionID: sql.NullString{},
+			ActionKind:     "",
+			ModelVariantID: sql.NullString{},
+			SkillID:        "",
 		}); err != nil {
 			return fmt.Errorf("create initial revision: %w", err)
 		}
@@ -327,6 +335,10 @@ func (s *Service) UpdateContent(ctx context.Context, input UpdateContentInput) (
 			Reason:         emptyDefault(input.Reason, "content update"),
 			CreatedBy:      createdBy,
 			CreatedAt:      now,
+			AgentSessionID: sql.NullString{},
+			ActionKind:     "",
+			ModelVariantID: sql.NullString{},
+			SkillID:        "",
 		}); err != nil {
 			return fmt.Errorf("create revision: %w", err)
 		}
