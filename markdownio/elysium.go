@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"git.inkyquill.net/inky/writer/project"
@@ -128,7 +129,10 @@ func exportElysiumPath(item ImportedItem, metadata map[string]any) (string, erro
 		return "", fmt.Errorf("export item has empty title")
 	}
 
-	filename := title + ".md"
+	filename, err := safeMarkdownFilename(title)
+	if err != nil {
+		return "", err
+	}
 	metadataType, _ := metadata["type"].(string)
 	switch project.ContentKind(item.Kind) {
 	case project.KindChapter:
@@ -273,7 +277,7 @@ func frontmatterScalar(value any) string {
 	case string:
 		return typed
 	case nil:
-		return ""
+		return "null"
 	default:
 		content, err := json.Marshal(typed)
 		if err != nil {
@@ -281,6 +285,39 @@ func frontmatterScalar(value any) string {
 		}
 		return string(content)
 	}
+}
+
+func parseFrontmatterScalar(value string) any {
+	switch value {
+	case "true":
+		return true
+	case "false":
+		return false
+	case "null":
+		return nil
+	}
+	if integer, err := strconv.ParseInt(value, 10, 64); err == nil {
+		return integer
+	}
+	if number, err := strconv.ParseFloat(value, 64); err == nil {
+		return number
+	}
+	return value
+}
+
+func safeMarkdownFilename(title string) (string, error) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return "", fmt.Errorf("export item has empty title")
+	}
+	if filepath.IsAbs(title) || strings.ContainsAny(title, `/\`) {
+		return "", fmt.Errorf("export item title %q is not a safe filename", title)
+	}
+	clean := filepath.Clean(title)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || clean != title {
+		return "", fmt.Errorf("export item title %q is not a safe filename", title)
+	}
+	return title + ".md", nil
 }
 
 func sortedSections(sections []ImportedSection) []ImportedSection {
@@ -424,7 +461,7 @@ func parseFrontmatter(frontmatter string) (map[string]any, error) {
 			continue
 		}
 
-		metadata[key] = value
+		metadata[key] = parseFrontmatterScalar(value)
 	}
 	list.flush(metadata)
 

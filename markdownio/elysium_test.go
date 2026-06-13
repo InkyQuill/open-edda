@@ -250,6 +250,70 @@ func TestExportElysiumLayoutWritesBriefPathsAndMetadataRoundTrips(t *testing.T) 
 	assertMetadataString(t, byPath["synopsis.md"].MetadataJSON, "type", "synopsis")
 }
 
+func TestExportElysiumLayoutRejectsUnsafeTitles(t *testing.T) {
+	tests := []string{
+		"../Outside",
+		"..",
+		"Nested/Title",
+		`Nested\Title`,
+	}
+
+	for _, title := range tests {
+		t.Run(title, func(t *testing.T) {
+			root := t.TempDir()
+			err := ExportElysiumLayout(root, []ImportedItem{
+				{
+					Kind:         string(project.KindChapter),
+					Title:        title,
+					BodyMarkdown: "Body.",
+				},
+			})
+			if err == nil {
+				t.Fatal("ExportElysiumLayout() error = nil, want unsafe title error")
+			}
+		})
+	}
+}
+
+func TestExportElysiumLayoutRoundTripsTypedMetadata(t *testing.T) {
+	root := t.TempDir()
+	if err := ExportElysiumLayout(root, []ImportedItem{
+		{
+			Kind:         string(project.KindWritingBrief),
+			Title:        "Genre",
+			BodyMarkdown: "Fantasy.",
+			MetadataJSON: `{"count":2,"enabled":true,"ratio":1.5,"type":"genre","unset":null}`,
+		},
+	}); err != nil {
+		t.Fatalf("ExportElysiumLayout() error = %v", err)
+	}
+
+	items, err := ImportElysiumLayout(root)
+	if err != nil {
+		t.Fatalf("ImportElysiumLayout() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("imported items = %d, want 1", len(items))
+	}
+
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(items[0].MetadataJSON), &metadata); err != nil {
+		t.Fatalf("metadata json = %q: %v", items[0].MetadataJSON, err)
+	}
+	if metadata["enabled"] != true {
+		t.Fatalf("enabled metadata = %#v, want true", metadata["enabled"])
+	}
+	if metadata["count"] != float64(2) {
+		t.Fatalf("count metadata = %#v, want 2", metadata["count"])
+	}
+	if metadata["ratio"] != 1.5 {
+		t.Fatalf("ratio metadata = %#v, want 1.5", metadata["ratio"])
+	}
+	if metadata["unset"] != nil {
+		t.Fatalf("unset metadata = %#v, want nil", metadata["unset"])
+	}
+}
+
 func writeFile(t *testing.T, root string, rel string, content string) {
 	t.Helper()
 
