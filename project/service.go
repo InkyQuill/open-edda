@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -14,11 +15,15 @@ import (
 var ErrConflict = errors.New("content revision conflict")
 
 type Service struct {
+	db      *sql.DB
 	queries *store.Queries
 }
 
-func NewService(queries *store.Queries) *Service {
-	return &Service{queries: queries}
+func NewService(db *sql.DB) *Service {
+	return &Service{
+		db:      db,
+		queries: store.New(db),
+	}
 }
 
 func (s *Service) CreateProject(ctx context.Context, input CreateProjectInput) (StoryProject, error) {
@@ -63,33 +68,39 @@ func (s *Service) CreateContent(ctx context.Context, input CreateContentInput) (
 		CurrentRevision: 1,
 	}
 
-	if err := s.queries.CreateContentItem(ctx, store.CreateContentItemParams{
-		ID:              item.ID,
-		ProjectID:       item.ProjectID,
-		Kind:            string(item.Kind),
-		Title:           item.Title,
-		Slug:            item.Slug,
-		BodyMarkdown:    item.BodyMarkdown,
-		MetadataJson:    item.MetadataJSON,
-		SortOrder:       item.SortOrder,
-		CurrentRevision: item.CurrentRevision,
-		CreatedAt:       now,
-		UpdatedAt:       now,
-	}); err != nil {
-		return ContentItem{}, fmt.Errorf("create content item: %w", err)
-	}
+	if err := s.inTx(ctx, func(queries *store.Queries) error {
+		if err := queries.CreateContentItem(ctx, store.CreateContentItemParams{
+			ID:              item.ID,
+			ProjectID:       item.ProjectID,
+			Kind:            string(item.Kind),
+			Title:           item.Title,
+			Slug:            item.Slug,
+			BodyMarkdown:    item.BodyMarkdown,
+			MetadataJson:    item.MetadataJSON,
+			SortOrder:       item.SortOrder,
+			CurrentRevision: item.CurrentRevision,
+			CreatedAt:       now,
+			UpdatedAt:       now,
+		}); err != nil {
+			return fmt.Errorf("create content item: %w", err)
+		}
 
-	if err := s.queries.CreateRevision(ctx, store.CreateRevisionParams{
-		ID:             newID("revision"),
-		ContentItemID:  item.ID,
-		RevisionNumber: item.CurrentRevision,
-		BodyMarkdown:   item.BodyMarkdown,
-		MetadataJson:   item.MetadataJSON,
-		Reason:         emptyDefault(input.Reason, "initial content"),
-		CreatedBy:      createdBy,
-		CreatedAt:      now,
+		if err := queries.CreateRevision(ctx, store.CreateRevisionParams{
+			ID:             newID("revision"),
+			ContentItemID:  item.ID,
+			RevisionNumber: item.CurrentRevision,
+			BodyMarkdown:   item.BodyMarkdown,
+			MetadataJson:   item.MetadataJSON,
+			Reason:         emptyDefault(input.Reason, "initial content"),
+			CreatedBy:      createdBy,
+			CreatedAt:      now,
+		}); err != nil {
+			return fmt.Errorf("create initial revision: %w", err)
+		}
+
+		return nil
 	}); err != nil {
-		return ContentItem{}, fmt.Errorf("create initial revision: %w", err)
+		return ContentItem{}, err
 	}
 
 	return item, nil
@@ -101,61 +112,93 @@ func (s *Service) UpdateContent(ctx context.Context, input UpdateContentInput) (
 		return ContentItem{}, err
 	}
 
-	item, err := s.queries.GetContentItem(ctx, store.GetContentItemParams{
-		ID:        input.ContentID,
-		ProjectID: input.ProjectID,
-	})
-	if err != nil {
-		return ContentItem{}, fmt.Errorf("get content item: %w", err)
-	}
-	if item.CurrentRevision != input.ExpectedRevision {
-		return ContentItem{}, ErrConflict
-	}
+	var updated ContentItem
+	if err := s.inTx(ctx, func(queries *store.Queries) error {
+		item, err := queries.GetContentItem(ctx, store.GetContentItemParams{
+			ID:        input.ContentID,
+			ProjectID: input.ProjectID,
+		})
+		if err != nil {
+			return fmt.Errorf("get content item: %w", err)
+		}
+		if item.CurrentRevision != input.ExpectedRevision {
+			return ErrConflict
+		}
 
-	nextRevision := input.ExpectedRevision + 1
-	metadataJSON := defaultJSON(input.MetadataJSON)
-	now := nowString()
+		nextRevision := input.ExpectedRevision + 1
+		metadataJSON := defaultJSON(input.MetadataJSON)
+		now := nowString()
 
-	affected, err := s.queries.UpdateContentItemBody(ctx, store.UpdateContentItemBodyParams{
-		BodyMarkdown:     input.BodyMarkdown,
-		MetadataJson:     metadataJSON,
-		NextRevision:     nextRevision,
-		UpdatedAt:        now,
-		ID:               input.ContentID,
-		ProjectID:        input.ProjectID,
-		ExpectedRevision: input.ExpectedRevision,
-	})
-	if err != nil {
-		return ContentItem{}, fmt.Errorf("update content item: %w", err)
-	}
-	if affected == 0 {
-		return ContentItem{}, ErrConflict
-	}
+		affected, err := queries.UpdateContentItemBody(ctx, store.UpdateContentItemBodyParams{
+			BodyMarkdown:     input.BodyMarkdown,
+			MetadataJson:     metadataJSON,
+			NextRevision:     nextRevision,
+			UpdatedAt:        now,
+			ID:               input.ContentID,
+			ProjectID:        input.ProjectID,
+			ExpectedRevision: input.ExpectedRevision,
+		})
+		if err != nil {
+			return fmt.Errorf("update content item: %w", err)
+		}
+		if affected == 0 {
+			return ErrConflict
+		}
 
-	if err := s.queries.CreateRevision(ctx, store.CreateRevisionParams{
-		ID:             newID("revision"),
-		ContentItemID:  input.ContentID,
-		RevisionNumber: nextRevision,
-		BodyMarkdown:   input.BodyMarkdown,
-		MetadataJson:   metadataJSON,
-		Reason:         emptyDefault(input.Reason, "content update"),
-		CreatedBy:      createdBy,
-		CreatedAt:      now,
+		if err := queries.CreateRevision(ctx, store.CreateRevisionParams{
+			ID:             newID("revision"),
+			ContentItemID:  input.ContentID,
+			RevisionNumber: nextRevision,
+			BodyMarkdown:   input.BodyMarkdown,
+			MetadataJson:   metadataJSON,
+			Reason:         emptyDefault(input.Reason, "content update"),
+			CreatedBy:      createdBy,
+			CreatedAt:      now,
+		}); err != nil {
+			return fmt.Errorf("create revision: %w", err)
+		}
+
+		updated = contentItemFromStore(store.ContentItem{
+			ID:              item.ID,
+			ProjectID:       item.ProjectID,
+			Kind:            item.Kind,
+			Title:           item.Title,
+			Slug:            item.Slug,
+			BodyMarkdown:    input.BodyMarkdown,
+			MetadataJson:    metadataJSON,
+			SortOrder:       item.SortOrder,
+			CurrentRevision: nextRevision,
+		})
+		return nil
 	}); err != nil {
-		return ContentItem{}, fmt.Errorf("create revision: %w", err)
+		return ContentItem{}, err
 	}
 
-	return contentItemFromStore(store.ContentItem{
-		ID:              item.ID,
-		ProjectID:       item.ProjectID,
-		Kind:            item.Kind,
-		Title:           item.Title,
-		Slug:            item.Slug,
-		BodyMarkdown:    input.BodyMarkdown,
-		MetadataJson:    metadataJSON,
-		SortOrder:       item.SortOrder,
-		CurrentRevision: nextRevision,
-	}), nil
+	return updated, nil
+}
+
+func (s *Service) inTx(ctx context.Context, fn func(*store.Queries) error) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if err := fn(s.queries.WithTx(tx)); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+	committed = true
+
+	return nil
 }
 
 func contentItemFromStore(item store.ContentItem) ContentItem {
