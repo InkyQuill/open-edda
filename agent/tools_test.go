@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"git.inkyquill.net/inky/writer/project"
+	"git.inkyquill.net/inky/writer/skill"
 	"git.inkyquill.net/inky/writer/store"
 )
 
@@ -26,6 +27,7 @@ func TestContextToolDefinitionsExposeExplicitSchemas(t *testing.T) {
 		"read_story_bible_entry",
 		"read_entry_section",
 		"list_revisions",
+		"skill",
 		"append_to_chapter",
 		"insert_into_chapter",
 		"replace_selection",
@@ -52,6 +54,19 @@ func TestContextToolDefinitionsExposeExplicitSchemas(t *testing.T) {
 		if _, ok := searchProps[prop]; !ok {
 			t.Fatalf("search_content schema missing %q", prop)
 		}
+	}
+
+	skillSchema := names["skill"].Function.Parameters
+	required, ok := skillSchema["required"].([]string)
+	if !ok {
+		t.Fatalf("skill schema required = %#v, want []string", skillSchema["required"])
+	}
+	if len(required) != 1 || required[0] != "skillId" {
+		t.Fatalf("skill schema required = %#v, want [skillId]", required)
+	}
+	skillProps := skillSchema["properties"].(map[string]any)
+	if _, ok := skillProps["skillId"]; !ok {
+		t.Fatal("skill schema missing skillId property")
 	}
 }
 
@@ -447,6 +462,94 @@ func TestExecuteContextToolsRecordsActivityAndArtifact(t *testing.T) {
 	}
 }
 
+func TestExecuteSkillToolReturnsRenderedSkillAndRecordsActivityAndArtifact(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	skillService := skill.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Skill Tool Project")
+	service := NewService(db, projectService, nil)
+	service.SetSkillService(skillService)
+	session := createTestSession(t, ctx, service, storyProject.ID)
+
+	installed := installToolSkill(t, ctx, skillService, storyProject.ID)
+	result, err := service.ExecuteTool(ctx, ToolCallInput{
+		ProjectID:     storyProject.ID,
+		SessionID:     session.ID,
+		ToolCallID:    "call-skill",
+		ToolName:      "skill",
+		ArgumentsJSON: `{"skillId":"` + installed.ID + `"}`,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool(skill) error = %v", err)
+	}
+
+	assertMarkdownContains(t, result.ModelVisibleMarkdown,
+		`<skill_content name="style-pass">`,
+		`Always tighten prose.`,
+		`<file path="templates/rewrite.md" purpose="template">Rewrite template</file>`,
+	)
+	assertFullJSONContains(t, result.FullResultJSON,
+		`"modelVisibleMarkdown"`,
+		`"skill"`,
+		`"instructionsMarkdown": "Always tighten prose."`,
+		`"bodyText": "Rewrite template"`,
+	)
+	assertSkillToolActivityAndArtifact(t, ctx, db, storyProject.ID, session.ID, result, installed.ID)
+}
+
+func TestExecuteSkillToolReturnsErrorForMissingSkill(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	skillService := skill.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Missing Skill Tool Project")
+	service := NewService(db, projectService, nil)
+	service.SetSkillService(skillService)
+	session := createTestSession(t, ctx, service, storyProject.ID)
+
+	_, err := service.ExecuteTool(ctx, ToolCallInput{
+		ProjectID:     storyProject.ID,
+		SessionID:     session.ID,
+		ToolCallID:    "call-missing-skill",
+		ToolName:      "skill",
+		ArgumentsJSON: `{"skillId":"skill-missing"}`,
+	})
+	if err == nil {
+		t.Fatal("ExecuteTool(skill missing) error = nil, want error")
+	}
+
+	assertNoToolActivityOrArtifact(t, ctx, db, storyProject.ID, session.ID)
+}
+
+func TestExecuteSkillToolScriptFilesAreDisabledAndNotExecuted(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	skillService := skill.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Script Skill Tool Project")
+	service := NewService(db, projectService, nil)
+	service.SetSkillService(skillService)
+	session := createTestSession(t, ctx, service, storyProject.ID)
+
+	installed := installToolSkill(t, ctx, skillService, storyProject.ID)
+	result, err := service.ExecuteTool(ctx, ToolCallInput{
+		ProjectID:     storyProject.ID,
+		SessionID:     session.ID,
+		ToolCallID:    "call-script-skill",
+		ToolName:      "skill",
+		ArgumentsJSON: `{"skillId":"` + installed.ID + `"}`,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool(skill) error = %v", err)
+	}
+
+	assertMarkdownContains(t, result.ModelVisibleMarkdown, `disabled="true"`)
+	if strings.Contains(result.ModelVisibleMarkdown, "echo should-not-execute") {
+		t.Fatalf("ModelVisibleMarkdown included shell execution output:\n%s", result.ModelVisibleMarkdown)
+	}
+}
+
 func TestExecuteToolRejectsSessionOutsideProject(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()
@@ -838,6 +941,47 @@ func seedToolContent(t *testing.T, ctx context.Context, service *project.Service
 	return toolSeed{Chapter: chapter, Character: character}
 }
 
+func installToolSkill(t *testing.T, ctx context.Context, service *skill.Service, projectID string) skill.Skill {
+	t.Helper()
+
+	installed, err := service.Install(ctx, skill.InstallInput{
+		ProjectID:   projectID,
+		SourceType:  skill.SourceTypeUpload,
+		SourceLabel: "style-pass.zip",
+		Imported: skill.ImportedSkill{
+			Name:                 "style-pass",
+			DisplayName:          "Style Pass",
+			Description:          "Tightens style",
+			InstructionsMarkdown: "Always tighten prose.",
+			MetadataJSON:         "{}",
+			SourceLabel:          "style-pass.zip",
+			ScriptCount:          1,
+			ScriptsDisabled:      true,
+			Files: []skill.ImportedSkillFile{
+				{
+					RelativePath: "templates/rewrite.md",
+					Purpose:      skill.FilePurposeTemplate,
+					MediaType:    "text/markdown; charset=utf-8",
+					BodyText:     "Rewrite template",
+					Bytes:        int64(len("Rewrite template")),
+				},
+				{
+					RelativePath:   "scripts/analyze.sh",
+					Purpose:        skill.FilePurposeScript,
+					MediaType:      "text/x-shellscript; charset=utf-8",
+					BodyText:       "echo should-not-execute",
+					Bytes:          int64(len("echo should-not-execute")),
+					ScriptDisabled: true,
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Install(skill) error = %v", err)
+	}
+	return installed
+}
+
 func assertToolActivityAndArtifact(t *testing.T, ctx context.Context, db *sql.DB, projectID, sessionID, toolName string, result ToolResult) {
 	t.Helper()
 
@@ -902,6 +1046,77 @@ func assertToolActivityAndArtifact(t *testing.T, ctx context.Context, db *sql.DB
 	if artifact.FullResultBytes != int64(len([]byte(result.FullResultJSON))) {
 		t.Fatalf("artifact full bytes = %d, want %d", artifact.FullResultBytes, len([]byte(result.FullResultJSON)))
 	}
+}
+
+func assertSkillToolActivityAndArtifact(t *testing.T, ctx context.Context, db *sql.DB, projectID, sessionID string, result ToolResult, skillID string) {
+	t.Helper()
+
+	queries := store.New(db)
+	events, err := queries.ListActivityEvents(ctx, store.ListActivityEventsParams{
+		ProjectID: projectID,
+		Limit:     10,
+	})
+	if err != nil {
+		t.Fatalf("ListActivityEvents() error = %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("activity event count = %d, want 1", len(events))
+	}
+	event := events[0]
+	if event.EventType != "skill_loaded" {
+		t.Fatalf("activity event type = %q, want skill_loaded", event.EventType)
+	}
+	if !event.SessionID.Valid || event.SessionID.String != sessionID {
+		t.Fatalf("activity session = %#v, want %q", event.SessionID, sessionID)
+	}
+	if event.Summary != "Loaded skill style-pass" {
+		t.Fatalf("activity summary = %q, want Loaded skill style-pass", event.Summary)
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(event.MetadataJson), &metadata); err != nil {
+		t.Fatalf("unmarshal activity metadata: %v", err)
+	}
+	for key, want := range map[string]any{
+		"toolName":        "skill",
+		"toolCallId":      result.ToolCallID,
+		"skillId":         skillID,
+		"name":            "style-pass",
+		"scriptCount":     float64(1),
+		"scriptsDisabled": true,
+	} {
+		if metadata[key] != want {
+			t.Fatalf("activity metadata %s = %#v, want %#v", key, metadata[key], want)
+		}
+	}
+
+	artifacts, err := queries.ListToolResultArtifacts(ctx, store.ListToolResultArtifactsParams{
+		ProjectID: projectID,
+		SessionID: sql.NullString{String: sessionID, Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("ListToolResultArtifacts() error = %v", err)
+	}
+	if len(artifacts) != 1 {
+		t.Fatalf("artifact count = %d, want 1", len(artifacts))
+	}
+	artifact := artifacts[0]
+	if artifact.ToolName != "skill" {
+		t.Fatalf("artifact tool = %q, want skill", artifact.ToolName)
+	}
+	if artifact.FullResultJson != result.FullResultJSON {
+		t.Fatal("artifact full JSON differs from returned full JSON")
+	}
+	if artifact.ModelVisibleMarkdown != result.ModelVisibleMarkdown {
+		t.Fatal("artifact model-visible markdown differs from returned markdown")
+	}
+	if artifact.Truncated != 0 || result.Truncated {
+		t.Fatalf("truncated = artifact %d result %v, want false", artifact.Truncated, result.Truncated)
+	}
+	if len([]byte(artifact.ModelVisibleMarkdown)) > maxToolVisibleBytes {
+		t.Fatalf("artifact model-visible bytes = %d, want <= %d", len([]byte(artifact.ModelVisibleMarkdown)), maxToolVisibleBytes)
+	}
+	assertFullJSONContains(t, artifact.FullResultJson, `"scriptCount": 1`, `"scriptsDisabled": true`)
+	assertMarkdownContains(t, artifact.ModelVisibleMarkdown, `<skill_content name="style-pass">`)
 }
 
 func assertWriteToolActivityAndArtifact(t *testing.T, ctx context.Context, db *sql.DB, projectID string, session Session, toolName string, targetContentID string, result ToolResult, want map[string]any) {

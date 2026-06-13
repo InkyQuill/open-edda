@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"git.inkyquill.net/inky/writer/project"
+	"git.inkyquill.net/inky/writer/skill"
 	"git.inkyquill.net/inky/writer/store"
 )
 
@@ -41,6 +42,9 @@ func ContextToolDefinitions() []CompletionTool {
 			"heading":   map[string]any{"type": "string"},
 		}, "contentId", "heading")),
 		contextTool("list_revisions", "List revisions for one content item.", contentIDSchema()),
+		contextTool("skill", "Load one installed Writer skill by ID when the task matches the available skill guidance. Returns instructions and inert supporting files. Bundled scripts are never executed.", objectSchema(map[string]any{
+			"skillId": map[string]any{"type": "string"},
+		}, "skillId")),
 		contextTool("append_to_chapter", "Append generated Markdown to the end of a chapter.", structuredWriteSchema(nil)),
 		contextTool("insert_into_chapter", "Insert generated Markdown into a chapter at an absolute position.", structuredWriteSchema(map[string]any{
 			"insertPosition": map[string]any{"type": "integer", "minimum": 0},
@@ -91,6 +95,12 @@ func (s *Service) ExecuteTool(ctx context.Context, input ToolCallInput) (ToolRes
 	}
 	fullJSON := string(fullJSONBytes)
 	modelVisible, truncated := boundedToolMarkdown(input.ToolName, payload, directRead)
+	if markdown, ok := modelVisibleMarkdownPayload(payload); ok {
+		modelVisible, truncated = boundModelVisible(markdown, true)
+		if truncated {
+			modelVisible += "\n\n_Result truncated; full JSON is stored in the tool result artifact._"
+		}
+	}
 	result := ToolResult{
 		ToolCallID:           input.ToolCallID,
 		ToolName:             input.ToolName,
@@ -113,6 +123,14 @@ func (s *Service) ExecuteTool(ctx context.Context, input ToolCallInput) (ToolRes
 	if err != nil {
 		return ToolResult{}, fmt.Errorf("marshal activity metadata: %w", err)
 	}
+	eventType := "agent_tool_executed"
+	summary := fmt.Sprintf("Executed %s", input.ToolName)
+	if input.ToolName == "skill" {
+		eventType = "skill_loaded"
+		if name, ok := activityMetadata["name"].(string); ok && name != "" {
+			summary = "Loaded skill " + name
+		}
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -129,8 +147,8 @@ func (s *Service) ExecuteTool(ctx context.Context, input ToolCallInput) (ToolRes
 		ID:           newID("event"),
 		ProjectID:    input.ProjectID,
 		SessionID:    sql.NullString{String: input.SessionID, Valid: input.SessionID != ""},
-		EventType:    "agent_tool_executed",
-		Summary:      fmt.Sprintf("Executed %s", input.ToolName),
+		EventType:    eventType,
+		Summary:      summary,
 		MetadataJson: string(metadataJSON),
 		CreatedAt:    now,
 	}); err != nil {
@@ -246,6 +264,35 @@ func (s *Service) executeContextTool(ctx context.Context, input ToolCallInput, s
 		}
 		revisions, err := s.projectService.ListRevisions(ctx, input.ProjectID, args.ContentID)
 		return revisions, false, nil, err
+	case "skill":
+		if s.skillService == nil {
+			return nil, false, nil, fmt.Errorf("skill service is not configured")
+		}
+		var args struct {
+			SkillID string `json:"skillId"`
+		}
+		if err := decodeToolArgs(input.ArgumentsJSON, &args); err != nil {
+			return nil, false, nil, err
+		}
+		if strings.TrimSpace(args.SkillID) == "" {
+			return nil, false, nil, fmt.Errorf("skillId is required")
+		}
+		rendered, loaded, err := s.skillService.RenderForModel(ctx, skill.RenderSkillInput{
+			ProjectID: input.ProjectID,
+			SkillID:   args.SkillID,
+		})
+		if err != nil {
+			return nil, false, nil, err
+		}
+		return map[string]any{
+				"skill":                loaded,
+				"modelVisibleMarkdown": rendered,
+			}, true, map[string]any{
+				"skillId":         loaded.ID,
+				"name":            loaded.Name,
+				"scriptCount":     loaded.ScriptCount,
+				"scriptsDisabled": loaded.ScriptsDisabled,
+			}, nil
 	case "append_to_chapter", "insert_into_chapter", "replace_selection", "update_story_bible_entry", "update_entry_section":
 		payload, metadata, err := s.executeWriteTool(ctx, input, session)
 		return payload, false, metadata, err
@@ -505,6 +552,15 @@ func boundedToolMarkdown(toolName string, payload any, directRead bool) (string,
 		bounded += "\n\n_Result truncated; full JSON is stored in the tool result artifact._"
 	}
 	return bounded, truncated
+}
+
+func modelVisibleMarkdownPayload(payload any) (string, bool) {
+	values, ok := payload.(map[string]any)
+	if !ok {
+		return "", false
+	}
+	markdown, ok := values["modelVisibleMarkdown"].(string)
+	return markdown, ok
 }
 
 func renderToolMarkdown(toolName string, payload any) string {
