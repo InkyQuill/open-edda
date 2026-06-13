@@ -465,8 +465,8 @@ func (q *Queries) SearchContent(ctx context.Context, arg SearchContentParams) ([
 
 const updateContentItemBody = `-- name: UpdateContentItemBody :execrows
 UPDATE content_items
-SET body_markdown = ?, metadata_json = ?, current_revision = ?6, updated_at = ?
-WHERE id = ? AND project_id = ? AND current_revision = ?7
+SET body_markdown = ?, metadata_json = ?, current_revision = ?, updated_at = ?
+WHERE id = ? AND project_id = ? AND current_revision = ?
 `
 
 type UpdateContentItemBodyParams struct {

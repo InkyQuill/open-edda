@@ -1,0 +1,56 @@
+package project
+
+type ContentKind string
+
+const (
+	KindChapter         ContentKind = "chapter"
+	KindStoryBibleEntry ContentKind = "story_bible_entry"
+	KindWritingBrief    ContentKind = "writing_brief"
+	KindProjectNote     ContentKind = "project_note"
+)
+
+type StoryProject struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Slug     string `json:"slug"`
+	Language string `json:"language"`
+}
+
+type ContentItem struct {
+	ID              string      `json:"id"`
+	ProjectID       string      `json:"projectId"`
+	Kind            ContentKind `json:"kind"`
+	Title           string      `json:"title"`
+	Slug            string      `json:"slug"`
+	BodyMarkdown    string      `json:"bodyMarkdown"`
+	MetadataJSON    string      `json:"metadataJson"`
+	SortOrder       int64       `json:"sortOrder"`
+	CurrentRevision int64       `json:"currentRevision"`
+}
+
+type CreateProjectInput struct {
+	AuthorID string
+	Title    string
+	Language string
+}
+
+type CreateContentInput struct {
+	ProjectID    string
+	Kind         ContentKind
+	Title        string
+	BodyMarkdown string
+	MetadataJSON string
+	SortOrder    int64
+	Reason       string
+	CreatedBy    string
+}
+
+type UpdateContentInput struct {
+	ProjectID        string
+	ContentID        string
+	ExpectedRevision int64
+	BodyMarkdown     string
+	MetadataJSON     string
+	Reason           string
+	CreatedBy        string
+}
