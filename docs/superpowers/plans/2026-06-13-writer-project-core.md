@@ -454,8 +454,8 @@ WHERE id = ? AND project_id = ?;
 
 -- name: UpdateContentItemBody :execrows
 UPDATE content_items
-SET body_markdown = ?, metadata_json = ?, current_revision = ?, updated_at = ?
-WHERE id = ? AND project_id = ? AND current_revision = ?;
+SET body_markdown = ?, metadata_json = ?, current_revision = sqlc.arg(next_revision), updated_at = ?
+WHERE id = ? AND project_id = ? AND current_revision = sqlc.arg(expected_revision);
 
 -- name: CreateRevision :exec
 INSERT INTO revisions (
@@ -501,7 +501,7 @@ LIMIT sqlc.arg(limit);
 Run:
 
 ```bash
-go run github.com/sqlc-dev/sqlc/cmd/sqlc@latest generate
+go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 generate
 ```
 
 Expected: `store/models.go`, `store/project_core.sql.go`, and `store/querier.go` exist.
@@ -846,11 +846,11 @@ func (s *Service) UpdateContent(ctx context.Context, input UpdateContentInput) (
 	rows, err := s.queries.UpdateContentItemBody(ctx, store.UpdateContentItemBodyParams{
 		BodyMarkdown:      input.BodyMarkdown,
 		MetadataJson:      metadata,
-		CurrentRevision:   nextRevision,
+		NextRevision:      nextRevision,
 		UpdatedAt:         now,
 		ID:                input.ContentID,
 		ProjectID:         input.ProjectID,
-		CurrentRevision_2: input.ExpectedRevision,
+		ExpectedRevision:  input.ExpectedRevision,
 	})
 	if err != nil {
 		return ContentItem{}, fmt.Errorf("update content item: %w", err)

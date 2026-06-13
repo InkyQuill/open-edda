@@ -465,29 +465,29 @@ func (q *Queries) SearchContent(ctx context.Context, arg SearchContentParams) ([
 
 const updateContentItemBody = `-- name: UpdateContentItemBody :execrows
 UPDATE content_items
-SET body_markdown = ?, metadata_json = ?, current_revision = ?, updated_at = ?
-WHERE id = ? AND project_id = ? AND current_revision = ?
+SET body_markdown = ?, metadata_json = ?, current_revision = ?6, updated_at = ?
+WHERE id = ? AND project_id = ? AND current_revision = ?7
 `
 
 type UpdateContentItemBodyParams struct {
-	BodyMarkdown      string `json:"body_markdown"`
-	MetadataJson      string `json:"metadata_json"`
-	CurrentRevision   int64  `json:"current_revision"`
-	UpdatedAt         string `json:"updated_at"`
-	ID                string `json:"id"`
-	ProjectID         string `json:"project_id"`
-	CurrentRevision_2 int64  `json:"current_revision_2"`
+	BodyMarkdown     string `json:"body_markdown"`
+	MetadataJson     string `json:"metadata_json"`
+	NextRevision     int64  `json:"next_revision"`
+	UpdatedAt        string `json:"updated_at"`
+	ID               string `json:"id"`
+	ProjectID        string `json:"project_id"`
+	ExpectedRevision int64  `json:"expected_revision"`
 }
 
 func (q *Queries) UpdateContentItemBody(ctx context.Context, arg UpdateContentItemBodyParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, updateContentItemBody,
 		arg.BodyMarkdown,
 		arg.MetadataJson,
-		arg.CurrentRevision,
+		arg.NextRevision,
 		arg.UpdatedAt,
 		arg.ID,
 		arg.ProjectID,
-		arg.CurrentRevision_2,
+		arg.ExpectedRevision,
 	)
 	if err != nil {
 		return 0, err
