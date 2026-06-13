@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"git.inkyquill.net/inky/writer/project"
@@ -73,6 +74,35 @@ func ImportElysiumLayout(root string) ([]ImportedItem, error) {
 	return items, nil
 }
 
+func ExportElysiumLayout(root string, items []ImportedItem) error {
+	for _, item := range items {
+		metadata, err := exportMetadata(item)
+		if err != nil {
+			return fmt.Errorf("metadata for %q: %w", item.Title, err)
+		}
+
+		rel, err := exportElysiumPath(item, metadata)
+		if err != nil {
+			return err
+		}
+
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return fmt.Errorf("create directory for %q: %w", rel, err)
+		}
+
+		content, err := renderElysiumItem(item, metadata)
+		if err != nil {
+			return fmt.Errorf("render %q: %w", item.Title, err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			return fmt.Errorf("write %q: %w", rel, err)
+		}
+	}
+
+	return nil
+}
+
 func elysiumKind(path string) (kind string, metadataType string, ok bool) {
 	switch {
 	case path == "genre.md":
@@ -85,9 +115,185 @@ func elysiumKind(path string) (kind string, metadataType string, ok bool) {
 		return string(project.KindStoryBibleEntry), "character", true
 	case strings.HasPrefix(path, "worldbuilding/"):
 		return string(project.KindStoryBibleEntry), "worldbuilding", true
+	case strings.HasPrefix(path, "braindump/"):
+		return string(project.KindProjectNote), "project_note", true
 	default:
 		return "", "", false
 	}
+}
+
+func exportElysiumPath(item ImportedItem, metadata map[string]any) (string, error) {
+	title := strings.TrimSpace(item.Title)
+	if title == "" {
+		return "", fmt.Errorf("export item has empty title")
+	}
+
+	filename := title + ".md"
+	metadataType, _ := metadata["type"].(string)
+	switch project.ContentKind(item.Kind) {
+	case project.KindChapter:
+		return filepath.ToSlash(filepath.Join("story", filename)), nil
+	case project.KindStoryBibleEntry:
+		switch metadataType {
+		case "character":
+			return filepath.ToSlash(filepath.Join("characters", filename)), nil
+		case "worldbuilding":
+			return filepath.ToSlash(filepath.Join("worldbuilding", filename)), nil
+		default:
+			return filepath.ToSlash(filepath.Join("worldbuilding", filename)), nil
+		}
+	case project.KindProjectNote:
+		return filepath.ToSlash(filepath.Join("braindump", filename)), nil
+	case project.KindWritingBrief:
+		switch metadataType {
+		case "genre":
+			return "genre.md", nil
+		case "synopsis":
+			return "synopsis.md", nil
+		default:
+			return filename, nil
+		}
+	default:
+		return "", fmt.Errorf("unsupported export item kind %q", item.Kind)
+	}
+}
+
+func exportMetadata(item ImportedItem) (map[string]any, error) {
+	metadata := make(map[string]any)
+	if strings.TrimSpace(item.MetadataJSON) != "" {
+		if err := json.Unmarshal([]byte(item.MetadataJSON), &metadata); err != nil {
+			return nil, fmt.Errorf("parse metadata JSON: %w", err)
+		}
+	}
+
+	if _, ok := metadata["related"]; !ok {
+		related := relatedTargets(item.Relations)
+		if len(related) > 0 {
+			metadata["related"] = related
+		}
+	}
+
+	return metadata, nil
+}
+
+func relatedTargets(relations []ImportedRelation) []string {
+	var targets []string
+	for _, relation := range relations {
+		if relation.RelationType != "related" || strings.TrimSpace(relation.TargetTitle) == "" {
+			continue
+		}
+		targets = append(targets, relation.TargetTitle)
+	}
+	return targets
+}
+
+func renderElysiumItem(item ImportedItem, metadata map[string]any) (string, error) {
+	var builder strings.Builder
+	builder.WriteString("# ")
+	builder.WriteString(strings.TrimSpace(item.Title))
+	builder.WriteString("\n---\n")
+	frontmatter, err := renderFrontmatter(metadata)
+	if err != nil {
+		return "", err
+	}
+	builder.WriteString(frontmatter)
+	builder.WriteString("---\n")
+
+	body := normalizeMarkdownBlock(item.BodyMarkdown)
+	if body != "" {
+		builder.WriteString(body)
+	}
+
+	sections := sortedSections(item.Sections)
+	for _, section := range sections {
+		if builder.Len() > 0 && !strings.HasSuffix(builder.String(), "\n\n") {
+			if strings.HasSuffix(builder.String(), "\n") {
+				builder.WriteString("\n")
+			} else {
+				builder.WriteString("\n\n")
+			}
+		}
+		builder.WriteString("## ")
+		builder.WriteString(strings.TrimSpace(section.Heading))
+		builder.WriteString("\n")
+		builder.WriteString(normalizeMarkdownBlock(section.BodyMarkdown))
+	}
+
+	return strings.TrimRight(builder.String(), "\n") + "\n", nil
+}
+
+func renderFrontmatter(metadata map[string]any) (string, error) {
+	keys := make([]string, 0, len(metadata))
+	for key := range metadata {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	var builder strings.Builder
+	for _, key := range keys {
+		if strings.TrimSpace(key) == "" {
+			return "", fmt.Errorf("metadata contains empty key")
+		}
+		if err := renderFrontmatterValue(&builder, key, metadata[key]); err != nil {
+			return "", err
+		}
+	}
+	return builder.String(), nil
+}
+
+func renderFrontmatterValue(builder *strings.Builder, key string, value any) error {
+	switch typed := value.(type) {
+	case []any:
+		builder.WriteString(key)
+		builder.WriteString(":\n")
+		for _, item := range typed {
+			builder.WriteString("  - ")
+			builder.WriteString(frontmatterScalar(item))
+			builder.WriteString("\n")
+		}
+	case []string:
+		builder.WriteString(key)
+		builder.WriteString(":\n")
+		for _, item := range typed {
+			builder.WriteString("  - ")
+			builder.WriteString(item)
+			builder.WriteString("\n")
+		}
+	default:
+		builder.WriteString(key)
+		builder.WriteString(": ")
+		builder.WriteString(frontmatterScalar(typed))
+		builder.WriteString("\n")
+	}
+	return nil
+}
+
+func frontmatterScalar(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case nil:
+		return ""
+	default:
+		content, err := json.Marshal(typed)
+		if err != nil {
+			return fmt.Sprint(typed)
+		}
+		return string(content)
+	}
+}
+
+func sortedSections(sections []ImportedSection) []ImportedSection {
+	sorted := append([]ImportedSection(nil), sections...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return sorted[i].SortOrder < sorted[j].SortOrder
+	})
+	return sorted
+}
+
+func normalizeMarkdownBlock(content string) string {
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	return strings.TrimRight(content, "\n")
 }
 
 func parseElysiumItem(path, content, kind, metadataType string) (ImportedItem, error) {

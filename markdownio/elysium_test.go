@@ -158,6 +158,98 @@ func TestImportElysiumLayoutRejectsMalformedFrontmatter(t *testing.T) {
 	}
 }
 
+func TestExportElysiumLayoutWritesMappedPathsAndSections(t *testing.T) {
+	root := t.TempDir()
+	items := []ImportedItem{
+		{
+			Kind:         string(project.KindChapter),
+			Title:        "Chapter 1",
+			BodyMarkdown: "Chapter body.\n\nWith a second paragraph.\n\n",
+			MetadataJSON: `{"status":"draft"}`,
+		},
+		{
+			Kind:         string(project.KindStoryBibleEntry),
+			Title:        "Hugh",
+			BodyMarkdown: "Character body.",
+			MetadataJSON: `{"type":"character","related":["Dwarves"]}`,
+		},
+		{
+			Kind:         string(project.KindStoryBibleEntry),
+			Title:        "Dwarves",
+			BodyMarkdown: "Worldbuilding body.",
+			MetadataJSON: `{"type":"worldbuilding","status":"canon"}`,
+			Sections: []ImportedSection{
+				{
+					Heading:      "NPC Perspective",
+					BodyMarkdown: "NPC-facing details.",
+					SortOrder:    1,
+				},
+				{
+					Heading:      "Player Perspective",
+					BodyMarkdown: "Player-facing details.",
+					SortOrder:    0,
+				},
+			},
+		},
+		{
+			Kind:         string(project.KindProjectNote),
+			Title:        "Loose Ideas",
+			BodyMarkdown: "Note body.",
+			MetadataJSON: `{"mood":"exploratory"}`,
+		},
+	}
+
+	if err := ExportElysiumLayout(root, items); err != nil {
+		t.Fatalf("ExportElysiumLayout() error = %v", err)
+	}
+
+	assertFile(t, root, "story/Chapter 1.md", "# Chapter 1\n---\nstatus: draft\n---\nChapter body.\n\nWith a second paragraph.\n")
+	assertFile(t, root, "characters/Hugh.md", "# Hugh\n---\nrelated:\n  - Dwarves\ntype: character\n---\nCharacter body.\n")
+	assertFile(t, root, "worldbuilding/Dwarves.md", "# Dwarves\n---\nstatus: canon\ntype: worldbuilding\n---\nWorldbuilding body.\n\n## Player Perspective\nPlayer-facing details.\n\n## NPC Perspective\nNPC-facing details.\n")
+	assertFile(t, root, "braindump/Loose Ideas.md", "# Loose Ideas\n---\nmood: exploratory\n---\nNote body.\n")
+}
+
+func TestExportElysiumLayoutWritesBriefPathsAndMetadataRoundTrips(t *testing.T) {
+	root := t.TempDir()
+	items := []ImportedItem{
+		{
+			Kind:         string(project.KindWritingBrief),
+			Title:        "Genre",
+			BodyMarkdown: "Fantasy adventure.",
+			MetadataJSON: `{"audience":"adult","type":"genre"}`,
+		},
+		{
+			Kind:         string(project.KindWritingBrief),
+			Title:        "Synopsis",
+			BodyMarkdown: "A compact plot summary.",
+			MetadataJSON: `{"type":"synopsis"}`,
+		},
+	}
+
+	if err := ExportElysiumLayout(root, items); err != nil {
+		t.Fatalf("ExportElysiumLayout() error = %v", err)
+	}
+
+	items, err := ImportElysiumLayout(root)
+	if err != nil {
+		t.Fatalf("ImportElysiumLayout() exported files error = %v", err)
+	}
+
+	byPath := make(map[string]ImportedItem, len(items))
+	for _, item := range items {
+		byPath[item.Path] = item
+	}
+	if _, ok := byPath["genre.md"]; !ok {
+		t.Fatal("missing exported genre.md")
+	}
+	if _, ok := byPath["synopsis.md"]; !ok {
+		t.Fatal("missing exported synopsis.md")
+	}
+	assertMetadataString(t, byPath["genre.md"].MetadataJSON, "audience", "adult")
+	assertMetadataString(t, byPath["genre.md"].MetadataJSON, "type", "genre")
+	assertMetadataString(t, byPath["synopsis.md"].MetadataJSON, "type", "synopsis")
+}
+
 func writeFile(t *testing.T, root string, rel string, content string) {
 	t.Helper()
 
@@ -167,6 +259,18 @@ func writeFile(t *testing.T, root string, rel string, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write fixture %q: %v", rel, err)
+	}
+}
+
+func assertFile(t *testing.T, root, rel, want string) {
+	t.Helper()
+
+	content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+	if err != nil {
+		t.Fatalf("read exported %q: %v", rel, err)
+	}
+	if string(content) != want {
+		t.Fatalf("exported %q =\n%s\nwant:\n%s", rel, string(content), want)
 	}
 }
 
