@@ -26,6 +26,11 @@ SELECT * FROM content_items
 WHERE project_id = ? AND kind = ?
 ORDER BY sort_order ASC, title ASC;
 
+-- name: ListProjectContentItems :many
+SELECT * FROM content_items
+WHERE project_id = ?
+ORDER BY kind ASC, sort_order ASC, title ASC;
+
 -- name: GetContentItem :one
 SELECT * FROM content_items
 WHERE id = ? AND project_id = ?;

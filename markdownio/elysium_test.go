@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"git.inkyquill.net/inky/writer/project"
 )
 
 func TestImportElysiumLayout(t *testing.T) {
@@ -28,27 +26,27 @@ func TestImportElysiumLayout(t *testing.T) {
 		{
 			name: "chapter",
 			path: filepath.ToSlash(filepath.Join("story", "Chapter 1.md")),
-			kind: string(project.KindChapter),
+			kind: "chapter",
 		},
 		{
 			name: "character",
 			path: filepath.ToSlash(filepath.Join("characters", "Hugh.md")),
-			kind: string(project.KindStoryBibleEntry),
+			kind: "story_bible_entry",
 		},
 		{
 			name: "worldbuilding",
 			path: filepath.ToSlash(filepath.Join("worldbuilding", "Dwarves.md")),
-			kind: string(project.KindStoryBibleEntry),
+			kind: "story_bible_entry",
 		},
 		{
 			name: "genre",
 			path: "genre.md",
-			kind: string(project.KindWritingBrief),
+			kind: "writing_brief",
 		},
 		{
 			name: "synopsis",
 			path: "synopsis.md",
-			kind: string(project.KindWritingBrief),
+			kind: "writing_brief",
 		},
 	}
 
@@ -162,19 +160,19 @@ func TestExportElysiumLayoutWritesMappedPathsAndSections(t *testing.T) {
 	root := t.TempDir()
 	items := []ImportedItem{
 		{
-			Kind:         string(project.KindChapter),
+			Kind:         "chapter",
 			Title:        "Chapter 1",
 			BodyMarkdown: "Chapter body.\n\nWith a second paragraph.\n\n",
 			MetadataJSON: `{"status":"draft"}`,
 		},
 		{
-			Kind:         string(project.KindStoryBibleEntry),
+			Kind:         "story_bible_entry",
 			Title:        "Hugh",
 			BodyMarkdown: "Character body.",
 			MetadataJSON: `{"type":"character","related":["Dwarves"]}`,
 		},
 		{
-			Kind:         string(project.KindStoryBibleEntry),
+			Kind:         "story_bible_entry",
 			Title:        "Dwarves",
 			BodyMarkdown: "Worldbuilding body.",
 			MetadataJSON: `{"type":"worldbuilding","status":"canon"}`,
@@ -192,7 +190,7 @@ func TestExportElysiumLayoutWritesMappedPathsAndSections(t *testing.T) {
 			},
 		},
 		{
-			Kind:         string(project.KindProjectNote),
+			Kind:         "project_note",
 			Title:        "Loose Ideas",
 			BodyMarkdown: "Note body.",
 			MetadataJSON: `{"mood":"exploratory"}`,
@@ -213,13 +211,13 @@ func TestExportElysiumLayoutWritesBriefPathsAndMetadataRoundTrips(t *testing.T) 
 	root := t.TempDir()
 	items := []ImportedItem{
 		{
-			Kind:         string(project.KindWritingBrief),
+			Kind:         "writing_brief",
 			Title:        "Genre",
 			BodyMarkdown: "Fantasy adventure.",
 			MetadataJSON: `{"audience":"adult","type":"genre"}`,
 		},
 		{
-			Kind:         string(project.KindWritingBrief),
+			Kind:         "writing_brief",
 			Title:        "Synopsis",
 			BodyMarkdown: "A compact plot summary.",
 			MetadataJSON: `{"type":"synopsis"}`,
@@ -254,7 +252,7 @@ func TestExportElysiumLayoutPreservesBodyLineEndings(t *testing.T) {
 	root := t.TempDir()
 	if err := ExportElysiumLayout(root, []ImportedItem{
 		{
-			Kind:         string(project.KindChapter),
+			Kind:         "chapter",
 			Title:        "Line Endings",
 			BodyMarkdown: "First line\r\nSecond line\r\n",
 			Sections: []ImportedSection{
@@ -284,7 +282,7 @@ func TestExportElysiumLayoutRejectsUnsafeTitles(t *testing.T) {
 			root := t.TempDir()
 			err := ExportElysiumLayout(root, []ImportedItem{
 				{
-					Kind:         string(project.KindChapter),
+					Kind:         "chapter",
 					Title:        title,
 					BodyMarkdown: "Body.",
 				},
@@ -300,7 +298,7 @@ func TestExportElysiumLayoutRoundTripsTypedMetadata(t *testing.T) {
 	root := t.TempDir()
 	if err := ExportElysiumLayout(root, []ImportedItem{
 		{
-			Kind:         string(project.KindWritingBrief),
+			Kind:         "writing_brief",
 			Title:        "Genre",
 			BodyMarkdown: "Fantasy.",
 			MetadataJSON: `{"count":2,"enabled":true,"ratio":1.5,"type":"genre","unset":null}`,
@@ -339,7 +337,7 @@ func TestExportElysiumLayoutRoundTripsAmbiguousStringMetadata(t *testing.T) {
 	root := t.TempDir()
 	if err := ExportElysiumLayout(root, []ImportedItem{
 		{
-			Kind:         string(project.KindWritingBrief),
+			Kind:         "writing_brief",
 			Title:        "Genre",
 			BodyMarkdown: "Fantasy.",
 			MetadataJSON: `{"count":"2","enabled":"true","type":"genre","unset":"null"}`,
@@ -373,7 +371,7 @@ func TestExportElysiumLayoutRoundTripsAmbiguousRelationTargets(t *testing.T) {
 	root := t.TempDir()
 	if err := ExportElysiumLayout(root, []ImportedItem{
 		{
-			Kind:         string(project.KindStoryBibleEntry),
+			Kind:         "story_bible_entry",
 			Title:        "Flag",
 			BodyMarkdown: "Body.",
 			MetadataJSON: `{"type":"worldbuilding"}`,
@@ -401,7 +399,7 @@ func TestExportElysiumLayoutRoundTripsEmptyStringLists(t *testing.T) {
 	root := t.TempDir()
 	if err := ExportElysiumLayout(root, []ImportedItem{
 		{
-			Kind:         string(project.KindWritingBrief),
+			Kind:         "writing_brief",
 			Title:        "Genre",
 			BodyMarkdown: "Fantasy.",
 			MetadataJSON: `{"tags":[],"type":"genre"}`,
@@ -438,7 +436,7 @@ func TestExportElysiumLayoutRejectsUnsupportedMetadataValues(t *testing.T) {
 		t.Run(metadataJSON, func(t *testing.T) {
 			err := ExportElysiumLayout(t.TempDir(), []ImportedItem{
 				{
-					Kind:         string(project.KindWritingBrief),
+					Kind:         "writing_brief",
 					Title:        "Genre",
 					BodyMarkdown: "Fantasy.",
 					MetadataJSON: metadataJSON,

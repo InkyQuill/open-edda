@@ -1,11 +1,14 @@
 package app
 
 import (
+	"archive/zip"
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 	"testing/fstest"
@@ -209,6 +212,72 @@ func TestCreateProjectRejectsTrailingJSON(t *testing.T) {
 	}
 }
 
+func TestImportElysiumProject(t *testing.T) {
+	handler := newTestApp(t)
+	body := zippedElysiumFixture(t)
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/import/elysium", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/zip")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	var created project.StoryProject
+	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
+		t.Fatalf("decode import response: %v", err)
+	}
+
+	listChapters := httptest.NewRequest(http.MethodGet, "/api/projects/"+created.ID+"/content?kind=chapter", nil)
+	chapterRec := httptest.NewRecorder()
+	handler.ServeHTTP(chapterRec, listChapters)
+	if chapterRec.Code != http.StatusOK {
+		t.Fatalf("chapter list status = %d, want %d; body = %s", chapterRec.Code, http.StatusOK, chapterRec.Body.String())
+	}
+	var chapters []project.ContentItem
+	if err := json.NewDecoder(chapterRec.Body).Decode(&chapters); err != nil {
+		t.Fatalf("decode chapters: %v", err)
+	}
+	if len(chapters) != 1 {
+		t.Fatalf("chapters len = %d, want 1", len(chapters))
+	}
+
+	listEntries := httptest.NewRequest(http.MethodGet, "/api/projects/"+created.ID+"/content?kind=story_bible_entry", nil)
+	entryRec := httptest.NewRecorder()
+	handler.ServeHTTP(entryRec, listEntries)
+	if entryRec.Code != http.StatusOK {
+		t.Fatalf("entry list status = %d, want %d; body = %s", entryRec.Code, http.StatusOK, entryRec.Body.String())
+	}
+	var entries []project.ContentItem
+	if err := json.NewDecoder(entryRec.Body).Decode(&entries); err != nil {
+		t.Fatalf("decode entries: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("story bible entries len = 0, want at least 1")
+	}
+}
+
+func TestExportElysiumProject(t *testing.T) {
+	handler := newTestApp(t)
+	content := createTestContent(t, handler, "project-1", "Chapter 1")
+	req := httptest.NewRequest(http.MethodGet, "/api/projects/"+content.ProjectID+"/export/elysium", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	reader, err := zip.NewReader(bytes.NewReader(rec.Body.Bytes()), int64(rec.Body.Len()))
+	if err != nil {
+		t.Fatalf("open zip response: %v", err)
+	}
+	if zipFile(reader, "story/Chapter 1.md") == nil {
+		t.Fatal("export zip missing story/Chapter 1.md")
+	}
+}
+
 func createTestContent(t *testing.T, handler http.Handler, projectID string, title string) project.ContentItem {
 	t.Helper()
 
@@ -232,6 +301,54 @@ func createTestContent(t *testing.T, handler http.Handler, projectID string, tit
 		t.Fatalf("decode content response: %v", err)
 	}
 	return content
+}
+
+func zippedElysiumFixture(t *testing.T) []byte {
+	t.Helper()
+
+	var buffer bytes.Buffer
+	writer := zip.NewWriter(&buffer)
+	root := filepath.Join("..", "markdownio", "testdata", "elysium")
+	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".md" {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		header, err := writer.Create(filepath.ToSlash(rel))
+		if err != nil {
+			return err
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		if _, err := io.Copy(header, file); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("zip fixture: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+	return buffer.Bytes()
+}
+
+func zipFile(reader *zip.Reader, name string) *zip.File {
+	for _, file := range reader.File {
+		if file.Name == name {
+			return file
+		}
+	}
+	return nil
 }
 
 func newTestApp(t *testing.T) http.Handler {

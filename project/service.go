@@ -150,6 +150,23 @@ func (s *Service) ListContent(ctx context.Context, projectID string, kind Conten
 	return result, nil
 }
 
+func (s *Service) ListProjectContent(ctx context.Context, projectID string) ([]ContentItem, error) {
+	if _, err := s.queries.GetStoryProjectByID(ctx, projectID); err != nil {
+		return nil, fmt.Errorf("get story project: %w", err)
+	}
+
+	items, err := s.queries.ListProjectContentItems(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list project content items: %w", err)
+	}
+
+	result := make([]ContentItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, contentItemFromStore(item))
+	}
+	return result, nil
+}
+
 func (s *Service) GetContent(ctx context.Context, projectID, contentID string) (ContentItem, error) {
 	item, err := s.queries.GetContentItem(ctx, store.GetContentItemParams{
 		ID:        contentID,
@@ -230,6 +247,70 @@ func (s *Service) UpdateContent(ctx context.Context, input UpdateContentInput) (
 	}
 
 	return updated, nil
+}
+
+func (s *Service) CreateEntrySection(ctx context.Context, input CreateEntrySectionInput) error {
+	if err := s.queries.CreateEntrySection(ctx, store.CreateEntrySectionParams{
+		ID:            newID("section"),
+		ContentItemID: input.ContentItemID,
+		Heading:       input.Heading,
+		BodyMarkdown:  input.BodyMarkdown,
+		SortOrder:     input.SortOrder,
+	}); err != nil {
+		return fmt.Errorf("create entry section: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) ListEntrySections(ctx context.Context, contentID string) ([]EntrySection, error) {
+	sections, err := s.queries.ListEntrySections(ctx, contentID)
+	if err != nil {
+		return nil, fmt.Errorf("list entry sections: %w", err)
+	}
+
+	result := make([]EntrySection, 0, len(sections))
+	for _, section := range sections {
+		result = append(result, EntrySection{
+			Heading:      section.Heading,
+			BodyMarkdown: section.BodyMarkdown,
+			SortOrder:    section.SortOrder,
+		})
+	}
+	return result, nil
+}
+
+func (s *Service) CreateEntryRelation(ctx context.Context, input CreateEntryRelationInput) error {
+	if err := s.queries.CreateEntryRelation(ctx, store.CreateEntryRelationParams{
+		ID:           newID("relation"),
+		ProjectID:    input.ProjectID,
+		SourceItemID: input.SourceItemID,
+		TargetItemID: sql.NullString{},
+		TargetTitle:  input.TargetTitle,
+		RelationType: input.RelationType,
+		CreatedAt:    nowString(),
+	}); err != nil {
+		return fmt.Errorf("create entry relation: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) ListEntryRelations(ctx context.Context, projectID, contentID string) ([]EntryRelation, error) {
+	relations, err := s.queries.ListEntryRelations(ctx, store.ListEntryRelationsParams{
+		ProjectID:    projectID,
+		SourceItemID: contentID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list entry relations: %w", err)
+	}
+
+	result := make([]EntryRelation, 0, len(relations))
+	for _, relation := range relations {
+		result = append(result, EntryRelation{
+			TargetTitle:  relation.TargetTitle,
+			RelationType: relation.RelationType,
+		})
+	}
+	return result, nil
 }
 
 func (s *Service) ListRevisions(ctx context.Context, projectID, contentID string) ([]Revision, error) {

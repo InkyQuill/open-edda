@@ -1,12 +1,18 @@
 package project
 
 import (
+	"archive/zip"
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
+	"git.inkyquill.net/inky/writer/markdownio"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -46,6 +52,8 @@ func RegisterRoutes(r chi.Router, service *Service) {
 	h := httpHandler{service: service}
 	r.Get("/projects", h.listProjects)
 	r.Post("/projects", h.createProject)
+	r.Post("/projects/import/elysium", h.importElysium)
+	r.Get("/projects/{projectID}/export/elysium", h.exportElysium)
 	r.Get("/projects/{projectID}/content", h.listContent)
 	r.Post("/projects/{projectID}/content", h.createContent)
 	r.Get("/projects/{projectID}/content/{contentID}", h.getContent)
@@ -81,6 +89,115 @@ func (h httpHandler) createProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, project)
+}
+
+func (h httpHandler) importElysium(w http.ResponseWriter, r *http.Request) {
+	root, err := unzipRequestBody(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid Elysium zip"})
+		return
+	}
+	defer os.RemoveAll(root)
+
+	items, err := markdownio.ImportElysiumLayout(root)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	project, err := h.service.CreateProject(r.Context(), CreateProjectInput{
+		AuthorID: placeholderAuthorID,
+		Title:    "Imported Elysium",
+		Language: "en",
+	})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	for index, item := range items {
+		content, err := h.service.CreateContent(r.Context(), CreateContentInput{
+			ProjectID:    project.ID,
+			Kind:         ContentKind(item.Kind),
+			Title:        item.Title,
+			BodyMarkdown: item.BodyMarkdown,
+			MetadataJSON: item.MetadataJSON,
+			SortOrder:    int64(index),
+			Reason:       "Elysium import",
+			CreatedBy:    "import",
+		})
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		for _, section := range item.Sections {
+			if err := h.service.CreateEntrySection(r.Context(), CreateEntrySectionInput{
+				ContentItemID: content.ID,
+				Heading:       section.Heading,
+				BodyMarkdown:  section.BodyMarkdown,
+				SortOrder:     int64(section.SortOrder),
+			}); err != nil {
+				writeError(w, err)
+				return
+			}
+		}
+		for _, relation := range item.Relations {
+			if err := h.service.CreateEntryRelation(r.Context(), CreateEntryRelationInput{
+				ProjectID:    project.ID,
+				SourceItemID: content.ID,
+				TargetTitle:  relation.TargetTitle,
+				RelationType: relation.RelationType,
+			}); err != nil {
+				writeError(w, err)
+				return
+			}
+		}
+	}
+
+	writeJSON(w, http.StatusCreated, project)
+}
+
+func (h httpHandler) exportElysium(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectID")
+	content, err := h.service.ListProjectContent(r.Context(), projectID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	items := make([]markdownio.ImportedItem, 0, len(content))
+	for _, item := range content {
+		sections, err := h.service.ListEntrySections(r.Context(), item.ID)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		relations, err := h.service.ListEntryRelations(r.Context(), projectID, item.ID)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		items = append(items, importedItemFromContent(item, sections, relations))
+	}
+
+	root, err := os.MkdirTemp("", "writer-elysium-export-*")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	defer os.RemoveAll(root)
+
+	if err := markdownio.ExportElysiumLayout(root, items); err != nil {
+		writeError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", `attachment; filename="elysium.zip"`)
+	w.WriteHeader(http.StatusOK)
+	if err := zipDirectory(root, w); err != nil {
+		return
+	}
 }
 
 func (h httpHandler) listContent(w http.ResponseWriter, r *http.Request) {
@@ -170,6 +287,116 @@ func (h httpHandler) listRevisions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, revisions)
+}
+
+func importedItemFromContent(item ContentItem, sections []EntrySection, relations []EntryRelation) markdownio.ImportedItem {
+	importedSections := make([]markdownio.ImportedSection, 0, len(sections))
+	for _, section := range sections {
+		importedSections = append(importedSections, markdownio.ImportedSection{
+			Heading:      section.Heading,
+			BodyMarkdown: section.BodyMarkdown,
+			SortOrder:    int(section.SortOrder),
+		})
+	}
+	importedRelations := make([]markdownio.ImportedRelation, 0, len(relations))
+	for _, relation := range relations {
+		importedRelations = append(importedRelations, markdownio.ImportedRelation{
+			TargetTitle:  relation.TargetTitle,
+			RelationType: relation.RelationType,
+		})
+	}
+	return markdownio.ImportedItem{
+		Kind:         string(item.Kind),
+		Title:        item.Title,
+		BodyMarkdown: item.BodyMarkdown,
+		MetadataJSON: item.MetadataJSON,
+		Sections:     importedSections,
+		Relations:    importedRelations,
+	}
+}
+
+func unzipRequestBody(r *http.Request) (string, error) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return "", err
+	}
+	reader, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		return "", err
+	}
+	root, err := os.MkdirTemp("", "writer-elysium-import-*")
+	if err != nil {
+		return "", err
+	}
+	if err := unzipToDirectory(reader, root); err != nil {
+		_ = os.RemoveAll(root)
+		return "", err
+	}
+	return root, nil
+}
+
+func unzipToDirectory(reader *zip.Reader, root string) error {
+	for _, file := range reader.File {
+		if !filepath.IsLocal(file.Name) || strings.Contains(file.Name, `\`) {
+			return errors.New("unsafe zip path")
+		}
+		target := filepath.Join(root, filepath.FromSlash(file.Name))
+		if file.FileInfo().IsDir() {
+			if err := os.MkdirAll(target, 0o755); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		source, err := file.Open()
+		if err != nil {
+			return err
+		}
+		destination, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+		if err != nil {
+			_ = source.Close()
+			return err
+		}
+		_, copyErr := io.Copy(destination, source)
+		closeErr := errors.Join(source.Close(), destination.Close())
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+	}
+	return nil
+}
+
+func zipDirectory(root string, writer io.Writer) error {
+	zipWriter := zip.NewWriter(writer)
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		header, err := zipWriter.Create(filepath.ToSlash(rel))
+		if err != nil {
+			return err
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		_, err = io.Copy(header, file)
+		return err
+	})
+	return errors.Join(err, zipWriter.Close())
 }
 
 func decodeJSON(r *http.Request, value any) error {

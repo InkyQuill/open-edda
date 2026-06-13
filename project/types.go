@@ -28,6 +28,17 @@ type ContentItem struct {
 	CurrentRevision int64       `json:"currentRevision"`
 }
 
+type EntrySection struct {
+	Heading      string `json:"heading"`
+	BodyMarkdown string `json:"bodyMarkdown"`
+	SortOrder    int64  `json:"sortOrder"`
+}
+
+type EntryRelation struct {
+	TargetTitle  string `json:"targetTitle"`
+	RelationType string `json:"relationType"`
+}
+
 type Revision struct {
 	ID             string `json:"id"`
 	ContentItemID  string `json:"contentItemId"`
@@ -54,6 +65,20 @@ type CreateContentInput struct {
 	SortOrder    int64
 	Reason       string
 	CreatedBy    string
+}
+
+type CreateEntrySectionInput struct {
+	ContentItemID string
+	Heading       string
+	BodyMarkdown  string
+	SortOrder     int64
+}
+
+type CreateEntryRelationInput struct {
+	ProjectID    string
+	SourceItemID string
+	TargetTitle  string
+	RelationType string
 }
 
 type UpdateContentInput struct {

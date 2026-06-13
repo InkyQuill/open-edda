@@ -20,6 +20,7 @@ type Querier interface {
 	ListContentItems(ctx context.Context, arg ListContentItemsParams) ([]ContentItem, error)
 	ListEntryRelations(ctx context.Context, arg ListEntryRelationsParams) ([]EntryRelation, error)
 	ListEntrySections(ctx context.Context, contentItemID string) ([]EntrySection, error)
+	ListProjectContentItems(ctx context.Context, projectID string) ([]ContentItem, error)
 	ListRevisions(ctx context.Context, arg ListRevisionsParams) ([]Revision, error)
 	ListStoryProjects(ctx context.Context, authorID string) ([]StoryProject, error)
 	SearchContent(ctx context.Context, arg SearchContentParams) ([]ContentItem, error)

@@ -358,6 +358,47 @@ func (q *Queries) ListEntrySections(ctx context.Context, contentItemID string) (
 	return items, nil
 }
 
+const listProjectContentItems = `-- name: ListProjectContentItems :many
+SELECT id, project_id, kind, title, slug, body_markdown, metadata_json, sort_order, current_revision, created_at, updated_at FROM content_items
+WHERE project_id = ?
+ORDER BY kind ASC, sort_order ASC, title ASC
+`
+
+func (q *Queries) ListProjectContentItems(ctx context.Context, projectID string) ([]ContentItem, error) {
+	rows, err := q.db.QueryContext(ctx, listProjectContentItems, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ContentItem
+	for rows.Next() {
+		var i ContentItem
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Kind,
+			&i.Title,
+			&i.Slug,
+			&i.BodyMarkdown,
+			&i.MetadataJson,
+			&i.SortOrder,
+			&i.CurrentRevision,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRevisions = `-- name: ListRevisions :many
 SELECT revisions.id, revisions.content_item_id, revisions.revision_number, revisions.body_markdown, revisions.metadata_json, revisions.reason, revisions.created_by, revisions.created_at
 FROM revisions

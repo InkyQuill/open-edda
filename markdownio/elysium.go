@@ -9,8 +9,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"git.inkyquill.net/inky/writer/project"
 )
 
 type ImportedItem struct {
@@ -107,17 +105,17 @@ func ExportElysiumLayout(root string, items []ImportedItem) error {
 func elysiumKind(path string) (kind string, metadataType string, ok bool) {
 	switch {
 	case path == "genre.md":
-		return string(project.KindWritingBrief), "genre", true
+		return "writing_brief", "genre", true
 	case path == "synopsis.md":
-		return string(project.KindWritingBrief), "synopsis", true
+		return "writing_brief", "synopsis", true
 	case strings.HasPrefix(path, "story/"):
-		return string(project.KindChapter), "", true
+		return "chapter", "", true
 	case strings.HasPrefix(path, "characters/"):
-		return string(project.KindStoryBibleEntry), "character", true
+		return "story_bible_entry", "character", true
 	case strings.HasPrefix(path, "worldbuilding/"):
-		return string(project.KindStoryBibleEntry), "worldbuilding", true
+		return "story_bible_entry", "worldbuilding", true
 	case strings.HasPrefix(path, "braindump/"):
-		return string(project.KindProjectNote), "project_note", true
+		return "project_note", "project_note", true
 	default:
 		return "", "", false
 	}
@@ -134,10 +132,10 @@ func exportElysiumPath(item ImportedItem, metadata map[string]any) (string, erro
 		return "", err
 	}
 	metadataType, _ := metadata["type"].(string)
-	switch project.ContentKind(item.Kind) {
-	case project.KindChapter:
+	switch item.Kind {
+	case "chapter":
 		return filepath.ToSlash(filepath.Join("story", filename)), nil
-	case project.KindStoryBibleEntry:
+	case "story_bible_entry":
 		switch metadataType {
 		case "character":
 			return filepath.ToSlash(filepath.Join("characters", filename)), nil
@@ -146,9 +144,9 @@ func exportElysiumPath(item ImportedItem, metadata map[string]any) (string, erro
 		default:
 			return filepath.ToSlash(filepath.Join("worldbuilding", filename)), nil
 		}
-	case project.KindProjectNote:
+	case "project_note":
 		return filepath.ToSlash(filepath.Join("braindump", filename)), nil
-	case project.KindWritingBrief:
+	case "writing_brief":
 		switch metadataType {
 		case "genre":
 			return "genre.md", nil
