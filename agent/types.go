@@ -119,11 +119,51 @@ type CreateModelVariantInput struct {
 }
 
 type PromptProfile struct {
-	ID                   string `json:"id"`
-	ProjectID            string `json:"projectId"`
-	InstructionsMarkdown string `json:"instructionsMarkdown"`
-	CreatedAt            string `json:"createdAt"`
-	UpdatedAt            string `json:"updatedAt"`
+	ID                        string `json:"id"`
+	ProjectID                 string `json:"projectId"`
+	Genre                     string `json:"genre"`
+	Tense                     string `json:"tense"`
+	POV                       string `json:"pov"`
+	Voice                     string `json:"voice"`
+	InstructionsMarkdown      string `json:"instructionsMarkdown"`
+	PromptRecordRetentionDays int64  `json:"promptRecordRetentionDays"`
+	CreatedAt                 string `json:"createdAt"`
+	UpdatedAt                 string `json:"updatedAt"`
+}
+
+type UpsertPromptProfileInput struct {
+	ProjectID                 string
+	Genre                     string
+	Tense                     string
+	POV                       string
+	Voice                     string
+	InstructionsMarkdown      string
+	PromptRecordRetentionDays int64
+}
+
+type BuildPromptInput struct {
+	ProjectID       string
+	SessionID       string
+	ActionKind      ActionKind
+	TargetContentID string
+	CursorSummary   string
+	UserGuidance    string
+}
+
+type PromptBundle struct {
+	SystemMessage    string                  `json:"systemMessage"`
+	DeveloperMessage string                  `json:"developerMessage"`
+	UserMessage      string                  `json:"userMessage"`
+	Tools            []CompletionTool        `json:"tools"`
+	MetadataJSON     string                  `json:"metadataJson"`
+	ContextSources   []ContextSourceSnapshot `json:"contextSources"`
+}
+
+type ContextSourceSnapshot struct {
+	SourceKey        string `json:"sourceKey"`
+	SourceVersion    string `json:"sourceVersion,omitempty"`
+	RenderedMarkdown string `json:"renderedMarkdown"`
+	ValueJSON        string `json:"valueJson"`
 }
 
 type QuickAction struct {
@@ -177,6 +217,7 @@ type ContextSnapshot struct {
 	ID               string `json:"id"`
 	PromptRecordID   string `json:"promptRecordId"`
 	SourceKey        string `json:"sourceKey"`
+	SourceVersion    string `json:"sourceVersion"`
 	RenderedMarkdown string `json:"renderedMarkdown"`
 	ValueJSON        string `json:"valueJson"`
 	CreatedAt        string `json:"createdAt"`

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -316,6 +317,52 @@ func (s *Service) GetModelVariantForProject(ctx context.Context, projectID, mode
 	return modelVariantFromStore(model), nil
 }
 
+func (s *Service) GetPromptProfile(ctx context.Context, projectID string) (PromptProfile, error) {
+	profile, err := s.queries.GetPromptProfile(ctx, projectID)
+	if err != nil {
+		return PromptProfile{}, fmt.Errorf("get prompt profile: %w", err)
+	}
+	return promptProfileFromStore(profile), nil
+}
+
+func (s *Service) UpsertPromptProfile(ctx context.Context, input UpsertPromptProfileInput) (PromptProfile, error) {
+	if _, err := s.queries.GetStoryProjectByID(ctx, input.ProjectID); err != nil {
+		return PromptProfile{}, fmt.Errorf("get story project: %w", err)
+	}
+
+	now := nowString()
+	existing, err := s.queries.GetPromptProfile(ctx, input.ProjectID)
+	id := newID("profile")
+	createdAt := now
+	if err == nil {
+		id = existing.ID
+		createdAt = existing.CreatedAt
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return PromptProfile{}, fmt.Errorf("get prompt profile: %w", err)
+	}
+
+	if err := s.queries.UpsertPromptProfile(ctx, store.UpsertPromptProfileParams{
+		ID:                        id,
+		ProjectID:                 input.ProjectID,
+		Genre:                     input.Genre,
+		Tense:                     input.Tense,
+		Pov:                       input.POV,
+		Voice:                     input.Voice,
+		InstructionsMarkdown:      input.InstructionsMarkdown,
+		PromptRecordRetentionDays: input.PromptRecordRetentionDays,
+		CreatedAt:                 createdAt,
+		UpdatedAt:                 now,
+	}); err != nil {
+		return PromptProfile{}, fmt.Errorf("upsert prompt profile: %w", err)
+	}
+
+	profile, err := s.queries.GetPromptProfile(ctx, input.ProjectID)
+	if err != nil {
+		return PromptProfile{}, fmt.Errorf("get prompt profile: %w", err)
+	}
+	return promptProfileFromStore(profile), nil
+}
+
 func sessionFromStore(session store.AgentSession) Session {
 	return Session{
 		ID:             session.ID,
@@ -369,6 +416,21 @@ func modelVariantFromStore(model store.ModelVariant) ModelVariant {
 		CompatibilityJSON:         model.CompatibilityJson,
 		CreatedAt:                 model.CreatedAt,
 		UpdatedAt:                 model.UpdatedAt,
+	}
+}
+
+func promptProfileFromStore(profile store.PromptProfile) PromptProfile {
+	return PromptProfile{
+		ID:                        profile.ID,
+		ProjectID:                 profile.ProjectID,
+		Genre:                     profile.Genre,
+		Tense:                     profile.Tense,
+		POV:                       profile.Pov,
+		Voice:                     profile.Voice,
+		InstructionsMarkdown:      profile.InstructionsMarkdown,
+		PromptRecordRetentionDays: profile.PromptRecordRetentionDays,
+		CreatedAt:                 profile.CreatedAt,
+		UpdatedAt:                 profile.UpdatedAt,
 	}
 }
 
