@@ -164,6 +164,7 @@ type UpdateEntrySectionInput struct {
 	ContentID      string
 	Heading        string
 	BodyMarkdown   string
+	Reason         string
 	AgentSessionID string
 	ActionKind     string
 	ModelVariantID string

@@ -371,6 +371,30 @@ func TestStructuredWriteStaleExpectedRevisionReturnsConflict(t *testing.T) {
 	}
 }
 
+func TestStructuredWriteExpectedRevisionMustMatchFetchedRevision(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	chapter := createStructuredWriteContent(t, ctx, service, KindChapter, "Opening", "The lantern burned blue.", `{}`)
+
+	_, err := service.AppendToContent(ctx, StructuredWriteInput{
+		ProjectID:         "project-1",
+		ContentID:         chapter.ID,
+		ExpectedRevision:  2,
+		GeneratedMarkdown: "\nShould not compose from revision one.",
+		Reason:            "ahead of fetched revision",
+		AgentSessionID:    "session-1",
+		ActionKind:        "continuation",
+		ModelVariantID:    "model-1",
+	})
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("AppendToContent() error = %v, want ErrConflict", err)
+	}
+	assertContentUnchanged(t, ctx, service, chapter.ID, "The lantern burned blue.", 1)
+	assertRevisionCount(t, ctx, db, chapter.ID, 1)
+}
+
 func TestUpdateEntrySectionBodyUpdatesSectionAndRecordsActivity(t *testing.T) {
 	db := openMigratedTestDB(t)
 	service := NewService(db)
@@ -392,6 +416,7 @@ func TestUpdateEntrySectionBodyUpdatesSectionAndRecordsActivity(t *testing.T) {
 		ContentID:      entry.ID,
 		Heading:        "Motivation",
 		BodyMarkdown:   "Protect the glass city.",
+		Reason:         "preserve section update reason",
 		AgentSessionID: "session-1",
 		ActionKind:     "rewrite",
 		ModelVariantID: "model-1",
@@ -860,6 +885,9 @@ func assertSectionActivity(t *testing.T, ctx context.Context, db *sql.DB, conten
 	}
 	if metadata["operationKind"] != "update_entry_section" {
 		t.Fatalf("operationKind = %#v, want update_entry_section", metadata["operationKind"])
+	}
+	if metadata["reason"] != "preserve section update reason" {
+		t.Fatalf("reason = %#v, want preserve section update reason", metadata["reason"])
 	}
 	if metadata["actionKind"] != "rewrite" {
 		t.Fatalf("actionKind = %#v, want rewrite", metadata["actionKind"])

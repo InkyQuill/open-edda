@@ -408,6 +408,7 @@ func (s *Service) executeWriteTool(ctx context.Context, input ToolCallInput, ses
 			ContentID:      args.ContentID,
 			Heading:        args.Heading,
 			BodyMarkdown:   args.GeneratedMarkdown,
+			Reason:         args.Reason,
 			AgentSessionID: session.ID,
 			ActionKind:     string(session.ActionKind),
 			ModelVariantID: session.ModelVariantID,
@@ -417,6 +418,7 @@ func (s *Service) executeWriteTool(ctx context.Context, input ToolCallInput, ses
 		}
 		return section, writeActivityMetadata(input.ToolName, session, args.ContentID, 0, 0, map[string]any{
 			"heading": args.Heading,
+			"reason":  args.Reason,
 		}), nil
 	default:
 		return nil, nil, fmt.Errorf("unknown write tool %q", input.ToolName)

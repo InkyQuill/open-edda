@@ -463,68 +463,112 @@ func (s *Service) UpdateContent(ctx context.Context, input UpdateContentInput) (
 }
 
 func (s *Service) AppendToContent(ctx context.Context, input StructuredWriteInput) (ContentItem, error) {
-	item, err := s.GetContent(ctx, input.ProjectID, input.ContentID)
-	if err != nil {
-		return ContentItem{}, err
-	}
-	input.InsertPosition = int64(len(item.BodyMarkdown))
-	return s.writeContent(ctx, input, item.BodyMarkdown+input.GeneratedMarkdown)
+	return s.structuredWriteContent(ctx, input, func(item store.ContentItem) (string, error) {
+		return item.BodyMarkdown + input.GeneratedMarkdown, nil
+	})
 }
 
 func (s *Service) InsertIntoContent(ctx context.Context, input StructuredWriteInput) (ContentItem, error) {
-	item, err := s.GetContent(ctx, input.ProjectID, input.ContentID)
-	if err != nil {
-		return ContentItem{}, err
-	}
-	if input.InsertPosition < 0 || input.InsertPosition > int64(len(item.BodyMarkdown)) {
-		return ContentItem{}, fmt.Errorf("insert position out of range")
-	}
-	if !validUTF8ByteBoundary(item.BodyMarkdown, input.InsertPosition) {
-		return ContentItem{}, fmt.Errorf("insert position byte offset %d is not a UTF-8 rune boundary", input.InsertPosition)
-	}
-	position := int(input.InsertPosition)
-	body := item.BodyMarkdown[:position] + input.GeneratedMarkdown + item.BodyMarkdown[position:]
-	return s.writeContent(ctx, input, body)
+	return s.structuredWriteContent(ctx, input, func(item store.ContentItem) (string, error) {
+		if input.InsertPosition < 0 || input.InsertPosition > int64(len(item.BodyMarkdown)) {
+			return "", fmt.Errorf("insert position out of range")
+		}
+		if !validUTF8ByteBoundary(item.BodyMarkdown, input.InsertPosition) {
+			return "", fmt.Errorf("insert position byte offset %d is not a UTF-8 rune boundary", input.InsertPosition)
+		}
+		position := int(input.InsertPosition)
+		return item.BodyMarkdown[:position] + input.GeneratedMarkdown + item.BodyMarkdown[position:], nil
+	})
 }
 
 func (s *Service) ReplaceContentRange(ctx context.Context, input StructuredWriteInput) (ContentItem, error) {
-	item, err := s.GetContent(ctx, input.ProjectID, input.ContentID)
-	if err != nil {
-		return ContentItem{}, err
-	}
-	if input.SelectionStart < 0 || input.SelectionEnd < input.SelectionStart || input.SelectionEnd > int64(len(item.BodyMarkdown)) {
-		return ContentItem{}, fmt.Errorf("selection range out of range")
-	}
-	if !validUTF8ByteBoundary(item.BodyMarkdown, input.SelectionStart) {
-		return ContentItem{}, fmt.Errorf("selection start byte offset %d is not a UTF-8 rune boundary", input.SelectionStart)
-	}
-	if !validUTF8ByteBoundary(item.BodyMarkdown, input.SelectionEnd) {
-		return ContentItem{}, fmt.Errorf("selection end byte offset %d is not a UTF-8 rune boundary", input.SelectionEnd)
-	}
-	start := int(input.SelectionStart)
-	end := int(input.SelectionEnd)
-	body := item.BodyMarkdown[:start] + input.GeneratedMarkdown + item.BodyMarkdown[end:]
-	return s.writeContent(ctx, input, body)
+	return s.structuredWriteContent(ctx, input, func(item store.ContentItem) (string, error) {
+		if input.SelectionStart < 0 || input.SelectionEnd < input.SelectionStart || input.SelectionEnd > int64(len(item.BodyMarkdown)) {
+			return "", fmt.Errorf("selection range out of range")
+		}
+		if !validUTF8ByteBoundary(item.BodyMarkdown, input.SelectionStart) {
+			return "", fmt.Errorf("selection start byte offset %d is not a UTF-8 rune boundary", input.SelectionStart)
+		}
+		if !validUTF8ByteBoundary(item.BodyMarkdown, input.SelectionEnd) {
+			return "", fmt.Errorf("selection end byte offset %d is not a UTF-8 rune boundary", input.SelectionEnd)
+		}
+		start := int(input.SelectionStart)
+		end := int(input.SelectionEnd)
+		return item.BodyMarkdown[:start] + input.GeneratedMarkdown + item.BodyMarkdown[end:], nil
+	})
 }
 
-func (s *Service) writeContent(ctx context.Context, input StructuredWriteInput, bodyMarkdown string) (ContentItem, error) {
-	item, err := s.GetContent(ctx, input.ProjectID, input.ContentID)
-	if err != nil {
+func (s *Service) structuredWriteContent(ctx context.Context, input StructuredWriteInput, compose func(store.ContentItem) (string, error)) (ContentItem, error) {
+	var updated ContentItem
+	if err := s.inTx(ctx, func(queries *store.Queries) error {
+		item, err := queries.GetContentItem(ctx, store.GetContentItemParams{
+			ID:        input.ContentID,
+			ProjectID: input.ProjectID,
+		})
+		if err != nil {
+			return fmt.Errorf("get content item: %w", err)
+		}
+		if item.CurrentRevision != input.ExpectedRevision {
+			return ErrConflict
+		}
+
+		bodyMarkdown, err := compose(item)
+		if err != nil {
+			return err
+		}
+		nextRevision := input.ExpectedRevision + 1
+		now := nowString()
+
+		affected, err := queries.UpdateContentItemBody(ctx, store.UpdateContentItemBodyParams{
+			BodyMarkdown:     bodyMarkdown,
+			MetadataJson:     item.MetadataJson,
+			NextRevision:     nextRevision,
+			UpdatedAt:        now,
+			ID:               input.ContentID,
+			ProjectID:        input.ProjectID,
+			ExpectedRevision: input.ExpectedRevision,
+		})
+		if err != nil {
+			return fmt.Errorf("update content item: %w", err)
+		}
+		if affected == 0 {
+			return ErrConflict
+		}
+
+		if err := queries.CreateRevision(ctx, store.CreateRevisionParams{
+			ID:             newID("revision"),
+			ContentItemID:  input.ContentID,
+			RevisionNumber: nextRevision,
+			BodyMarkdown:   bodyMarkdown,
+			MetadataJson:   item.MetadataJson,
+			Reason:         emptyDefault(input.Reason, "content update"),
+			CreatedBy:      "agent",
+			CreatedAt:      now,
+			AgentSessionID: nullString(input.AgentSessionID),
+			ActionKind:     input.ActionKind,
+			ModelVariantID: nullString(input.ModelVariantID),
+			SkillID:        input.SkillID,
+		}); err != nil {
+			return fmt.Errorf("create revision: %w", err)
+		}
+
+		updated = contentItemFromStore(store.ContentItem{
+			ID:              item.ID,
+			ProjectID:       item.ProjectID,
+			Kind:            item.Kind,
+			Title:           item.Title,
+			Slug:            item.Slug,
+			BodyMarkdown:    bodyMarkdown,
+			MetadataJson:    item.MetadataJson,
+			SortOrder:       item.SortOrder,
+			CurrentRevision: nextRevision,
+		})
+		return nil
+	}); err != nil {
 		return ContentItem{}, err
 	}
-	return s.UpdateContent(ctx, UpdateContentInput{
-		ProjectID:        input.ProjectID,
-		ContentID:        input.ContentID,
-		ExpectedRevision: input.ExpectedRevision,
-		BodyMarkdown:     bodyMarkdown,
-		MetadataJSON:     item.MetadataJSON,
-		Reason:           input.Reason,
-		CreatedBy:        "agent",
-		AgentSessionID:   input.AgentSessionID,
-		ActionKind:       input.ActionKind,
-		ModelVariantID:   input.ModelVariantID,
-		SkillID:          input.SkillID,
-	})
+
+	return updated, nil
 }
 
 func (s *Service) CreateEntrySection(ctx context.Context, input CreateEntrySectionInput) error {
@@ -577,6 +621,7 @@ func (s *Service) UpdateEntrySectionBody(ctx context.Context, input UpdateEntryS
 			"targetContentId": input.ContentID,
 			"operationKind":   "update_entry_section",
 			"heading":         input.Heading,
+			"reason":          input.Reason,
 			"actionKind":      input.ActionKind,
 			"modelVariantId":  input.ModelVariantID,
 			"agentSessionId":  input.AgentSessionID,

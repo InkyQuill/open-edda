@@ -135,6 +135,7 @@ func TestExecuteWriteToolsRecordRevisionActivityAndArtifact(t *testing.T) {
 			wantMetadata: map[string]any{
 				"operationKind": "update_entry_section",
 				"heading":       "Motivation",
+				"reason":        "update motivation",
 			},
 		},
 	}
