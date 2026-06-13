@@ -119,20 +119,33 @@ type DollarSkillToken = {
   query: string;
 };
 
+const skillMentionListboxId = "chat-skill-mention-listbox";
+const tokenBoundaryPattern = /[\s,.;:()[\]{}]/;
+
+function isTokenBoundary(value: string): boolean {
+  return tokenBoundaryPattern.test(value);
+}
+
+function skillMentionOptionId(skillId: string): string {
+  return `${skillMentionListboxId}-option-${skillId}`;
+}
+
 function findDollarSkillToken(value: string, cursorPosition: number): DollarSkillToken | null {
   const cursor = Math.max(0, Math.min(cursorPosition, value.length));
   let start = cursor;
-  while (start > 0 && !/\s/.test(value[start - 1])) {
+  while (start > 0 && !isTokenBoundary(value[start - 1])) {
     start -= 1;
-  }
-  const prefix = value.slice(start, cursor);
-  if (!prefix.startsWith("$") || prefix.includes("/")) {
-    return null;
   }
 
   let end = cursor;
-  while (end < value.length && !/\s/.test(value[end])) {
+  while (end < value.length && !isTokenBoundary(value[end])) {
     end += 1;
+  }
+
+  const token = value.slice(start, end);
+  const prefix = value.slice(start, cursor);
+  if (!token.startsWith("$") || token.includes("/") || !prefix.startsWith("$")) {
+    return null;
   }
 
   return { start, end, query: prefix.slice(1).toLowerCase() };
@@ -1206,6 +1219,9 @@ function AgentPanel({
     activeDollarSkillToken !== null &&
     activeDollarSkillTokenKey !== dismissedSkillMentionKey &&
     skillMentionSuggestions.length > 0;
+  const visibleHighlightedSkillIndex =
+    showSkillMentionSuggestions && highlightedSkillIndex < skillMentionSuggestions.length ? highlightedSkillIndex : 0;
+  const highlightedSkill = showSkillMentionSuggestions ? skillMentionSuggestions[visibleHighlightedSkillIndex] : null;
 
   useEffect(() => {
     setHighlightedSkillIndex(0);
@@ -1291,7 +1307,7 @@ function AgentPanel({
     }
     const beforeToken = messageInput.slice(0, activeDollarSkillToken.start);
     const afterToken = messageInput.slice(activeDollarSkillToken.end);
-    const suffix = afterToken.length === 0 || /^\s/.test(afterToken) ? "" : " ";
+    const suffix = afterToken.length === 0 || isTokenBoundary(afterToken[0]) ? "" : " ";
     const mention = `$${skill.name}`;
     const nextInput = `${beforeToken}${mention}${suffix}${afterToken}`;
     const nextCursorPosition = beforeToken.length + mention.length + suffix.length;
@@ -1328,7 +1344,9 @@ function AgentPanel({
     }
     if (event.key === "Enter" || event.key === "Tab") {
       event.preventDefault();
-      acceptSkillMention(skillMentionSuggestions[highlightedSkillIndex] ?? skillMentionSuggestions[0]);
+      if (highlightedSkill) {
+        acceptSkillMention(highlightedSkill);
+      }
     }
   }
 
@@ -1591,18 +1609,23 @@ function AgentPanel({
               onKeyDown={handleChatKeyDown}
               onKeyUp={(event) => updateChatCursorPosition(event.currentTarget)}
               onSelect={(event) => updateChatCursorPosition(event.currentTarget)}
+              aria-autocomplete="list"
+              aria-expanded={showSkillMentionSuggestions}
+              aria-controls={showSkillMentionSuggestions ? skillMentionListboxId : undefined}
+              aria-activedescendant={highlightedSkill ? skillMentionOptionId(highlightedSkill.id) : undefined}
               placeholder="Ask about this project..."
               disabled={!activeModel || isSendingMessage}
             />
             {showSkillMentionSuggestions ? (
-              <div className="skill-mention-list" role="listbox" aria-label="Skill suggestions">
+              <div id={skillMentionListboxId} className="skill-mention-list" role="listbox" aria-label="Skill suggestions">
                 {skillMentionSuggestions.map((skill, index) => (
                   <button
+                    id={skillMentionOptionId(skill.id)}
                     key={skill.id}
                     type="button"
                     role="option"
-                    aria-selected={index === highlightedSkillIndex}
-                    data-active={index === highlightedSkillIndex}
+                    aria-selected={index === visibleHighlightedSkillIndex}
+                    data-active={index === visibleHighlightedSkillIndex}
                     onMouseDown={(event) => {
                       event.preventDefault();
                       acceptSkillMention(skill);

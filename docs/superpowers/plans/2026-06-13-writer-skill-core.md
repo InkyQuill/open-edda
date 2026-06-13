@@ -1591,6 +1591,8 @@ const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
 
 Render compact checkboxes for installed skills. Pass `skillIds: selectedSkillIds` to chat session creation, continuation, rewrite, and read-check calls. When no skills are installed, render no selector.
 
+Skill invocation notation follows the editor-wide convention: `/` is reserved for commands, `@` is reserved for entity mentions, and `$` is reserved for skill mentions. In chat, typing `$` should open skill search suggestions; accepting a `$skill-name` suggestion selects that skill through the same `selectedSkillIds` state used by chat session creation and quick actions.
+
 - [ ] **Step 5: Add styles**
 
 Add CSS classes:

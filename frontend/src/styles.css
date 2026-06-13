@@ -640,7 +640,8 @@ button {
 }
 
 .chat-input-wrap {
-  position: relative;
+  display: grid;
+  gap: 6px;
 }
 
 .chat-form textarea {
@@ -648,12 +649,8 @@ button {
 }
 
 .skill-mention-list {
-  position: absolute;
-  z-index: 5;
-  right: 8px;
-  bottom: 8px;
   display: grid;
-  width: min(320px, calc(100% - 16px));
+  width: min(320px, 100%);
   max-height: 190px;
   overflow: auto;
   border: 1px solid #cbd5e1;
