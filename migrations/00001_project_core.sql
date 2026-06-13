@@ -82,6 +82,12 @@ CREATE TABLE attached_notes (
   FOREIGN KEY (content_item_id, project_id) REFERENCES content_items(id, project_id) ON DELETE CASCADE
 );
 
+CREATE INDEX idx_entry_sections_content_item_id ON entry_sections(content_item_id);
+CREATE INDEX idx_revisions_content_item_id_revision_number ON revisions(content_item_id, revision_number DESC);
+CREATE INDEX idx_entry_relations_project_source ON entry_relations(project_id, source_item_id, target_title);
+CREATE INDEX idx_entry_relations_project_target ON entry_relations(project_id, target_item_id);
+CREATE INDEX idx_attached_notes_project_content_item ON attached_notes(project_id, content_item_id);
+
 CREATE VIRTUAL TABLE content_search USING fts5(
   title,
   body_markdown,
@@ -117,6 +123,11 @@ DROP TRIGGER IF EXISTS content_items_au;
 DROP TRIGGER IF EXISTS content_items_ad;
 DROP TRIGGER IF EXISTS content_items_ai;
 DROP TABLE IF EXISTS content_search;
+DROP INDEX IF EXISTS idx_attached_notes_project_content_item;
+DROP INDEX IF EXISTS idx_entry_relations_project_target;
+DROP INDEX IF EXISTS idx_entry_relations_project_source;
+DROP INDEX IF EXISTS idx_revisions_content_item_id_revision_number;
+DROP INDEX IF EXISTS idx_entry_sections_content_item_id;
 DROP TABLE IF EXISTS attached_notes;
 DROP TABLE IF EXISTS revisions;
 DROP TABLE IF EXISTS entry_relations;
