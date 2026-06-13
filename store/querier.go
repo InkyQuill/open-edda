@@ -11,7 +11,7 @@ import (
 type Querier interface {
 	CreateActivityEvent(ctx context.Context, arg CreateActivityEventParams) error
 	CreateAgentMessage(ctx context.Context, arg CreateAgentMessageParams) error
-	CreateAgentMessageForProject(ctx context.Context, arg CreateAgentMessageForProjectParams) error
+	CreateAgentMessageForProject(ctx context.Context, arg CreateAgentMessageForProjectParams) (int64, error)
 	CreateAgentSession(ctx context.Context, arg CreateAgentSessionParams) error
 	CreateContentItem(ctx context.Context, arg CreateContentItemParams) error
 	CreateEntryRelation(ctx context.Context, arg CreateEntryRelationParams) error
@@ -31,6 +31,7 @@ type Querier interface {
 	GetContentItem(ctx context.Context, arg GetContentItemParams) (ContentItem, error)
 	GetGenerationCandidate(ctx context.Context, arg GetGenerationCandidateParams) (GenerationCandidate, error)
 	GetModelVariant(ctx context.Context, arg GetModelVariantParams) (ModelVariant, error)
+	GetModelVariantForProject(ctx context.Context, arg GetModelVariantForProjectParams) (ModelVariant, error)
 	GetPromptProfile(ctx context.Context, projectID string) (PromptProfile, error)
 	GetProviderConfig(ctx context.Context, arg GetProviderConfigParams) (ProviderConfig, error)
 	GetStoryProject(ctx context.Context, arg GetStoryProjectParams) (StoryProject, error)

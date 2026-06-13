@@ -41,6 +41,14 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 	if _, err := s.queries.GetStoryProjectByID(ctx, input.ProjectID); err != nil {
 		return Session{}, fmt.Errorf("get story project: %w", err)
 	}
+	if input.ModelVariantID != "" {
+		if _, err := s.queries.GetModelVariantForProject(ctx, store.GetModelVariantForProjectParams{
+			ProjectID:      input.ProjectID,
+			ModelVariantID: input.ModelVariantID,
+		}); err != nil {
+			return Session{}, fmt.Errorf("get model variant for project: %w", err)
+		}
+	}
 
 	now := nowString()
 	session := Session{
@@ -122,7 +130,7 @@ func (s *Service) AppendMessage(ctx context.Context, input AppendMessageInput) (
 		CreatedAt:    nowString(),
 	}
 
-	if err := s.queries.CreateAgentMessageForProject(ctx, store.CreateAgentMessageForProjectParams{
+	affected, err := s.queries.CreateAgentMessageForProject(ctx, store.CreateAgentMessageForProjectParams{
 		ID:           message.ID,
 		Role:         string(message.Role),
 		BodyMarkdown: message.BodyMarkdown,
@@ -130,8 +138,12 @@ func (s *Service) AppendMessage(ctx context.Context, input AppendMessageInput) (
 		CreatedAt:    message.CreatedAt,
 		SessionID:    message.SessionID,
 		ProjectID:    input.ProjectID,
-	}); err != nil {
+	})
+	if err != nil {
 		return Message{}, fmt.Errorf("create agent message: %w", err)
+	}
+	if affected != 1 {
+		return Message{}, fmt.Errorf("create agent message: affected rows = %d, want 1", affected)
 	}
 
 	return message, nil

@@ -56,6 +56,14 @@ JOIN provider_configs ON provider_configs.id = model_variants.provider_config_id
 WHERE model_variants.id = sqlc.arg(id)
   AND provider_configs.author_id = sqlc.arg(author_id);
 
+-- name: GetModelVariantForProject :one
+SELECT model_variants.*
+FROM model_variants
+JOIN provider_configs ON provider_configs.id = model_variants.provider_config_id
+JOIN story_projects ON story_projects.author_id = provider_configs.author_id
+WHERE story_projects.id = sqlc.arg(project_id)
+  AND model_variants.id = sqlc.arg(model_variant_id);
+
 -- name: UpdateModelVariant :exec
 UPDATE model_variants
 SET name = sqlc.arg(name),
@@ -134,7 +142,7 @@ SELECT * FROM agent_messages
 WHERE session_id = ?
 ORDER BY created_at ASC;
 
--- name: CreateAgentMessageForProject :exec
+-- name: CreateAgentMessageForProject :execrows
 INSERT INTO agent_messages (
   id, session_id, role, body_markdown, metadata_json, created_at
 )

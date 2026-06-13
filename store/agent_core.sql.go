@@ -66,7 +66,7 @@ func (q *Queries) CreateAgentMessage(ctx context.Context, arg CreateAgentMessage
 	return err
 }
 
-const createAgentMessageForProject = `-- name: CreateAgentMessageForProject :exec
+const createAgentMessageForProject = `-- name: CreateAgentMessageForProject :execrows
 INSERT INTO agent_messages (
   id, session_id, role, body_markdown, metadata_json, created_at
 )
@@ -92,8 +92,8 @@ type CreateAgentMessageForProjectParams struct {
 	ProjectID    string `json:"project_id"`
 }
 
-func (q *Queries) CreateAgentMessageForProject(ctx context.Context, arg CreateAgentMessageForProjectParams) error {
-	_, err := q.db.ExecContext(ctx, createAgentMessageForProject,
+func (q *Queries) CreateAgentMessageForProject(ctx context.Context, arg CreateAgentMessageForProjectParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, createAgentMessageForProject,
 		arg.ID,
 		arg.Role,
 		arg.BodyMarkdown,
@@ -102,7 +102,10 @@ func (q *Queries) CreateAgentMessageForProject(ctx context.Context, arg CreateAg
 		arg.SessionID,
 		arg.ProjectID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const createAgentSession = `-- name: CreateAgentSession :exec
@@ -515,6 +518,44 @@ type GetModelVariantParams struct {
 
 func (q *Queries) GetModelVariant(ctx context.Context, arg GetModelVariantParams) (ModelVariant, error) {
 	row := q.db.QueryRowContext(ctx, getModelVariant, arg.ID, arg.AuthorID)
+	var i ModelVariant
+	err := row.Scan(
+		&i.ID,
+		&i.ProviderConfigID,
+		&i.Name,
+		&i.Model,
+		&i.Temperature,
+		&i.MaxOutputTokens,
+		&i.ContextWindowTokens,
+		&i.InputPricePerMillion,
+		&i.OutputPricePerMillion,
+		&i.CacheReadPricePerMillion,
+		&i.CacheWritePricePerMillion,
+		&i.RequestTokenField,
+		&i.ReasoningFormat,
+		&i.CompatibilityJson,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getModelVariantForProject = `-- name: GetModelVariantForProject :one
+SELECT model_variants.id, model_variants.provider_config_id, model_variants.name, model_variants.model, model_variants.temperature, model_variants.max_output_tokens, model_variants.context_window_tokens, model_variants.input_price_per_million, model_variants.output_price_per_million, model_variants.cache_read_price_per_million, model_variants.cache_write_price_per_million, model_variants.request_token_field, model_variants.reasoning_format, model_variants.compatibility_json, model_variants.created_at, model_variants.updated_at
+FROM model_variants
+JOIN provider_configs ON provider_configs.id = model_variants.provider_config_id
+JOIN story_projects ON story_projects.author_id = provider_configs.author_id
+WHERE story_projects.id = ?1
+  AND model_variants.id = ?2
+`
+
+type GetModelVariantForProjectParams struct {
+	ProjectID      string `json:"project_id"`
+	ModelVariantID string `json:"model_variant_id"`
+}
+
+func (q *Queries) GetModelVariantForProject(ctx context.Context, arg GetModelVariantForProjectParams) (ModelVariant, error) {
+	row := q.db.QueryRowContext(ctx, getModelVariantForProject, arg.ProjectID, arg.ModelVariantID)
 	var i ModelVariant
 	err := row.Scan(
 		&i.ID,
