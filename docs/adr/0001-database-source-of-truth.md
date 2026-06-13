@@ -1,0 +1,3 @@
+# Database as the Project Source of Truth
+
+Writer stores each story project's authoritative text, story bible material, versions, diffs, chat history, and agent activity in the database. Story text, story bible entries, writing briefs, and project notes remain Markdown-based content inside the database so they can be edited with a Markdown editor and exported cleanly to Markdown files. Markdown import and export are first-class interoperability paths for local TUI agent editing and backups, but Markdown files are not the canonical storage model because the product needs structured retrieval, version history, permissions, and auditability that would be fragile if every feature had to round-trip through filesystem semantics.
