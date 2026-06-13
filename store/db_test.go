@@ -121,6 +121,28 @@ func TestAgentCoreTablesExist(t *testing.T) {
 	}
 }
 
+func TestAgentCoreDownMigrationRemovesRevisionColumns(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+
+	columns := []string{"agent_session_id", "action_kind", "model_variant_id", "skill_id"}
+	for _, column := range columns {
+		if !tableHasColumn(t, db, "revisions", column) {
+			t.Fatalf("revisions.%s missing before down migration", column)
+		}
+	}
+
+	if err := goose.DownTo(db, filepath.Join("..", "migrations"), 1); err != nil {
+		t.Fatalf("roll back agent core migration: %v", err)
+	}
+
+	for _, column := range columns {
+		if tableHasColumn(t, db, "revisions", column) {
+			t.Fatalf("revisions.%s still exists after down migration", column)
+		}
+	}
+}
+
 func TestSearchContentUsesFTSIndex(t *testing.T) {
 	db := openMigratedProjectCoreDB(t)
 	defer db.Close()
@@ -256,6 +278,37 @@ func openTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 
 	return openMigratedProjectCoreDB(t)
+}
+
+func tableHasColumn(t *testing.T, db *sql.DB, tableName string, columnName string) bool {
+	t.Helper()
+
+	rows, err := db.Query("PRAGMA table_info(" + tableName + ")")
+	if err != nil {
+		t.Fatalf("query %s columns: %v", tableName, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			cid        int
+			name       string
+			columnType string
+			notNull    int
+			defaultVal sql.NullString
+			pk         int
+		)
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultVal, &pk); err != nil {
+			t.Fatalf("scan %s column: %v", tableName, err)
+		}
+		if name == columnName {
+			return true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate %s columns: %v", tableName, err)
+	}
+	return false
 }
 
 func seedProjectScopedContent(t *testing.T, db *sql.DB) {
