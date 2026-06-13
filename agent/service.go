@@ -391,9 +391,6 @@ func (s *Service) RunChatTurn(ctx context.Context, input ChatTurnInput) (ChatTur
 	if strings.TrimSpace(input.BodyMarkdown) == "" {
 		return ChatTurnResult{}, fmt.Errorf("body markdown is required")
 	}
-	if s.provider == nil {
-		return ChatTurnResult{}, fmt.Errorf("provider is required")
-	}
 	session, err := s.GetSession(ctx, input.ProjectID, input.SessionID)
 	if err != nil {
 		return ChatTurnResult{}, err
@@ -418,6 +415,7 @@ func (s *Service) RunChatTurn(ctx context.Context, input ChatTurnInput) (ChatTur
 	if err != nil {
 		return ChatTurnResult{}, fmt.Errorf("get provider config for project model: %w", err)
 	}
+	provider := s.completionProvider(providerConfig, modelVariantFromStore(model))
 	profile, err := s.GetPromptProfile(ctx, input.ProjectID)
 	if err != nil {
 		return ChatTurnResult{}, err
@@ -457,7 +455,7 @@ func (s *Service) RunChatTurn(ctx context.Context, input ChatTurnInput) (ChatTur
 			Temperature:     &model.Temperature,
 			MaxOutputTokens: model.MaxOutputTokens,
 		}
-		response, err := s.provider.Complete(ctx, request)
+		response, err := provider.Complete(ctx, request)
 		if err != nil {
 			return ChatTurnResult{}, fmt.Errorf("complete chat turn: %w", err)
 		}
@@ -955,16 +953,25 @@ type quickActionCompletionInput struct {
 }
 
 func (s *Service) runQuickActionCompletion(ctx context.Context, input quickActionCompletionInput) (string, Session, error) {
-	if s.provider == nil {
-		return "", Session{}, fmt.Errorf("provider is required")
-	}
 	if input.ModelVariantID == "" {
 		return "", Session{}, fmt.Errorf("model variant ID is required")
 	}
-	model, err := s.GetModelVariantForProject(ctx, input.ProjectID, input.ModelVariantID)
+	model, err := s.queries.GetModelVariantForProject(ctx, store.GetModelVariantForProjectParams{
+		ProjectID:      input.ProjectID,
+		ModelVariantID: input.ModelVariantID,
+	})
 	if err != nil {
-		return "", Session{}, err
+		return "", Session{}, fmt.Errorf("get model variant for project: %w", err)
 	}
+	providerConfig, err := s.queries.GetProviderConfigForProjectModel(ctx, store.GetProviderConfigForProjectModelParams{
+		ProjectID:      input.ProjectID,
+		ModelVariantID: input.ModelVariantID,
+	})
+	if err != nil {
+		return "", Session{}, fmt.Errorf("get provider config for project model: %w", err)
+	}
+	modelVariant := modelVariantFromStore(model)
+	provider := s.completionProvider(providerConfig, modelVariant)
 	if _, err := s.projectService.GetContent(ctx, input.ProjectID, input.ContentID); err != nil {
 		return "", Session{}, err
 	}
@@ -991,16 +998,16 @@ func (s *Service) runQuickActionCompletion(ctx context.Context, input quickActio
 		return "", Session{}, err
 	}
 	request := CompletionRequest{
-		Model: model.Model,
+		Model: modelVariant.Model,
 		Messages: []CompletionMessage{
 			{Role: MessageRoleSystem, Content: bundle.SystemMessage},
 			{Role: MessageRoleSystem, Content: bundle.DeveloperMessage},
 			{Role: MessageRoleUser, Content: bundle.UserMessage},
 		},
-		Temperature:     &model.Temperature,
-		MaxOutputTokens: model.MaxOutputTokens,
+		Temperature:     &modelVariant.Temperature,
+		MaxOutputTokens: modelVariant.MaxOutputTokens,
 	}
-	response, err := s.provider.Complete(ctx, request)
+	response, err := provider.Complete(ctx, request)
 	if err != nil {
 		return "", Session{}, fmt.Errorf("complete quick action: %w", err)
 	}
@@ -1009,6 +1016,13 @@ func (s *Service) runQuickActionCompletion(ctx context.Context, input quickActio
 		return "", Session{}, fmt.Errorf("provider did not return generated markdown")
 	}
 	return generated, session, nil
+}
+
+func (s *Service) completionProvider(providerConfig store.ProviderConfig, model ModelVariant) Provider {
+	if s.provider != nil {
+		return s.provider
+	}
+	return NewOpenAICompatibleClient(providerConfig.BaseUrl, providerConfig.ApiKeyEncrypted, model)
 }
 
 type generationCandidateInput struct {

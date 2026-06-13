@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -740,6 +742,91 @@ func TestRunChatTurnStoresMessagesToolActivityAndPromptRecord(t *testing.T) {
 	}
 	assertSnapshotSource(t, snapshots, "prompt_profile")
 	assertSnapshotSource(t, snapshots, "transcript")
+}
+
+func TestRunChatTurnUsesDBProviderConfigWhenProviderNotInjected(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Runtime Provider Project")
+	var capturedAuthorization string
+	var capturedModel string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedAuthorization = r.Header.Get("Authorization")
+		var request struct {
+			Model string `json:"model"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode completion request: %v", err)
+		}
+		capturedModel = request.Model
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id": "completion-db-provider",
+			"model": "runtime-model",
+			"choices": [
+				{
+					"message": {
+						"role": "assistant",
+						"content": "DB provider answered."
+					},
+					"finish_reason": "stop"
+				}
+			],
+			"usage": {
+				"prompt_tokens": 12,
+				"completion_tokens": 4
+			}
+		}`))
+	}))
+	t.Cleanup(server.Close)
+	service := NewService(db, projectService, nil)
+	provider, err := service.CreateProviderConfig(ctx, CreateProviderConfigInput{
+		AuthorID: "author-1",
+		Name:     "Runtime Provider",
+		BaseURL:  server.URL,
+		APIKey:   "runtime-key",
+	})
+	if err != nil {
+		t.Fatalf("CreateProviderConfig() error = %v", err)
+	}
+	model, err := service.CreateModelVariant(ctx, CreateModelVariantInput{
+		AuthorID:          "author-1",
+		ProviderConfigID:  provider.ID,
+		Name:              "Runtime Model",
+		Model:             "runtime-model",
+		Temperature:       0.2,
+		MaxOutputTokens:   128,
+		RequestTokenField: "max_tokens",
+		CompatibilityJSON: "{}",
+	})
+	if err != nil {
+		t.Fatalf("CreateModelVariant() error = %v", err)
+	}
+	session := createChatTurnTestSessionWithModel(t, ctx, service, storyProject.ID, model.ID)
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 30)
+
+	result, err := service.RunChatTurn(ctx, ChatTurnInput{
+		ProjectID:    storyProject.ID,
+		SessionID:    session.ID,
+		BodyMarkdown: "Use the runtime provider.",
+	})
+	if err != nil {
+		t.Fatalf("RunChatTurn() error = %v", err)
+	}
+
+	if result.AssistantMessage.BodyMarkdown != "DB provider answered." {
+		t.Fatalf("assistant body = %q", result.AssistantMessage.BodyMarkdown)
+	}
+	if capturedAuthorization != "Bearer runtime-key" {
+		t.Fatalf("authorization = %q, want bearer runtime key", capturedAuthorization)
+	}
+	if capturedModel != "runtime-model" {
+		t.Fatalf("model = %q, want runtime-model", capturedModel)
+	}
+	if result.PromptRecordID == "" {
+		t.Fatal("PromptRecordID is empty")
+	}
 }
 
 func TestRunChatTurnFollowUpDoesNotSendOrphanToolMessages(t *testing.T) {
