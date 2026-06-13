@@ -87,6 +87,70 @@ func TestCreateSessionPersistsSkillSelection(t *testing.T) {
 	}
 }
 
+func TestCreateSessionWithSkillIDsRecordsSkillSelectedActivity(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Session Skill Activity Project")
+	service := NewService(db, projectService, nil)
+	skillService := skill.NewService(db)
+	service.SetSkillService(skillService)
+	selectedSkill := installPromptSkill(t, ctx, skillService, storyProject.ID, skill.ImportedSkill{
+		Name:            "style-pass",
+		Description:     "Use when rewriting prose for style.",
+		ScriptCount:     1,
+		ScriptsDisabled: true,
+	})
+
+	session, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:  storyProject.ID,
+		Title:      "Skill session",
+		ActionKind: ActionKindContinuation,
+		ApplyMode:  ApplyModePreview,
+		SkillIDs:   []string{selectedSkill.ID, selectedSkill.ID},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	events, err := store.New(db).ListActivityEvents(ctx, store.ListActivityEventsParams{ProjectID: storyProject.ID, Limit: 10})
+	if err != nil {
+		t.Fatalf("ListActivityEvents() error = %v", err)
+	}
+	selectedEvents := make([]store.ActivityEvent, 0, 1)
+	for _, event := range events {
+		if event.EventType == "skill_selected" {
+			selectedEvents = append(selectedEvents, event)
+		}
+	}
+	if len(selectedEvents) != 1 {
+		t.Fatalf("skill_selected event count = %d, want 1 in %#v", len(selectedEvents), events)
+	}
+	event := selectedEvents[0]
+	if !event.SessionID.Valid || event.SessionID.String != session.ID {
+		t.Fatalf("event session ID = %#v, want %q", event.SessionID, session.ID)
+	}
+	if event.Summary != "Selected skill style-pass" {
+		t.Fatalf("event summary = %q, want Selected skill style-pass", event.Summary)
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(event.MetadataJson), &metadata); err != nil {
+		t.Fatalf("unmarshal metadata: %v", err)
+	}
+	if metadata["skillId"] != selectedSkill.ID {
+		t.Fatalf("metadata skillId = %#v, want %q", metadata["skillId"], selectedSkill.ID)
+	}
+	if metadata["name"] != "style-pass" {
+		t.Fatalf("metadata name = %#v, want style-pass", metadata["name"])
+	}
+	if metadata["scriptCount"] != float64(1) {
+		t.Fatalf("metadata scriptCount = %#v, want 1", metadata["scriptCount"])
+	}
+	if metadata["scriptsDisabled"] != true {
+		t.Fatalf("metadata scriptsDisabled = %#v, want true", metadata["scriptsDisabled"])
+	}
+}
+
 func TestPromptRecordRequestMetadataIncludesSkillSelection(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()

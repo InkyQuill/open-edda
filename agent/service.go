@@ -152,10 +152,11 @@ func (s *Service) selectSessionSkillsWithQueries(ctx context.Context, queries *s
 			continue
 		}
 		seen[skillID] = struct{}{}
-		if _, err := queries.GetSkillByProjectID(ctx, store.GetSkillByProjectIDParams{
+		selected, err := queries.GetSkillByProjectID(ctx, store.GetSkillByProjectIDParams{
 			ProjectID: projectID,
 			ID:        skillID,
-		}); err != nil {
+		})
+		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return skill.ErrInvalidInput
 			}
@@ -172,6 +173,26 @@ func (s *Service) selectSessionSkillsWithQueries(ctx context.Context, queries *s
 		}
 		if rowsAffected == 0 {
 			return skill.ErrInvalidInput
+		}
+		metadataJSON, err := marshalJSON(map[string]any{
+			"skillId":         selected.ID,
+			"name":            selected.Name,
+			"scriptCount":     selected.ScriptCount,
+			"scriptsDisabled": selected.ScriptsDisabled != 0,
+		})
+		if err != nil {
+			return err
+		}
+		if err := queries.CreateActivityEvent(ctx, store.CreateActivityEventParams{
+			ID:           newID("event"),
+			ProjectID:    projectID,
+			SessionID:    sql.NullString{String: sessionID, Valid: true},
+			EventType:    "skill_selected",
+			Summary:      "Selected skill " + selected.Name,
+			MetadataJson: metadataJSON,
+			CreatedAt:    selectedAt,
+		}); err != nil {
+			return fmt.Errorf("create skill selected event: %w", err)
 		}
 	}
 	return nil
