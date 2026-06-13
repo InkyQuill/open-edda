@@ -12,6 +12,7 @@ import (
 	"git.inkyquill.net/inky/writer/agent"
 	"git.inkyquill.net/inky/writer/app"
 	"git.inkyquill.net/inky/writer/project"
+	"git.inkyquill.net/inky/writer/skill"
 	"git.inkyquill.net/inky/writer/store"
 	"github.com/pressly/goose/v3"
 )
@@ -67,10 +68,12 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 
 	projectService := project.NewService(db)
 	agentService := agent.NewService(db, projectService, nil)
+	skillService := skill.NewService(db)
 
 	return &app.Dependencies{
 		ProjectService: projectService,
 		AgentService:   agentService,
+		SkillService:   skillService,
 		StaticFS:       os.DirFS(staticPath),
 	}, cleanup, nil
 }

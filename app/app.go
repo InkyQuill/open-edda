@@ -9,6 +9,7 @@ import (
 
 	"git.inkyquill.net/inky/writer/agent"
 	"git.inkyquill.net/inky/writer/project"
+	"git.inkyquill.net/inky/writer/skill"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -16,6 +17,7 @@ import (
 type Dependencies struct {
 	ProjectService *project.Service
 	AgentService   *agent.Service
+	SkillService   *skill.Service
 	StaticFS       fs.FS
 }
 
@@ -29,6 +31,7 @@ func New(deps *Dependencies) http.Handler {
 		r.Route("/api", func(r chi.Router) {
 			project.RegisterRoutes(r, deps.ProjectService)
 			agent.RegisterRoutes(r, deps.AgentService)
+			skill.RegisterRoutes(r, deps.SkillService)
 		})
 		if deps.StaticFS != nil {
 			r.NotFound(spaHandler(deps.StaticFS))
