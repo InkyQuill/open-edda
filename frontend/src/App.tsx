@@ -120,7 +120,7 @@ type DollarSkillToken = {
 };
 
 const skillMentionListboxId = "chat-skill-mention-listbox";
-const tokenBoundaryPattern = /[\s,.;:()[\]{}]/;
+const tokenBoundaryPattern = /[\s,.;:!?()[\]{}"'`<>]/;
 
 function isTokenBoundary(value: string): boolean {
   return tokenBoundaryPattern.test(value);
