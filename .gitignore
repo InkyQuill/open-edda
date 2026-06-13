@@ -1,2 +1,5 @@
 .superpowers/
 .worktrees/
+frontend/dist/
+frontend/node_modules/
+frontend/tsconfig.tsbuildinfo
