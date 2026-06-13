@@ -69,6 +69,7 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 	projectService := project.NewService(db)
 	agentService := agent.NewService(db, projectService, nil)
 	skillService := skill.NewService(db)
+	agentService.SetSkillService(skillService)
 
 	return &app.Dependencies{
 		ProjectService: projectService,

@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"sort"
 	"strings"
 
 	"git.inkyquill.net/inky/writer/project"
+	"git.inkyquill.net/inky/writer/skill"
 )
 
 const fictionAssistantSystemPrompt = "You are a fiction writing assistant working inside Writer. Preserve the author's intent, respect established project facts, and use available tools to inspect project context before making claims. Do not invent durable worldbuilding facts unless the author asks you to brainstorm."
@@ -51,6 +53,13 @@ func (s *Service) BuildActionPrompt(ctx context.Context, input BuildPromptInput)
 	if err != nil {
 		return PromptBundle{}, err
 	}
+	if s.skillService != nil {
+		skillSources, err := s.buildSkillContextSources(ctx, input.ProjectID, input.SessionID)
+		if err != nil {
+			return PromptBundle{}, err
+		}
+		sources = append(sources, skillSources...)
+	}
 
 	developerMessage := renderDeveloperMessage(sources)
 	userMessage := renderUserMessage(input)
@@ -67,6 +76,56 @@ func (s *Service) BuildActionPrompt(ctx context.Context, input BuildPromptInput)
 		MetadataJSON:     metadataJSON,
 		ContextSources:   sources,
 	}, nil
+}
+
+func (s *Service) buildSkillContextSources(ctx context.Context, projectID, sessionID string) ([]ContextSourceSnapshot, error) {
+	installed, err := s.skillService.List(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list skills: %w", err)
+	}
+	available := describedSkillSummaries(installed)
+	availableRendered := renderAvailableSkills(available, len(installed))
+	availableValue, err := marshalJSON(map[string]any{
+		"skills": available,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	sources := []ContextSourceSnapshot{
+		{
+			SourceKey:        "available_skills",
+			SourceVersion:    skillsVersion(installed),
+			RenderedMarkdown: availableRendered,
+			ValueJSON:        availableValue,
+		},
+	}
+	if sessionID == "" {
+		return sources, nil
+	}
+
+	selectedSkills, err := s.skillService.ListSessionSkills(ctx, projectID, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("list session skills: %w", err)
+	}
+	if len(selectedSkills) == 0 {
+		return sources, nil
+	}
+	selected := skillSummaries(selectedSkills)
+	selectedRendered := renderSelectedSkills(selected)
+	selectedValue, err := marshalJSON(map[string]any{
+		"skills": selected,
+	})
+	if err != nil {
+		return nil, err
+	}
+	sources = append(sources, ContextSourceSnapshot{
+		SourceKey:        "selected_skills",
+		SourceVersion:    skillsVersion(selectedSkills),
+		RenderedMarkdown: selectedRendered,
+		ValueJSON:        selectedValue,
+	})
+	return sources, nil
 }
 
 func (s *Service) layeredWritingBriefs(ctx context.Context, projectID, targetContentID string) ([]project.ContentItem, error) {
@@ -271,6 +330,88 @@ func renderTargetContentWindow(target project.ContentItem, cursorSummary string)
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+func describedSkillSummaries(skills []skill.Skill) []SkillSummary {
+	summaries := make([]SkillSummary, 0, len(skills))
+	for _, item := range skills {
+		if strings.TrimSpace(item.Description) == "" {
+			continue
+		}
+		summaries = append(summaries, skillSummary(item))
+	}
+	return summaries
+}
+
+func skillSummaries(skills []skill.Skill) []SkillSummary {
+	summaries := make([]SkillSummary, 0, len(skills))
+	for _, item := range skills {
+		summaries = append(summaries, skillSummary(item))
+	}
+	return summaries
+}
+
+func skillSummary(item skill.Skill) SkillSummary {
+	return SkillSummary{
+		ID:              item.ID,
+		Name:            item.Name,
+		Description:     item.Description,
+		ScriptCount:     item.ScriptCount,
+		ScriptsDisabled: item.ScriptsDisabled,
+	}
+}
+
+func renderAvailableSkills(skills []SkillSummary, installedCount int) string {
+	var b strings.Builder
+	b.WriteString("## Available Skills\n\n")
+	b.WriteString("Skills provide specialized instructions and workflows for specific writing tasks.\n")
+	b.WriteString("Use the skill tool to load a skill when the task matches its description.\n")
+	if installedCount == 0 {
+		b.WriteString("\nNo skills are installed for this project.\n")
+		return b.String()
+	}
+	if len(skills) == 0 {
+		b.WriteString("\nNo described skills are available for this project.\n")
+		return b.String()
+	}
+	b.WriteString("\n<available_skills>\n")
+	for _, item := range skills {
+		b.WriteString("  <skill>\n")
+		b.WriteString("    <id>" + escapePromptXML(item.ID) + "</id>\n")
+		b.WriteString("    <name>" + escapePromptXML(item.Name) + "</name>\n")
+		b.WriteString("    <description>" + escapePromptXML(item.Description) + "</description>\n")
+		b.WriteString("  </skill>\n")
+	}
+	b.WriteString("</available_skills>\n")
+	return b.String()
+}
+
+func renderSelectedSkills(skills []SkillSummary) string {
+	var b strings.Builder
+	b.WriteString("## Selected Skills\n\n")
+	b.WriteString("The author selected these skills for this session.\n")
+	b.WriteString("<selected_skills>\n")
+	for _, item := range skills {
+		b.WriteString("  <skill>\n")
+		b.WriteString("    <id>" + escapePromptXML(item.ID) + "</id>\n")
+		b.WriteString("    <name>" + escapePromptXML(item.Name) + "</name>\n")
+		fmt.Fprintf(&b, "    <script_status disabled=\"%t\" count=\"%d\">Scripts are available only as inert reference files.</script_status>\n", item.ScriptsDisabled, item.ScriptCount)
+		b.WriteString("  </skill>\n")
+	}
+	b.WriteString("</selected_skills>\n")
+	return b.String()
+}
+
+func skillsVersion(skills []skill.Skill) string {
+	versions := make([]string, 0, len(skills))
+	for _, item := range skills {
+		versions = append(versions, item.ID+":"+item.UpdatedAt)
+	}
+	return strings.Join(versions, ",")
+}
+
+func escapePromptXML(value string) string {
+	return html.EscapeString(value)
 }
 
 func renderDeveloperMessage(sources []ContextSourceSnapshot) string {

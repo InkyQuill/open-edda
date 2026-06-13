@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"git.inkyquill.net/inky/writer/project"
+	"git.inkyquill.net/inky/writer/skill"
 	"git.inkyquill.net/inky/writer/store"
 	"github.com/pressly/goose/v3"
 )
@@ -51,6 +52,147 @@ func TestContinuationDirectApplyAppendsGeneratedProseAndCreatesRevision(t *testi
 		t.Fatalf("revision = %d, want %d", updated.CurrentRevision, chapter.CurrentRevision+1)
 	}
 	assertAgentRevision(t, ctx, db, chapter.ID, "Existing text.\n\nNew paragraph.", "continuation")
+}
+
+func TestCreateSessionPersistsSkillSelection(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Session Skill Project")
+	service := NewService(db, projectService, nil)
+	skillService := skill.NewService(db)
+	service.SetSkillService(skillService)
+	selectedSkill := installPromptSkill(t, ctx, skillService, storyProject.ID, skill.ImportedSkill{
+		Name:        "style-pass",
+		Description: "Use when rewriting prose for style.",
+	})
+
+	session, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:  storyProject.ID,
+		Title:      "Skill session",
+		ActionKind: ActionKindContinuation,
+		ApplyMode:  ApplyModePreview,
+		SkillIDs:   []string{selectedSkill.ID},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	skills, err := skillService.ListSessionSkills(ctx, storyProject.ID, session.ID)
+	if err != nil {
+		t.Fatalf("ListSessionSkills() error = %v", err)
+	}
+	if len(skills) != 1 || skills[0].ID != selectedSkill.ID {
+		t.Fatalf("selected skills = %#v, want %q", skills, selectedSkill.ID)
+	}
+}
+
+func TestContinuationDirectApplyStoresSelectedSkillIDOnRevision(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Continuation Skill Project")
+	provider := &fakeChatProvider{responses: []CompletionResponse{quickActionResponse("completion-1", "\n\nSkilled paragraph.")}}
+	service := NewService(db, projectService, provider)
+	skillService := skill.NewService(db)
+	service.SetSkillService(skillService)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 0)
+	chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Opening", "Existing text.")
+	selectedSkill := installPromptSkill(t, ctx, skillService, storyProject.ID, skill.ImportedSkill{
+		Name:        "style-pass",
+		Description: "Use when rewriting prose for style.",
+	})
+
+	_, err := service.RunContinuation(ctx, ContinuationInput{
+		ProjectID:         storyProject.ID,
+		ContentID:         chapter.ID,
+		ModelVariantID:    model.ID,
+		ApplyMode:         ApplyModeDirectApply,
+		ExpectedRevision:  chapter.CurrentRevision,
+		ContinuationUnits: "paragraph",
+		ContinuationCount: 1,
+		SkillIDs:          []string{selectedSkill.ID},
+	})
+	if err != nil {
+		t.Fatalf("RunContinuation() error = %v", err)
+	}
+
+	var skillID string
+	err = db.QueryRowContext(ctx, `
+		SELECT skill_id
+		FROM revisions
+		WHERE content_item_id = ?
+		ORDER BY revision_number DESC
+		LIMIT 1
+	`, chapter.ID).Scan(&skillID)
+	if err != nil {
+		t.Fatalf("load latest revision skill_id: %v", err)
+	}
+	if skillID != selectedSkill.ID {
+		t.Fatalf("revision skill_id = %q, want %q", skillID, selectedSkill.ID)
+	}
+}
+
+func TestContinuationPreviewStoresSelectedSkillIDOnCandidateAndAcceptedRevision(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Continuation Candidate Skill Project")
+	provider := &fakeChatProvider{responses: []CompletionResponse{quickActionResponse("completion-1", "\n\nCandidate paragraph.")}}
+	service := NewService(db, projectService, provider)
+	skillService := skill.NewService(db)
+	service.SetSkillService(skillService)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 0)
+	chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Opening", "Existing text.")
+	selectedSkill := installPromptSkill(t, ctx, skillService, storyProject.ID, skill.ImportedSkill{
+		Name:        "style-pass",
+		Description: "Use when rewriting prose for style.",
+	})
+
+	preview, err := service.RunContinuation(ctx, ContinuationInput{
+		ProjectID:         storyProject.ID,
+		ContentID:         chapter.ID,
+		ModelVariantID:    model.ID,
+		ApplyMode:         ApplyModePreview,
+		ExpectedRevision:  chapter.CurrentRevision,
+		ContinuationUnits: "paragraph",
+		ContinuationCount: 1,
+		SkillIDs:          []string{selectedSkill.ID},
+	})
+	if err != nil {
+		t.Fatalf("RunContinuation() error = %v", err)
+	}
+	if preview.Candidate.SkillID != selectedSkill.ID {
+		t.Fatalf("candidate skill ID = %q, want %q", preview.Candidate.SkillID, selectedSkill.ID)
+	}
+	storedCandidate := mustGetGenerationCandidate(t, ctx, db, storyProject.ID, preview.Candidate.ID)
+	if storedCandidate.SkillID != selectedSkill.ID {
+		t.Fatalf("stored candidate skill ID = %q, want %q", storedCandidate.SkillID, selectedSkill.ID)
+	}
+
+	if _, err := service.AcceptCandidate(ctx, AcceptCandidateInput{
+		ProjectID:   storyProject.ID,
+		CandidateID: preview.Candidate.ID,
+	}); err != nil {
+		t.Fatalf("AcceptCandidate() error = %v", err)
+	}
+
+	var skillID string
+	err = db.QueryRowContext(ctx, `
+		SELECT skill_id
+		FROM revisions
+		WHERE content_item_id = ?
+		ORDER BY revision_number DESC
+		LIMIT 1
+	`, chapter.ID).Scan(&skillID)
+	if err != nil {
+		t.Fatalf("load latest revision skill_id: %v", err)
+	}
+	if skillID != selectedSkill.ID {
+		t.Fatalf("revision skill_id = %q, want %q", skillID, selectedSkill.ID)
+	}
 }
 
 func TestContinuationPreviewCreatesPendingCandidateWithoutChangingChapter(t *testing.T) {

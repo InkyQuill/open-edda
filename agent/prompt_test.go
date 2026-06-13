@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"git.inkyquill.net/inky/writer/project"
+	"git.inkyquill.net/inky/writer/skill"
 	"git.inkyquill.net/inky/writer/store"
 )
 
@@ -161,6 +162,121 @@ func TestPromptBuildActionPromptAssemblesContinuationContext(t *testing.T) {
 		if !slices.Contains(sourceKeys, key) {
 			t.Fatalf("context source keys = %v, want key %q", sourceKeys, key)
 		}
+	}
+}
+
+func TestPromptBuildActionPromptAddsSkillGuidanceSources(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Prompt Skill Project")
+	service := NewService(db, projectService, nil)
+	skillService := skill.NewService(db)
+	service.SetSkillService(skillService)
+	createPromptProfile(t, ctx, service, storyProject.ID)
+	chapter := createPromptContent(t, ctx, projectService, project.CreateContentInput{
+		ProjectID:    storyProject.ID,
+		Kind:         project.KindChapter,
+		Title:        "Chapter 1",
+		BodyMarkdown: "Opening.",
+	})
+
+	describedSkill := installPromptSkill(t, ctx, skillService, storyProject.ID, skill.ImportedSkill{
+		Name:                 `style-pass`,
+		Description:          `Use when rewriting prose for style & rhythm`,
+		InstructionsMarkdown: "Full instructions must not be preloaded.",
+		ScriptCount:          1,
+		ScriptsDisabled:      true,
+	})
+	undescribedSkill := installPromptSkill(t, ctx, skillService, storyProject.ID, skill.ImportedSkill{
+		Name:                 "private-notes",
+		InstructionsMarkdown: "Private instructions.",
+	})
+	session, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:  storyProject.ID,
+		Title:      "Skill session",
+		ActionKind: ActionKindContinuation,
+		ApplyMode:  ApplyModePreview,
+		SkillIDs:   []string{describedSkill.ID},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	bundle, err := service.BuildActionPrompt(ctx, BuildPromptInput{
+		ProjectID:       storyProject.ID,
+		SessionID:       session.ID,
+		ActionKind:      ActionKindContinuation,
+		TargetContentID: chapter.ID,
+	})
+	if err != nil {
+		t.Fatalf("BuildActionPrompt() error = %v", err)
+	}
+
+	sourceKeys := make([]string, 0, len(bundle.ContextSources))
+	for _, source := range bundle.ContextSources {
+		sourceKeys = append(sourceKeys, source.SourceKey)
+	}
+	for _, key := range []string{"prompt_profile", "writing_briefs", "target_content_window", "provider_disclosure", "tool_catalog", "available_skills", "selected_skills"} {
+		if !slices.Contains(sourceKeys, key) {
+			t.Fatalf("context source keys = %v, want key %q", sourceKeys, key)
+		}
+	}
+
+	available := mustContextSource(t, bundle, "available_skills")
+	assertContains(t, available.RenderedMarkdown, "Skills provide specialized instructions and workflows for specific writing tasks.")
+	assertContains(t, available.RenderedMarkdown, "Use the skill tool to load a skill when the task matches its description.")
+	assertContains(t, available.RenderedMarkdown, "<available_skills>")
+	assertContains(t, available.RenderedMarkdown, "<id>"+describedSkill.ID+"</id>")
+	assertContains(t, available.RenderedMarkdown, "<name>style-pass</name>")
+	assertContains(t, available.RenderedMarkdown, "<description>Use when rewriting prose for style &amp; rhythm</description>")
+	if strings.Contains(available.RenderedMarkdown, undescribedSkill.ID) || strings.Contains(available.RenderedMarkdown, "private-notes") {
+		t.Fatalf("available_skills advertised undescribed skill:\n%s", available.RenderedMarkdown)
+	}
+	if strings.Contains(available.RenderedMarkdown, "Full instructions must not be preloaded.") {
+		t.Fatalf("available_skills included full instructions:\n%s", available.RenderedMarkdown)
+	}
+
+	selected := mustContextSource(t, bundle, "selected_skills")
+	assertContains(t, selected.RenderedMarkdown, "The author selected these skills for this session.")
+	assertContains(t, selected.RenderedMarkdown, "<selected_skills>")
+	assertContains(t, selected.RenderedMarkdown, "<id>"+describedSkill.ID+"</id>")
+	assertContains(t, selected.RenderedMarkdown, `<script_status disabled="true" count="1">Scripts are available only as inert reference files.</script_status>`)
+}
+
+func TestPromptBuildActionPromptAddsStableAvailableSkillsSourceWhenNoDescribedSkills(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Prompt Undescribed Skill Project")
+	service := NewService(db, projectService, nil)
+	skillService := skill.NewService(db)
+	service.SetSkillService(skillService)
+	createPromptProfile(t, ctx, service, storyProject.ID)
+	chapter := createPromptContent(t, ctx, projectService, project.CreateContentInput{
+		ProjectID:    storyProject.ID,
+		Kind:         project.KindChapter,
+		Title:        "Chapter 1",
+		BodyMarkdown: "Opening.",
+	})
+	installPromptSkill(t, ctx, skillService, storyProject.ID, skill.ImportedSkill{
+		Name:                 "private-notes",
+		InstructionsMarkdown: "Private instructions.",
+	})
+
+	bundle, err := service.BuildActionPrompt(ctx, BuildPromptInput{
+		ProjectID:       storyProject.ID,
+		ActionKind:      ActionKindContinuation,
+		TargetContentID: chapter.ID,
+	})
+	if err != nil {
+		t.Fatalf("BuildActionPrompt() error = %v", err)
+	}
+
+	available := mustContextSource(t, bundle, "available_skills")
+	assertContains(t, available.RenderedMarkdown, "No described skills are available for this project.")
+	if _, ok := contextSource(bundle, "selected_skills"); ok {
+		t.Fatalf("selected_skills source rendered without selected skills")
 	}
 }
 
@@ -417,6 +533,39 @@ func createPromptProfile(t *testing.T, ctx context.Context, service *Service, pr
 	if err != nil {
 		t.Fatalf("UpsertPromptProfile() error = %v", err)
 	}
+}
+
+func installPromptSkill(t *testing.T, ctx context.Context, service *skill.Service, projectID string, imported skill.ImportedSkill) skill.Skill {
+	t.Helper()
+
+	installed, err := service.Install(ctx, skill.InstallInput{
+		ProjectID:   projectID,
+		SourceType:  skill.SourceTypeUpload,
+		SourceLabel: imported.Name + ".zip",
+		Imported:    imported,
+	})
+	if err != nil {
+		t.Fatalf("Install(%q) error = %v", imported.Name, err)
+	}
+	return installed
+}
+
+func mustContextSource(t *testing.T, bundle PromptBundle, key string) ContextSourceSnapshot {
+	t.Helper()
+	source, ok := contextSource(bundle, key)
+	if !ok {
+		t.Fatalf("missing context source %q", key)
+	}
+	return source
+}
+
+func contextSource(bundle PromptBundle, key string) (ContextSourceSnapshot, bool) {
+	for _, source := range bundle.ContextSources {
+		if source.SourceKey == key {
+			return source, true
+		}
+	}
+	return ContextSourceSnapshot{}, false
 }
 
 func insertPromptContentRow(t *testing.T, ctx context.Context, service *Service, input store.CreateContentItemParams) {

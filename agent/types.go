@@ -53,6 +53,15 @@ type CreateSessionInput struct {
 	ActionKind     ActionKind
 	ModelVariantID string
 	ApplyMode      ApplyMode
+	SkillIDs       []string
+}
+
+type SkillSummary struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	ScriptCount     int64  `json:"scriptCount"`
+	ScriptsDisabled bool   `json:"scriptsDisabled"`
 }
 
 type AppendMessageInput struct {
@@ -210,6 +219,7 @@ type ContinuationInput struct {
 	Insert            bool
 	ContinuationUnits string
 	ContinuationCount int64
+	SkillIDs          []string
 }
 
 type ContinuationResult struct {
@@ -227,6 +237,7 @@ type RewriteInput struct {
 	ExpectedRevision int64
 	SelectionStart   int64
 	SelectionEnd     int64
+	SkillIDs         []string
 }
 
 type RewriteResult struct {
@@ -244,6 +255,7 @@ type ReadAndCheckInput struct {
 	ExpectedRevision int64
 	SelectionStart   int64
 	SelectionEnd     int64
+	SkillIDs         []string
 }
 
 type ReadAndCheckResult struct {
@@ -356,6 +368,7 @@ type GenerationCandidate struct {
 	GeneratedMarkdown string     `json:"generatedMarkdown"`
 	Reason            string     `json:"reason,omitempty"`
 	ModelVariantID    string     `json:"modelVariantId,omitempty"`
+	SkillID           string     `json:"skillId,omitempty"`
 	Status            string     `json:"status"`
 	CreatedAt         string     `json:"createdAt"`
 	UpdatedAt         string     `json:"updatedAt"`

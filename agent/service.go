@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"git.inkyquill.net/inky/writer/project"
+	"git.inkyquill.net/inky/writer/skill"
 	"git.inkyquill.net/inky/writer/store"
 	"github.com/mattn/go-sqlite3"
 )
@@ -24,6 +25,14 @@ type Service struct {
 	queries        *store.Queries
 	projectService *project.Service
 	provider       Provider
+	skillService   SkillProvider
+}
+
+type SkillProvider interface {
+	List(ctx context.Context, projectID string) ([]skill.Skill, error)
+	ListSessionSkills(ctx context.Context, projectID, sessionID string) ([]skill.Skill, error)
+	SelectSessionSkills(ctx context.Context, input skill.SelectSessionSkillsInput) ([]skill.Skill, error)
+	RenderForModel(ctx context.Context, input skill.RenderSkillInput) (string, skill.Skill, error)
 }
 
 func NewService(db *sql.DB, projectService *project.Service, provider Provider) *Service {
@@ -33,6 +42,10 @@ func NewService(db *sql.DB, projectService *project.Service, provider Provider) 
 		projectService: projectService,
 		provider:       provider,
 	}
+}
+
+func (s *Service) SetSkillService(service SkillProvider) {
+	s.skillService = service
 }
 
 func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (Session, error) {
@@ -77,6 +90,15 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		UpdatedAt:      session.UpdatedAt,
 	}); err != nil {
 		return Session{}, fmt.Errorf("create agent session: %w", err)
+	}
+	if s.skillService != nil && len(input.SkillIDs) > 0 {
+		if _, err := s.skillService.SelectSessionSkills(ctx, skill.SelectSessionSkillsInput{
+			ProjectID: input.ProjectID,
+			SessionID: session.ID,
+			SkillIDs:  input.SkillIDs,
+		}); err != nil {
+			return Session{}, err
+		}
 	}
 
 	return session, nil
@@ -605,6 +627,7 @@ func (s *Service) RunContinuation(ctx context.Context, input ContinuationInput) 
 		SelectionEnd:     0,
 		Guidance:         input.Guidance,
 		Instruction:      continuationInstruction(input),
+		SkillIDs:         input.SkillIDs,
 	})
 	if err != nil {
 		return ContinuationResult{}, err
@@ -628,6 +651,7 @@ func (s *Service) RunContinuation(ctx context.Context, input ContinuationInput) 
 			GeneratedMarkdown: generated,
 			Reason:            reason,
 			ModelVariantID:    input.ModelVariantID,
+			SkillID:           primarySkillID(input.SkillIDs),
 		})
 		if err != nil {
 			return ContinuationResult{}, err
@@ -648,6 +672,7 @@ func (s *Service) RunContinuation(ctx context.Context, input ContinuationInput) 
 		AgentSessionID:    session.ID,
 		ActionKind:        string(ActionKindContinuation),
 		ModelVariantID:    input.ModelVariantID,
+		SkillID:           primarySkillID(input.SkillIDs),
 	}
 	content, err := s.applyCandidateWrite(ctx, operationKind, writeInput)
 	if err != nil {
@@ -681,6 +706,7 @@ func (s *Service) RunRewrite(ctx context.Context, input RewriteInput) (RewriteRe
 		SelectionEnd:     input.SelectionEnd,
 		Guidance:         input.Guidance,
 		Instruction:      rewriteInstruction(input, original, before, after),
+		SkillIDs:         input.SkillIDs,
 	})
 	if err != nil {
 		return RewriteResult{}, err
@@ -714,6 +740,7 @@ func (s *Service) RunRewrite(ctx context.Context, input RewriteInput) (RewriteRe
 			GeneratedMarkdown: generated,
 			Reason:            reasonPayload,
 			ModelVariantID:    input.ModelVariantID,
+			SkillID:           primarySkillID(input.SkillIDs),
 		})
 		if err != nil {
 			return RewriteResult{}, err
@@ -735,6 +762,7 @@ func (s *Service) RunRewrite(ctx context.Context, input RewriteInput) (RewriteRe
 		AgentSessionID:    session.ID,
 		ActionKind:        string(ActionKindRewrite),
 		ModelVariantID:    input.ModelVariantID,
+		SkillID:           primarySkillID(input.SkillIDs),
 	})
 	if err != nil {
 		return RewriteResult{}, err
@@ -772,6 +800,7 @@ func (s *Service) AcceptCandidate(ctx context.Context, input AcceptCandidateInpu
 		AgentSessionID:    candidate.SessionID,
 		ActionKind:        candidate.ActionKind,
 		ModelVariantID:    valueString(candidate.ModelVariantID),
+		SkillID:           candidate.SkillID,
 	})
 	if err != nil {
 		if errors.Is(err, project.ErrConflict) {
@@ -851,6 +880,7 @@ func (s *Service) RunReadAndCheck(ctx context.Context, input ReadAndCheckInput) 
 		SelectionEnd:     input.SelectionEnd,
 		Guidance:         input.Guidance,
 		Instruction:      readAndCheckInstruction(input, original, before, after),
+		SkillIDs:         input.SkillIDs,
 	})
 	if err != nil {
 		return ReadAndCheckResult{}, err
@@ -962,6 +992,7 @@ type quickActionCompletionInput struct {
 	SelectionEnd     int64
 	Guidance         string
 	Instruction      string
+	SkillIDs         []string
 }
 
 func (s *Service) runQuickActionCompletion(ctx context.Context, input quickActionCompletionInput) (string, Session, error) {
@@ -993,6 +1024,7 @@ func (s *Service) runQuickActionCompletion(ctx context.Context, input quickActio
 		ActionKind:     input.ActionKind,
 		ModelVariantID: input.ModelVariantID,
 		ApplyMode:      input.ApplyMode,
+		SkillIDs:       input.SkillIDs,
 	})
 	if err != nil {
 		return "", Session{}, err
@@ -1071,6 +1103,7 @@ type generationCandidateInput struct {
 	GeneratedMarkdown string
 	Reason            string
 	ModelVariantID    string
+	SkillID           string
 }
 
 func (s *Service) createGenerationCandidate(ctx context.Context, input generationCandidateInput) (GenerationCandidate, error) {
@@ -1093,6 +1126,7 @@ func (s *Service) createGenerationCandidate(ctx context.Context, input generatio
 		GeneratedMarkdown: input.GeneratedMarkdown,
 		Reason:            input.Reason,
 		ModelVariantID:    input.ModelVariantID,
+		SkillID:           input.SkillID,
 		Status:            "pending",
 		CreatedAt:         now,
 		UpdatedAt:         now,
@@ -1115,10 +1149,18 @@ func (s *Service) createGenerationCandidate(ctx context.Context, input generatio
 		Status:            candidate.Status,
 		CreatedAt:         candidate.CreatedAt,
 		UpdatedAt:         candidate.UpdatedAt,
+		SkillID:           candidate.SkillID,
 	}); err != nil {
 		return GenerationCandidate{}, fmt.Errorf("create generation candidate: %w", err)
 	}
 	return candidate, nil
+}
+
+func primarySkillID(ids []string) string {
+	if len(ids) == 0 {
+		return ""
+	}
+	return ids[0]
 }
 
 func (s *Service) transitionCandidateStatus(ctx context.Context, projectID, candidateID, fromStatus, toStatus string) error {
@@ -1553,6 +1595,7 @@ func generationCandidateFromStore(candidate store.GenerationCandidate) Generatio
 		GeneratedMarkdown: candidate.GeneratedMarkdown,
 		Reason:            candidate.Reason,
 		ModelVariantID:    valueString(candidate.ModelVariantID),
+		SkillID:           candidate.SkillID,
 		Status:            candidate.Status,
 		CreatedAt:         candidate.CreatedAt,
 		UpdatedAt:         candidate.UpdatedAt,
