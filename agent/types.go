@@ -115,6 +115,13 @@ type CreateProviderConfigInput struct {
 	APIKey   string
 }
 
+type UpdateProviderConfigInput struct {
+	AuthorID   string
+	ProviderID string
+	BaseURL    string
+	APIKey     string
+}
+
 type CreateModelVariantInput struct {
 	AuthorID                  string
 	ProviderConfigID          string

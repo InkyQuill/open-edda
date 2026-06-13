@@ -13,6 +13,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"git.inkyquill.net/inky/writer/agent"
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/store"
 	"github.com/pressly/goose/v3"
@@ -102,6 +103,29 @@ func TestCreateProjectContent(t *testing.T) {
 	}
 	if got.CurrentRevision != 1 {
 		t.Fatalf("currentRevision = %d, want 1", got.CurrentRevision)
+	}
+}
+
+func TestAppMountsAgentRoutes(t *testing.T) {
+	db := openMigratedTestDB(t)
+	handler := New(&Dependencies{
+		ProjectService: project.NewService(db),
+		AgentService:   agent.NewService(db, project.NewService(db), nil),
+	})
+	req := httptest.NewRequest(http.MethodGet, "/api/provider-configs", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var providers []agent.ProviderConfig
+	if err := json.NewDecoder(rec.Body).Decode(&providers); err != nil {
+		t.Fatalf("decode providers: %v", err)
+	}
+	if len(providers) != 0 {
+		t.Fatalf("provider count = %d, want 0", len(providers))
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"git.inkyquill.net/inky/writer/agent"
 	"git.inkyquill.net/inky/writer/app"
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/store"
@@ -64,8 +65,12 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 		return nil, func() {}, err
 	}
 
+	projectService := project.NewService(db)
+	agentService := agent.NewService(db, projectService, nil)
+
 	return &app.Dependencies{
-		ProjectService: project.NewService(db),
+		ProjectService: projectService,
+		AgentService:   agentService,
 		StaticFS:       os.DirFS(staticPath),
 	}, cleanup, nil
 }

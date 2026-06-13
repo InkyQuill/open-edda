@@ -221,6 +221,26 @@ func (s *Service) GetProviderConfig(ctx context.Context, authorID, providerID st
 	return providerConfigFromStore(provider), nil
 }
 
+func (s *Service) UpdateProviderConfig(ctx context.Context, input UpdateProviderConfigInput) (ProviderConfig, error) {
+	if _, err := s.GetProviderConfig(ctx, input.AuthorID, input.ProviderID); err != nil {
+		return ProviderConfig{}, err
+	}
+	if err := s.queries.UpdateProviderConfig(ctx, store.UpdateProviderConfigParams{
+		BaseUrl:         input.BaseURL,
+		ApiKeyEncrypted: input.APIKey,
+		UpdatedAt:       nowString(),
+		ID:              input.ProviderID,
+		AuthorID:        input.AuthorID,
+	}); err != nil {
+		return ProviderConfig{}, fmt.Errorf("update provider config: %w", err)
+	}
+	provider, err := s.GetProviderConfig(ctx, input.AuthorID, input.ProviderID)
+	if err != nil {
+		return ProviderConfig{}, err
+	}
+	return provider, nil
+}
+
 func (s *Service) CreateModelVariant(ctx context.Context, input CreateModelVariantInput) (ModelVariant, error) {
 	if _, err := s.GetProviderConfig(ctx, input.AuthorID, input.ProviderConfigID); err != nil {
 		return ModelVariant{}, err
@@ -879,6 +899,48 @@ func (s *Service) PrunePromptRecords(ctx context.Context, projectID string) (int
 	return deleted, nil
 }
 
+func (s *Service) ListActivityEvents(ctx context.Context, projectID string, limit int64) ([]ActivityEvent, error) {
+	if _, err := s.queries.GetStoryProjectByID(ctx, projectID); err != nil {
+		return nil, fmt.Errorf("get story project: %w", err)
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	events, err := s.queries.ListActivityEvents(ctx, store.ListActivityEventsParams{
+		ProjectID: projectID,
+		Limit:     limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list activity events: %w", err)
+	}
+	result := make([]ActivityEvent, 0, len(events))
+	for _, event := range events {
+		result = append(result, activityEventFromStore(event))
+	}
+	return result, nil
+}
+
+func (s *Service) ListPromptRecords(ctx context.Context, projectID string, limit int64) ([]PromptRecord, error) {
+	if _, err := s.queries.GetStoryProjectByID(ctx, projectID); err != nil {
+		return nil, fmt.Errorf("get story project: %w", err)
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	records, err := s.queries.ListPromptRecords(ctx, store.ListPromptRecordsParams{
+		ProjectID: projectID,
+		Limit:     limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list prompt records: %w", err)
+	}
+	result := make([]PromptRecord, 0, len(records))
+	for _, record := range records {
+		result = append(result, promptRecordFromStore(record))
+	}
+	return result, nil
+}
+
 type quickActionCompletionInput struct {
 	ProjectID        string
 	ContentID        string
@@ -1449,6 +1511,44 @@ func generationCandidateFromStore(candidate store.GenerationCandidate) Generatio
 		Status:            candidate.Status,
 		CreatedAt:         candidate.CreatedAt,
 		UpdatedAt:         candidate.UpdatedAt,
+	}
+}
+
+func activityEventFromStore(event store.ActivityEvent) ActivityEvent {
+	return ActivityEvent{
+		ID:           event.ID,
+		ProjectID:    event.ProjectID,
+		SessionID:    valueString(event.SessionID),
+		EventType:    event.EventType,
+		Summary:      event.Summary,
+		MetadataJSON: event.MetadataJson,
+		CreatedAt:    event.CreatedAt,
+	}
+}
+
+func promptRecordFromStore(record store.PromptRecord) PromptRecord {
+	return PromptRecord{
+		ID:           record.ID,
+		ProjectID:    record.ProjectID,
+		SessionID:    valueString(record.SessionID),
+		ProviderName: record.ProviderName,
+		ModelName:    record.ModelName,
+		ActionKind:   ActionKind(record.ActionKind),
+		RequestJSON:  record.RequestJson,
+		ResponseJSON: record.ResponseJson,
+		Usage: Usage{
+			InputTokens:      record.InputTokens,
+			OutputTokens:     record.OutputTokens,
+			CacheReadTokens:  record.CacheReadTokens,
+			CacheWriteTokens: record.CacheWriteTokens,
+			TotalTokens:      record.TotalTokens,
+			InputCost:        record.InputCost,
+			OutputCost:       record.OutputCost,
+			CacheReadCost:    record.CacheReadCost,
+			CacheWriteCost:   record.CacheWriteCost,
+			TotalCost:        record.TotalCost,
+		},
+		CreatedAt: record.CreatedAt,
 	}
 }
 

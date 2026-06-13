@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"git.inkyquill.net/inky/writer/agent"
 	"git.inkyquill.net/inky/writer/project"
 	"github.com/go-chi/chi/v5"
 )
@@ -14,6 +15,7 @@ import (
 // Dependencies holds services used by the application router.
 type Dependencies struct {
 	ProjectService *project.Service
+	AgentService   *agent.Service
 	StaticFS       fs.FS
 }
 
@@ -26,6 +28,7 @@ func New(deps *Dependencies) http.Handler {
 	if deps != nil {
 		r.Route("/api", func(r chi.Router) {
 			project.RegisterRoutes(r, deps.ProjectService)
+			agent.RegisterRoutes(r, deps.AgentService)
 		})
 		if deps.StaticFS != nil {
 			r.NotFound(spaHandler(deps.StaticFS))
