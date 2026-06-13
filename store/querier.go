@@ -10,6 +10,7 @@ import (
 
 type Querier interface {
 	AddSessionSkill(ctx context.Context, arg AddSessionSkillParams) (int64, error)
+	CountSkillsByProject(ctx context.Context, projectID string) (int64, error)
 	CreateActivityEvent(ctx context.Context, arg CreateActivityEventParams) error
 	CreateAgentMessage(ctx context.Context, arg CreateAgentMessageParams) error
 	CreateAgentMessageForProject(ctx context.Context, arg CreateAgentMessageForProjectParams) (int64, error)
@@ -63,6 +64,7 @@ type Querier interface {
 	ListProviderConfigs(ctx context.Context, authorID string) ([]ProviderConfig, error)
 	ListRevisions(ctx context.Context, arg ListRevisionsParams) ([]Revision, error)
 	ListRoutableSkills(ctx context.Context, arg ListRoutableSkillsParams) ([]Skill, error)
+	ListSessionSkillIDs(ctx context.Context, arg ListSessionSkillIDsParams) ([]string, error)
 	ListSessionSkills(ctx context.Context, arg ListSessionSkillsParams) ([]Skill, error)
 	ListSkillFiles(ctx context.Context, skillID string) ([]SkillFile, error)
 	ListSkillRoutingHints(ctx context.Context, skillID string) ([]SkillRoutingHint, error)

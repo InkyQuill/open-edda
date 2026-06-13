@@ -28,6 +28,10 @@ SELECT * FROM skills
 WHERE project_id = ?
 ORDER BY display_name ASC, name ASC;
 
+-- name: CountSkillsByProject :one
+SELECT COUNT(*) FROM skills
+WHERE project_id = ?;
+
 -- name: DeleteSkillFiles :exec
 DELETE FROM skill_files
 WHERE skill_id = ?;
@@ -96,6 +100,16 @@ WHERE agent_sessions.id = sqlc.arg(session_id)
 
 -- name: ListSessionSkills :many
 SELECT skills.*
+FROM agent_session_skills
+JOIN skills ON skills.id = agent_session_skills.skill_id
+JOIN agent_sessions ON agent_sessions.id = agent_session_skills.session_id
+WHERE agent_session_skills.session_id = sqlc.arg(session_id)
+  AND agent_sessions.project_id = sqlc.arg(project_id)
+  AND skills.project_id = agent_sessions.project_id
+ORDER BY skills.display_name ASC, skills.name ASC;
+
+-- name: ListSessionSkillIDs :many
+SELECT skills.id
 FROM agent_session_skills
 JOIN skills ON skills.id = agent_session_skills.skill_id
 JOIN agent_sessions ON agent_sessions.id = agent_session_skills.session_id

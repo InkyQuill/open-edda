@@ -39,6 +39,18 @@ func (q *Queries) AddSessionSkill(ctx context.Context, arg AddSessionSkillParams
 	return result.RowsAffected()
 }
 
+const countSkillsByProject = `-- name: CountSkillsByProject :one
+SELECT COUNT(*) FROM skills
+WHERE project_id = ?
+`
+
+func (q *Queries) CountSkillsByProject(ctx context.Context, projectID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countSkillsByProject, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createSkillFile = `-- name: CreateSkillFile :exec
 INSERT INTO skill_files (
   id, skill_id, relative_path, purpose, media_type, body_text, bytes, script_disabled, created_at
@@ -266,6 +278,45 @@ func (q *Queries) ListRoutableSkills(ctx context.Context, arg ListRoutableSkills
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSessionSkillIDs = `-- name: ListSessionSkillIDs :many
+SELECT skills.id
+FROM agent_session_skills
+JOIN skills ON skills.id = agent_session_skills.skill_id
+JOIN agent_sessions ON agent_sessions.id = agent_session_skills.session_id
+WHERE agent_session_skills.session_id = ?1
+  AND agent_sessions.project_id = ?2
+  AND skills.project_id = agent_sessions.project_id
+ORDER BY skills.display_name ASC, skills.name ASC
+`
+
+type ListSessionSkillIDsParams struct {
+	SessionID string `json:"session_id"`
+	ProjectID string `json:"project_id"`
+}
+
+func (q *Queries) ListSessionSkillIDs(ctx context.Context, arg ListSessionSkillIDsParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listSessionSkillIDs, arg.SessionID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

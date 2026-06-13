@@ -316,6 +316,84 @@ func TestServiceSelectSessionSkillsRecordsSkillSelectedActivity(t *testing.T) {
 	assertMetadataBool(t, metadata, "scriptsDisabled", true)
 }
 
+func TestServiceSelectSessionSkillsDeduplicatesSkillSelectedActivity(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	selectedSkill, err := service.Install(ctx, InstallInput{
+		ProjectID:   "project-1",
+		SourceType:  SourceTypeUpload,
+		SourceLabel: "style-pass.zip",
+		Imported:    importedStylePass("Rewrite template"),
+	})
+	if err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+
+	if _, err := service.SelectSessionSkills(ctx, SelectSessionSkillsInput{
+		ProjectID: "project-1",
+		SessionID: "session-1",
+		SkillIDs:  []string{selectedSkill.ID, selectedSkill.ID},
+	}); err != nil {
+		t.Fatalf("SelectSessionSkills() error = %v", err)
+	}
+
+	events, err := store.New(db).ListActivityEvents(ctx, store.ListActivityEventsParams{ProjectID: "project-1", Limit: 10})
+	if err != nil {
+		t.Fatalf("ListActivityEvents() error = %v", err)
+	}
+	if got := countActivityEvents(events, "skill_selected"); got != 1 {
+		t.Fatalf("skill_selected event count = %d, want 1 in %#v", got, events)
+	}
+}
+
+func TestServiceSelectSessionSkillsClearsWithoutSkillSelectedActivity(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	selectedSkill, err := service.Install(ctx, InstallInput{
+		ProjectID:   "project-1",
+		SourceType:  SourceTypeUpload,
+		SourceLabel: "style-pass.zip",
+		Imported:    importedStylePass("Rewrite template"),
+	})
+	if err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+	if _, err := service.SelectSessionSkills(ctx, SelectSessionSkillsInput{
+		ProjectID: "project-1",
+		SessionID: "session-1",
+		SkillIDs:  []string{selectedSkill.ID},
+	}); err != nil {
+		t.Fatalf("SelectSessionSkills(select) error = %v", err)
+	}
+
+	if _, err := service.SelectSessionSkills(ctx, SelectSessionSkillsInput{
+		ProjectID: "project-1",
+		SessionID: "session-1",
+		SkillIDs:  []string{},
+	}); err != nil {
+		t.Fatalf("SelectSessionSkills(clear) error = %v", err)
+	}
+
+	sessionSkills, err := service.ListSessionSkills(ctx, "project-1", "session-1")
+	if err != nil {
+		t.Fatalf("ListSessionSkills() error = %v", err)
+	}
+	if len(sessionSkills) != 0 {
+		t.Fatalf("session skills after clear = %#v, want none", sessionSkills)
+	}
+	events, err := store.New(db).ListActivityEvents(ctx, store.ListActivityEventsParams{ProjectID: "project-1", Limit: 10})
+	if err != nil {
+		t.Fatalf("ListActivityEvents() error = %v", err)
+	}
+	if got := countActivityEvents(events, "skill_selected"); got != 1 {
+		t.Fatalf("skill_selected event count after clear = %d, want 1 in %#v", got, events)
+	}
+}
+
 func importedStylePass(templateBody string) ImportedSkill {
 	return ImportedSkill{
 		Name:                 "style-pass",
@@ -352,6 +430,16 @@ func importedStylePass(templateBody string) ImportedSkill {
 			},
 		},
 	}
+}
+
+func countActivityEvents(events []store.ActivityEvent, eventType string) int {
+	count := 0
+	for _, event := range events {
+		if event.EventType == eventType {
+			count++
+		}
+	}
+	return count
 }
 
 func assertMetadataString(t *testing.T, metadata map[string]any, key, want string) {
