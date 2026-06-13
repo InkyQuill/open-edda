@@ -16,6 +16,7 @@ type Querier interface {
 	CreateStoryProject(ctx context.Context, arg CreateStoryProjectParams) error
 	GetContentItem(ctx context.Context, arg GetContentItemParams) (ContentItem, error)
 	GetStoryProject(ctx context.Context, arg GetStoryProjectParams) (StoryProject, error)
+	GetStoryProjectByID(ctx context.Context, id string) (StoryProject, error)
 	ListContentItems(ctx context.Context, arg ListContentItemsParams) ([]ContentItem, error)
 	ListEntryRelations(ctx context.Context, arg ListEntryRelationsParams) ([]EntryRelation, error)
 	ListEntrySections(ctx context.Context, contentItemID string) ([]EntrySection, error)

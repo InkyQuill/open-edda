@@ -11,6 +11,10 @@ ORDER BY updated_at DESC, title ASC;
 SELECT * FROM story_projects
 WHERE id = ? AND author_id = ?;
 
+-- name: GetStoryProjectByID :one
+SELECT * FROM story_projects
+WHERE id = ?;
+
 -- name: CreateContentItem :exec
 INSERT INTO content_items (
   id, project_id, kind, title, slug, body_markdown, metadata_json,

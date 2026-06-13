@@ -129,6 +129,54 @@ func TestListRevisionsDoesNotCrossProjectBoundary(t *testing.T) {
 	}
 }
 
+func TestProjectContentRoutesMapClientErrors(t *testing.T) {
+	handler := newTestApp(t)
+
+	listMissing := httptest.NewRequest(http.MethodGet, "/api/projects/missing/content?kind=chapter", nil)
+	listRec := httptest.NewRecorder()
+	handler.ServeHTTP(listRec, listMissing)
+	if listRec.Code != http.StatusNotFound {
+		t.Fatalf("list missing project status = %d, want %d; body = %s", listRec.Code, http.StatusNotFound, listRec.Body.String())
+	}
+
+	createMissing := httptest.NewRequest(http.MethodPost, "/api/projects/missing/content", bytes.NewBufferString(`{
+		"kind": "chapter",
+		"title": "Chapter 1",
+		"bodyMarkdown": "Opening.",
+		"metadataJson": "{}"
+	}`))
+	createMissingRec := httptest.NewRecorder()
+	handler.ServeHTTP(createMissingRec, createMissing)
+	if createMissingRec.Code != http.StatusNotFound {
+		t.Fatalf("create missing project status = %d, want %d; body = %s", createMissingRec.Code, http.StatusNotFound, createMissingRec.Body.String())
+	}
+
+	createTestContent(t, handler, "project-1", "Chapter 1")
+	createDuplicate := httptest.NewRequest(http.MethodPost, "/api/projects/project-1/content", bytes.NewBufferString(`{
+		"kind": "chapter",
+		"title": "Chapter 1",
+		"bodyMarkdown": "Duplicate.",
+		"metadataJson": "{}"
+	}`))
+	createDuplicateRec := httptest.NewRecorder()
+	handler.ServeHTTP(createDuplicateRec, createDuplicate)
+	if createDuplicateRec.Code != http.StatusConflict {
+		t.Fatalf("create duplicate status = %d, want %d; body = %s", createDuplicateRec.Code, http.StatusConflict, createDuplicateRec.Body.String())
+	}
+}
+
+func TestCreateProjectRejectsTrailingJSON(t *testing.T) {
+	handler := newTestApp(t)
+	req := httptest.NewRequest(http.MethodPost, "/api/projects", bytes.NewBufferString(`{"title":"One","language":"en"}{"title":"Two"}`))
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
 func createTestContent(t *testing.T, handler http.Handler, projectID string, title string) project.ContentItem {
 	t.Helper()
 

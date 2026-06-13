@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -172,7 +173,14 @@ func (h httpHandler) listRevisions(w http.ResponseWriter, r *http.Request) {
 }
 
 func decodeJSON(r *http.Request, value any) error {
-	return json.NewDecoder(r.Body).Decode(value)
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(value); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return errors.New("trailing JSON data")
+	}
+	return nil
 }
 
 func validContentKind(kind ContentKind) bool {

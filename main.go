@@ -1,11 +1,16 @@
 package main
 
 import (
+	"database/sql"
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"git.inkyquill.net/inky/writer/app"
+	"git.inkyquill.net/inky/writer/project"
+	"git.inkyquill.net/inky/writer/store"
+	"github.com/pressly/goose/v3"
 )
 
 func main() {
@@ -14,9 +19,16 @@ func main() {
 		addr = value
 	}
 
+	deps, cleanup, err := buildDependencies()
+	if err != nil {
+		slog.Error("initialize writer", "error", err)
+		os.Exit(1)
+	}
+	defer cleanup()
+
 	server := &http.Server{
 		Addr:    addr,
-		Handler: app.New(&app.Dependencies{}),
+		Handler: app.New(deps),
 	}
 
 	slog.Info("starting writer", "addr", addr)
@@ -24,4 +36,50 @@ func main() {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+func buildDependencies() (*app.Dependencies, func(), error) {
+	dbPath := getenvDefault("WRITER_DB_PATH", "writer.db")
+	migrationsPath := getenvDefault("WRITER_MIGRATIONS_PATH", "migrations")
+
+	db, err := store.Open(dbPath)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	cleanup := func() { _ = db.Close() }
+
+	if err := migrate(db, migrationsPath); err != nil {
+		cleanup()
+		return nil, func() {}, err
+	}
+	if err := ensurePlaceholderAuthor(db); err != nil {
+		cleanup()
+		return nil, func() {}, err
+	}
+
+	return &app.Dependencies{
+		ProjectService: project.NewService(db),
+	}, cleanup, nil
+}
+
+func migrate(db *sql.DB, migrationsPath string) error {
+	if err := goose.SetDialect("sqlite3"); err != nil {
+		return err
+	}
+	return goose.Up(db, migrationsPath)
+}
+
+func ensurePlaceholderAuthor(db *sql.DB) error {
+	_, err := db.Exec(`
+		INSERT OR IGNORE INTO authors (id, email, password_hash, created_at)
+		VALUES (?, ?, ?, ?)
+	`, "author-1", "author@example.invalid", "placeholder", time.Now().UTC().Format(time.RFC3339Nano))
+	return err
+}
+
+func getenvDefault(name string, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
 }

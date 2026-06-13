@@ -215,6 +215,26 @@ func (q *Queries) GetStoryProject(ctx context.Context, arg GetStoryProjectParams
 	return i, err
 }
 
+const getStoryProjectByID = `-- name: GetStoryProjectByID :one
+SELECT id, author_id, title, slug, language, created_at, updated_at FROM story_projects
+WHERE id = ?
+`
+
+func (q *Queries) GetStoryProjectByID(ctx context.Context, id string) (StoryProject, error) {
+	row := q.db.QueryRowContext(ctx, getStoryProjectByID, id)
+	var i StoryProject
+	err := row.Scan(
+		&i.ID,
+		&i.AuthorID,
+		&i.Title,
+		&i.Slug,
+		&i.Language,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listContentItems = `-- name: ListContentItems :many
 SELECT id, project_id, kind, title, slug, body_markdown, metadata_json, sort_order, current_revision, created_at, updated_at FROM content_items
 WHERE project_id = ? AND kind = ?

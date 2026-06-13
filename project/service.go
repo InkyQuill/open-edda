@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"git.inkyquill.net/inky/writer/store"
+	"github.com/mattn/go-sqlite3"
 )
 
 var ErrConflict = errors.New("content revision conflict")
@@ -44,6 +45,9 @@ func (s *Service) CreateProject(ctx context.Context, input CreateProjectInput) (
 		CreatedAt: now,
 		UpdatedAt: now,
 	}); err != nil {
+		if isSQLiteConstraint(err, sqlite3.ErrConstraintUnique) {
+			return StoryProject{}, ErrConflict
+		}
 		return StoryProject{}, fmt.Errorf("create story project: %w", err)
 	}
 
@@ -82,6 +86,10 @@ func (s *Service) CreateContent(ctx context.Context, input CreateContentInput) (
 	}
 
 	if err := s.inTx(ctx, func(queries *store.Queries) error {
+		if _, err := queries.GetStoryProjectByID(ctx, input.ProjectID); err != nil {
+			return fmt.Errorf("get story project: %w", err)
+		}
+
 		if err := queries.CreateContentItem(ctx, store.CreateContentItemParams{
 			ID:              item.ID,
 			ProjectID:       item.ProjectID,
@@ -95,6 +103,9 @@ func (s *Service) CreateContent(ctx context.Context, input CreateContentInput) (
 			CreatedAt:       now,
 			UpdatedAt:       now,
 		}); err != nil {
+			if isSQLiteConstraint(err, sqlite3.ErrConstraintUnique) {
+				return ErrConflict
+			}
 			return fmt.Errorf("create content item: %w", err)
 		}
 
@@ -120,6 +131,10 @@ func (s *Service) CreateContent(ctx context.Context, input CreateContentInput) (
 }
 
 func (s *Service) ListContent(ctx context.Context, projectID string, kind ContentKind) ([]ContentItem, error) {
+	if _, err := s.queries.GetStoryProjectByID(ctx, projectID); err != nil {
+		return nil, fmt.Errorf("get story project: %w", err)
+	}
+
 	items, err := s.queries.ListContentItems(ctx, store.ListContentItemsParams{
 		ProjectID: projectID,
 		Kind:      string(kind),
@@ -333,4 +348,9 @@ func newID(prefix string) string {
 
 func nowString() string {
 	return time.Now().UTC().Format(time.RFC3339Nano)
+}
+
+func isSQLiteConstraint(err error, code sqlite3.ErrNoExtended) bool {
+	var sqliteErr sqlite3.Error
+	return errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == code
 }
