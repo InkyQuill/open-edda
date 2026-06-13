@@ -235,6 +235,22 @@ type ToolResultArtifact struct {
 	CreatedAt            string `json:"createdAt"`
 }
 
+type ToolCallInput struct {
+	ProjectID     string
+	SessionID     string
+	ToolCallID    string
+	ToolName      string
+	ArgumentsJSON string
+}
+
+type ToolResult struct {
+	ToolCallID           string `json:"toolCallId"`
+	ToolName             string `json:"toolName"`
+	FullResultJSON       string `json:"fullResultJson"`
+	ModelVisibleMarkdown string `json:"modelVisibleMarkdown"`
+	Truncated            bool   `json:"truncated"`
+}
+
 type GenerationCandidate struct {
 	ID                string     `json:"id"`
 	ProjectID         string     `json:"projectId"`

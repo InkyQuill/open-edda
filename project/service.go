@@ -3,6 +3,7 @@ package project
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -276,6 +277,96 @@ func (s *Service) ListProjectContent(ctx context.Context, projectID string) ([]C
 	return result, nil
 }
 
+func (s *Service) ProjectMap(ctx context.Context, projectID string) (ProjectMap, error) {
+	storyProject, err := s.queries.GetStoryProjectByID(ctx, projectID)
+	if err != nil {
+		return ProjectMap{}, fmt.Errorf("get story project: %w", err)
+	}
+
+	items, err := s.ListProjectContent(ctx, projectID)
+	if err != nil {
+		return ProjectMap{}, err
+	}
+
+	content := make([]ProjectMapContentItem, 0, len(items))
+	for _, item := range items {
+		mapped := ProjectMapContentItem{ContentItem: item}
+		if item.Kind == KindStoryBibleEntry {
+			sections, err := s.ListEntrySections(ctx, projectID, item.ID)
+			if err != nil {
+				return ProjectMap{}, err
+			}
+			relations, err := s.ListEntryRelations(ctx, projectID, item.ID)
+			if err != nil {
+				return ProjectMap{}, err
+			}
+			mapped.Sections = sections
+			mapped.Relations = relations
+		}
+		content = append(content, mapped)
+	}
+
+	return ProjectMap{
+		Project: storyProjectFromStore(storyProject),
+		Content: content,
+	}, nil
+}
+
+func (s *Service) SearchContent(ctx context.Context, input SearchContentInput) ([]ContentItem, error) {
+	if _, err := s.queries.GetStoryProjectByID(ctx, input.ProjectID); err != nil {
+		return nil, fmt.Errorf("get story project: %w", err)
+	}
+
+	limit := input.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+
+	var (
+		items []store.ContentItem
+		err   error
+	)
+	if strings.TrimSpace(input.Query) == "" {
+		if input.Kind != "" {
+			items, err = s.queries.ListContentItems(ctx, store.ListContentItemsParams{
+				ProjectID: input.ProjectID,
+				Kind:      string(input.Kind),
+			})
+		} else {
+			items, err = s.queries.ListProjectContentItems(ctx, input.ProjectID)
+		}
+	} else {
+		items, err = s.queries.SearchContent(ctx, store.SearchContentParams{
+			Query:     input.Query,
+			ProjectID: input.ProjectID,
+			Limit:     limit,
+		})
+	}
+	if err != nil {
+		return nil, fmt.Errorf("search content: %w", err)
+	}
+
+	result := make([]ContentItem, 0, len(items))
+	for _, item := range items {
+		content := contentItemFromStore(item)
+		if input.Kind != "" && content.Kind != input.Kind {
+			continue
+		}
+		matches, err := contentMatchesMetadata(content.MetadataJSON, input.MetadataFilters, input.Tags)
+		if err != nil {
+			return nil, err
+		}
+		if !matches {
+			continue
+		}
+		result = append(result, content)
+		if int64(len(result)) >= limit {
+			break
+		}
+	}
+	return result, nil
+}
+
 func (s *Service) GetContent(ctx context.Context, projectID, contentID string) (ContentItem, error) {
 	item, err := s.queries.GetContentItem(ctx, store.GetContentItemParams{
 		ID:        contentID,
@@ -401,6 +492,59 @@ func (s *Service) ListEntrySections(ctx context.Context, projectID, contentID st
 	return result, nil
 }
 
+func (s *Service) CreateAttachedNote(ctx context.Context, input CreateAttachedNoteInput) (AttachedNote, error) {
+	if _, err := s.queries.GetStoryProjectByID(ctx, input.ProjectID); err != nil {
+		return AttachedNote{}, fmt.Errorf("get story project: %w", err)
+	}
+	if input.ContentItemID != "" {
+		if _, err := s.GetContent(ctx, input.ProjectID, input.ContentItemID); err != nil {
+			return AttachedNote{}, err
+		}
+	}
+
+	source := emptyDefault(input.Source, "author")
+	if source != "author" && source != "read_and_check" {
+		return AttachedNote{}, fmt.Errorf("invalid attached note source %q", source)
+	}
+
+	now := nowString()
+	note := AttachedNote{
+		ID:             newID("note"),
+		ProjectID:      input.ProjectID,
+		ContentItemID:  input.ContentItemID,
+		SelectionStart: input.SelectionStart,
+		SelectionEnd:   input.SelectionEnd,
+		Title:          input.Title,
+		BodyMarkdown:   input.BodyMarkdown,
+		Source:         source,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO attached_notes (
+			id, project_id, content_item_id, selection_start, selection_end,
+			title, body_markdown, source, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		note.ID,
+		note.ProjectID,
+		nullString(note.ContentItemID),
+		nullInt64(note.SelectionStart),
+		nullInt64(note.SelectionEnd),
+		note.Title,
+		note.BodyMarkdown,
+		note.Source,
+		note.CreatedAt,
+		note.UpdatedAt,
+	)
+	if err != nil {
+		return AttachedNote{}, fmt.Errorf("create attached note: %w", err)
+	}
+
+	return note, nil
+}
+
 func (s *Service) CreateEntryRelation(ctx context.Context, input CreateEntryRelationInput) error {
 	if err := s.queries.CreateEntryRelation(ctx, store.CreateEntryRelationParams{
 		ID:           newID("relation"),
@@ -513,6 +657,55 @@ func revisionFromStore(revision store.Revision) Revision {
 		CreatedBy:      revision.CreatedBy,
 		CreatedAt:      revision.CreatedAt,
 	}
+}
+
+func contentMatchesMetadata(metadataJSON string, filters map[string]string, tags []string) (bool, error) {
+	if len(filters) == 0 && len(tags) == 0 {
+		return true, nil
+	}
+
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(defaultJSON(metadataJSON)), &metadata); err != nil {
+		return false, err
+	}
+
+	for key, want := range filters {
+		got, ok := metadata[key]
+		if !ok {
+			return false, nil
+		}
+		if gotString, ok := got.(string); !ok || gotString != want {
+			return false, nil
+		}
+	}
+
+	if len(tags) > 0 {
+		values, ok := metadata["tags"].([]any)
+		if !ok {
+			return false, nil
+		}
+		available := make(map[string]bool, len(values))
+		for _, value := range values {
+			if tag, ok := value.(string); ok {
+				available[tag] = true
+			}
+		}
+		for _, tag := range tags {
+			if !available[tag] {
+				return false, nil
+			}
+		}
+	}
+
+	return true, nil
+}
+
+func nullString(value string) sql.NullString {
+	return sql.NullString{String: value, Valid: value != ""}
+}
+
+func nullInt64(value int64) sql.NullInt64 {
+	return sql.NullInt64{Int64: value, Valid: value != 0}
 }
 
 func defaultJSON(value string) string {

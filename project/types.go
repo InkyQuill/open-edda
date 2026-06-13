@@ -28,6 +28,17 @@ type ContentItem struct {
 	CurrentRevision int64       `json:"currentRevision"`
 }
 
+type ProjectMap struct {
+	Project StoryProject            `json:"project"`
+	Content []ProjectMapContentItem `json:"content"`
+}
+
+type ProjectMapContentItem struct {
+	ContentItem
+	Sections  []EntrySection  `json:"sections,omitempty"`
+	Relations []EntryRelation `json:"relations,omitempty"`
+}
+
 type EntrySection struct {
 	Heading      string `json:"heading"`
 	BodyMarkdown string `json:"bodyMarkdown"`
@@ -48,6 +59,19 @@ type Revision struct {
 	Reason         string `json:"reason"`
 	CreatedBy      string `json:"createdBy"`
 	CreatedAt      string `json:"createdAt"`
+}
+
+type AttachedNote struct {
+	ID             string `json:"id"`
+	ProjectID      string `json:"projectId"`
+	ContentItemID  string `json:"contentItemId,omitempty"`
+	SelectionStart int64  `json:"selectionStart,omitempty"`
+	SelectionEnd   int64  `json:"selectionEnd,omitempty"`
+	Title          string `json:"title"`
+	BodyMarkdown   string `json:"bodyMarkdown"`
+	Source         string `json:"source"`
+	CreatedAt      string `json:"createdAt"`
+	UpdatedAt      string `json:"updatedAt"`
 }
 
 type CreateProjectInput struct {
@@ -80,6 +104,25 @@ type CreateEntryRelationInput struct {
 	SourceItemID string
 	TargetTitle  string
 	RelationType string
+}
+
+type SearchContentInput struct {
+	ProjectID       string
+	Query           string
+	Kind            ContentKind
+	MetadataFilters map[string]string
+	Tags            []string
+	Limit           int64
+}
+
+type CreateAttachedNoteInput struct {
+	ProjectID      string
+	ContentItemID  string
+	SelectionStart int64
+	SelectionEnd   int64
+	Title          string
+	BodyMarkdown   string
+	Source         string
 }
 
 type UpdateContentInput struct {
