@@ -104,21 +104,29 @@ func TestSearchContentUsesFTSIndex(t *testing.T) {
 		INSERT INTO authors (id, email, password_hash, created_at)
 		VALUES ('author-1', 'author@example.com', 'hash', '2026-06-13T00:00:00Z');
 		INSERT INTO story_projects (id, author_id, title, slug, language, created_at, updated_at)
-		VALUES ('project-1', 'author-1', 'Project', 'project', 'en', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z');
+		VALUES
+			('project-1', 'author-1', 'Project One', 'project-one', 'en', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z'),
+			('project-2', 'author-1', 'Project Two', 'project-two', 'en', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z');
 		INSERT INTO content_items (
 			id, project_id, kind, title, slug, body_markdown, metadata_json,
 			sort_order, current_revision, created_at, updated_at
-		) VALUES (
-			'item-1', 'project-1', 'chapter', 'Opening', 'opening', 'A precise lantern scene.', '{}',
-			1, 1, '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z'
-		);
+		) VALUES
+			(
+				'item-1', 'project-1', 'chapter', 'Opening', 'opening', 'A precise lantern scene.', '{}',
+				1, 1, '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z'
+			),
+			(
+				'item-2', 'project-2', 'chapter', 'Opening', 'opening', 'Another lantern scene.', '{}',
+				1, 1, '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z'
+			);
 	`); err != nil {
 		t.Fatalf("seed content: %v", err)
 	}
 
 	items, err := New(db).SearchContent(context.Background(), SearchContentParams{
-		Query: "lantern",
-		Limit: 10,
+		Query:     "lantern",
+		ProjectID: "project-1",
+		Limit:     10,
 	})
 	if err != nil {
 		t.Fatalf("SearchContent() error = %v", err)

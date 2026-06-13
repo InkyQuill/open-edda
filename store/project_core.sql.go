@@ -417,17 +417,19 @@ const searchContent = `-- name: SearchContent :many
 SELECT content_items.id, content_items.project_id, content_items.kind, content_items.title, content_items.slug, content_items.body_markdown, content_items.metadata_json, content_items.sort_order, content_items.current_revision, content_items.created_at, content_items.updated_at
 FROM content_search(CAST(?1 AS TEXT))
 JOIN content_items ON content_items.rowid = content_search.rowid
+WHERE content_items.project_id = ?2
 ORDER BY rank
-LIMIT ?2
+LIMIT ?3
 `
 
 type SearchContentParams struct {
-	Query string `json:"query"`
-	Limit int64  `json:"limit"`
+	Query     string `json:"query"`
+	ProjectID string `json:"project_id"`
+	Limit     int64  `json:"limit"`
 }
 
 func (q *Queries) SearchContent(ctx context.Context, arg SearchContentParams) ([]ContentItem, error) {
-	rows, err := q.db.QueryContext(ctx, searchContent, arg.Query, arg.Limit)
+	rows, err := q.db.QueryContext(ctx, searchContent, arg.Query, arg.ProjectID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
