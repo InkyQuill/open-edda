@@ -286,7 +286,7 @@ func renderToolMarkdown(toolName string, payload any) string {
 		b.WriteString(value.BodyMarkdown)
 	case []project.ContentItem:
 		for _, item := range value {
-			fmt.Fprintf(&b, "- %s (%s, revision %d)\n", item.Title, item.Kind, item.CurrentRevision)
+			fmt.Fprintf(&b, "- %s (contentId: %s, kind: %s, revision %d)\n", item.Title, item.ID, item.Kind, item.CurrentRevision)
 			if item.BodyMarkdown != "" {
 				b.WriteString("  ")
 				b.WriteString(firstLine(item.BodyMarkdown))
@@ -300,9 +300,9 @@ func renderToolMarkdown(toolName string, payload any) string {
 	case project.ProjectMap:
 		fmt.Fprintf(&b, "# %s\n\n", value.Project.Title)
 		for _, item := range value.Content {
-			fmt.Fprintf(&b, "- %s (%s, revision %d)\n", item.Title, item.Kind, item.CurrentRevision)
+			fmt.Fprintf(&b, "- %s (contentId: %s, kind: %s, revision %d)\n", item.Title, item.ID, item.Kind, item.CurrentRevision)
 			for _, section := range item.Sections {
-				fmt.Fprintf(&b, "  - section: %s\n", section.Heading)
+				fmt.Fprintf(&b, "  - section: %s (contentId: %s, heading: %s)\n", section.Heading, item.ID, section.Heading)
 			}
 			for _, relation := range item.Relations {
 				fmt.Fprintf(&b, "  - relation: %s %s\n", relation.RelationType, relation.TargetTitle)

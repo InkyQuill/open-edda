@@ -198,6 +198,47 @@ func TestExecuteToolRejectsSessionOutsideProject(t *testing.T) {
 	}
 }
 
+func TestContextToolMarkdownIncludesActionableContentIdentifiers(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Identifier Tool Project")
+	service := NewService(db, projectService, nil)
+	session := createTestSession(t, ctx, service, storyProject.ID)
+	seed := seedToolContent(t, ctx, projectService, storyProject.ID)
+
+	projectMap, err := service.ExecuteTool(ctx, ToolCallInput{
+		ProjectID:     storyProject.ID,
+		SessionID:     session.ID,
+		ToolCallID:    "call-project-map-identifiers",
+		ToolName:      "project_map",
+		ArgumentsJSON: `{}`,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool(project_map) error = %v", err)
+	}
+	assertMarkdownContains(t, projectMap.ModelVisibleMarkdown,
+		"contentId: "+seed.Chapter.ID,
+		"contentId: "+seed.Character.ID,
+		"section: Motivation",
+	)
+
+	search, err := service.ExecuteTool(ctx, ToolCallInput{
+		ProjectID:     storyProject.ID,
+		SessionID:     session.ID,
+		ToolCallID:    "call-search-identifiers",
+		ToolName:      "search_content",
+		ArgumentsJSON: `{"query":"alchemy","kind":"story_bible_entry","metadataFilters":{"type":"character"},"limit":1}`,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool(search_content) error = %v", err)
+	}
+	assertMarkdownContains(t, search.ModelVisibleMarkdown,
+		"contentId: "+seed.Character.ID,
+		"Mira",
+	)
+}
+
 func TestExecuteToolValidatesSearchContentArguments(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()
