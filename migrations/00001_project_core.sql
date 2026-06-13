@@ -82,6 +82,9 @@ CREATE TABLE attached_notes (
   FOREIGN KEY (content_item_id, project_id) REFERENCES content_items(id, project_id) ON DELETE CASCADE
 );
 
+CREATE INDEX idx_story_projects_author_updated_title ON story_projects(author_id, updated_at DESC, title);
+CREATE INDEX idx_content_items_project_kind_sort_title ON content_items(project_id, kind, sort_order, title);
+CREATE INDEX idx_entry_sections_content_item_sort_order ON entry_sections(content_item_id, sort_order);
 CREATE INDEX idx_entry_sections_content_item_id ON entry_sections(content_item_id);
 CREATE INDEX idx_revisions_content_item_id_revision_number ON revisions(content_item_id, revision_number DESC);
 CREATE INDEX idx_entry_relations_project_source ON entry_relations(project_id, source_item_id, target_title);
@@ -123,6 +126,9 @@ DROP TRIGGER IF EXISTS content_items_au;
 DROP TRIGGER IF EXISTS content_items_ad;
 DROP TRIGGER IF EXISTS content_items_ai;
 DROP TABLE IF EXISTS content_search;
+DROP INDEX IF EXISTS idx_entry_sections_content_item_sort_order;
+DROP INDEX IF EXISTS idx_content_items_project_kind_sort_title;
+DROP INDEX IF EXISTS idx_story_projects_author_updated_title;
 DROP INDEX IF EXISTS idx_attached_notes_project_content_item;
 DROP INDEX IF EXISTS idx_entry_relations_project_target;
 DROP INDEX IF EXISTS idx_entry_relations_project_source;
