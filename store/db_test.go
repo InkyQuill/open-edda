@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -51,42 +52,38 @@ func TestOpenEnforcesForeignKeysAcrossConnections(t *testing.T) {
 		t.Fatalf("create foreign key tables: %v", err)
 	}
 
+	conns := make([]*sql.Conn, 0, 4)
 	for i := 0; i < 4; i++ {
 		conn, err := db.Conn(ctx)
 		if err != nil {
 			t.Fatalf("open connection %d: %v", i, err)
 		}
+		conns = append(conns, conn)
+	}
+	defer func() {
+		for i, conn := range conns {
+			if err := conn.Close(); err != nil {
+				t.Errorf("close connection %d: %v", i, err)
+			}
+		}
+	}()
 
+	for i, conn := range conns {
 		_, execErr := conn.ExecContext(ctx,
 			"INSERT INTO children (id, parent_id) VALUES (?, ?)",
 			"child-"+strconv.Itoa(i),
 			"missing-parent",
 		)
-		closeErr := conn.Close()
 
 		if execErr == nil {
 			t.Fatalf("connection %d allowed child row with missing parent", i)
-		}
-		if closeErr != nil {
-			t.Fatalf("close connection %d: %v", i, closeErr)
 		}
 	}
 }
 
 func TestProjectCoreMigrationCreatesStoryProjects(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "writer.db"))
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
+	db := openMigratedProjectCoreDB(t)
 	defer db.Close()
-
-	if err := goose.SetDialect("sqlite3"); err != nil {
-		t.Fatalf("set goose dialect: %v", err)
-	}
-	if err := goose.Up(db, filepath.Join("..", "migrations")); err != nil {
-		requireFTS5(t, err)
-		t.Fatalf("apply migrations: %v", err)
-	}
 
 	var tableName string
 	if err := db.QueryRow(
@@ -100,19 +97,8 @@ func TestProjectCoreMigrationCreatesStoryProjects(t *testing.T) {
 }
 
 func TestSearchContentUsesFTSIndex(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "writer.db"))
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
+	db := openMigratedProjectCoreDB(t)
 	defer db.Close()
-
-	if err := goose.SetDialect("sqlite3"); err != nil {
-		t.Fatalf("set goose dialect: %v", err)
-	}
-	if err := goose.Up(db, filepath.Join("..", "migrations")); err != nil {
-		requireFTS5(t, err)
-		t.Fatalf("apply migrations: %v", err)
-	}
 
 	if _, err := db.Exec(`
 		INSERT INTO authors (id, email, password_hash, created_at)
@@ -142,6 +128,115 @@ func TestSearchContentUsesFTSIndex(t *testing.T) {
 	}
 	if items[0].ID != "item-1" {
 		t.Fatalf("SearchContent() item ID = %q, want item-1", items[0].ID)
+	}
+}
+
+func TestProjectCoreMigrationRejectsCrossProjectEntryRelations(t *testing.T) {
+	db := openMigratedProjectCoreDB(t)
+	defer db.Close()
+	seedProjectScopedContent(t, db)
+
+	_, err := db.Exec(`
+		INSERT INTO entry_relations (
+			id, project_id, source_item_id, target_item_id, target_title, relation_type, created_at
+		) VALUES (
+			'relation-cross-source', 'project-1', 'item-2', NULL, 'Imported target', 'mentions', '2026-06-13T00:00:00Z'
+		);
+	`)
+	if err == nil {
+		t.Fatal("cross-project source_item_id insert succeeded, want foreign key failure")
+	}
+
+	_, err = db.Exec(`
+		INSERT INTO entry_relations (
+			id, project_id, source_item_id, target_item_id, target_title, relation_type, created_at
+		) VALUES (
+			'relation-cross-target', 'project-1', 'item-1', 'item-2', 'Other project target', 'mentions', '2026-06-13T00:00:00Z'
+		);
+	`)
+	if err == nil {
+		t.Fatal("cross-project target_item_id insert succeeded, want foreign key failure")
+	}
+
+	if _, err := db.Exec(`
+		INSERT INTO entry_relations (
+			id, project_id, source_item_id, target_item_id, target_title, relation_type, created_at
+		) VALUES (
+			'relation-unresolved-target', 'project-1', 'item-1', NULL, 'Imported target', 'mentions', '2026-06-13T00:00:00Z'
+		);
+	`); err != nil {
+		t.Fatalf("insert unresolved target relation: %v", err)
+	}
+}
+
+func TestProjectCoreMigrationRejectsCrossProjectAttachedNotes(t *testing.T) {
+	db := openMigratedProjectCoreDB(t)
+	defer db.Close()
+	seedProjectScopedContent(t, db)
+
+	_, err := db.Exec(`
+		INSERT INTO attached_notes (
+			id, project_id, content_item_id, title, body_markdown, source, created_at, updated_at
+		) VALUES (
+			'note-cross-content', 'project-1', 'item-2', 'Cross project note', 'Body', 'author',
+			'2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z'
+		);
+	`)
+	if err == nil {
+		t.Fatal("cross-project attached note insert succeeded, want foreign key failure")
+	}
+
+	if _, err := db.Exec(`
+		INSERT INTO attached_notes (
+			id, project_id, content_item_id, title, body_markdown, source, created_at, updated_at
+		) VALUES (
+			'note-project-level', 'project-1', NULL, 'Project note', 'Body', 'author',
+			'2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z'
+		);
+	`); err != nil {
+		t.Fatalf("insert project-level attached note: %v", err)
+	}
+}
+
+func openMigratedProjectCoreDB(t *testing.T) *sql.DB {
+	t.Helper()
+
+	db, err := Open(filepath.Join(t.TempDir(), "writer.db"))
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+
+	if err := goose.SetDialect("sqlite3"); err != nil {
+		_ = db.Close()
+		t.Fatalf("set goose dialect: %v", err)
+	}
+	if err := goose.Up(db, filepath.Join("..", "migrations")); err != nil {
+		_ = db.Close()
+		requireFTS5(t, err)
+		t.Fatalf("apply migrations: %v", err)
+	}
+
+	return db
+}
+
+func seedProjectScopedContent(t *testing.T, db *sql.DB) {
+	t.Helper()
+
+	if _, err := db.Exec(`
+		INSERT INTO authors (id, email, password_hash, created_at)
+		VALUES ('author-1', 'author@example.com', 'hash', '2026-06-13T00:00:00Z');
+		INSERT INTO story_projects (id, author_id, title, slug, language, created_at, updated_at)
+		VALUES
+			('project-1', 'author-1', 'Project One', 'project-one', 'en', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z'),
+			('project-2', 'author-1', 'Project Two', 'project-two', 'en', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z');
+		INSERT INTO content_items (
+			id, project_id, kind, title, slug, body_markdown, metadata_json,
+			sort_order, current_revision, created_at, updated_at
+		) VALUES
+			('item-1', 'project-1', 'story_bible_entry', 'Item One', 'item-one', 'Body one', '{}', 1, 1, '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z'),
+			('item-2', 'project-2', 'story_bible_entry', 'Item Two', 'item-two', 'Body two', '{}', 1, 1, '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z');
+	`); err != nil {
+		t.Fatalf("seed project-scoped content: %v", err)
 	}
 }
 

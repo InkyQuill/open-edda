@@ -229,8 +229,8 @@ Run:
 
 ```bash
 gofmt -w main.go app
-go test ./...
-go vet ./...
+go test -tags sqlite_fts5 ./...
+go vet -tags sqlite_fts5 ./...
 ```
 
 Expected: PASS.
@@ -313,6 +313,7 @@ CREATE TABLE content_items (
   current_revision INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
+  UNIQUE(id, project_id),
   UNIQUE(project_id, kind, slug)
 );
 
@@ -328,11 +329,13 @@ CREATE TABLE entry_sections (
 CREATE TABLE entry_relations (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES story_projects(id) ON DELETE CASCADE,
-  source_item_id TEXT NOT NULL REFERENCES content_items(id) ON DELETE CASCADE,
-  target_item_id TEXT REFERENCES content_items(id) ON DELETE SET NULL,
+  source_item_id TEXT NOT NULL,
+  target_item_id TEXT,
   target_title TEXT NOT NULL,
   relation_type TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (source_item_id, project_id) REFERENCES content_items(id, project_id) ON DELETE CASCADE,
+  FOREIGN KEY (target_item_id, project_id) REFERENCES content_items(id, project_id) ON DELETE CASCADE
 );
 
 CREATE TABLE revisions (
@@ -350,14 +353,15 @@ CREATE TABLE revisions (
 CREATE TABLE attached_notes (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES story_projects(id) ON DELETE CASCADE,
-  content_item_id TEXT REFERENCES content_items(id) ON DELETE CASCADE,
+  content_item_id TEXT,
   selection_start INTEGER,
   selection_end INTEGER,
   title TEXT NOT NULL,
   body_markdown TEXT NOT NULL,
   source TEXT NOT NULL CHECK(source IN ('author', 'read_and_check')),
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (content_item_id, project_id) REFERENCES content_items(id, project_id) ON DELETE CASCADE
 );
 
 CREATE VIRTUAL TABLE content_search USING fts5(
@@ -431,7 +435,7 @@ ORDER BY sort_order ASC, title ASC;
 SELECT * FROM content_items
 WHERE id = ? AND project_id = ?;
 
--- name: UpdateContentItemBody :exec
+-- name: UpdateContentItemBody :execrows
 UPDATE content_items
 SET body_markdown = ?, metadata_json = ?, current_revision = ?, updated_at = ?
 WHERE id = ? AND project_id = ? AND current_revision = ?;
@@ -468,11 +472,10 @@ ORDER BY target_title ASC;
 
 -- name: SearchContent :many
 SELECT content_items.*
-FROM content_search
+FROM content_search(CAST(sqlc.arg(query) AS TEXT))
 JOIN content_items ON content_items.rowid = content_search.rowid
-WHERE content_search MATCH ?
 ORDER BY rank
-LIMIT ?;
+LIMIT sqlc.arg(limit);
 ```
 
 - [ ] **Step 4: Generate sqlc code**
@@ -555,8 +558,8 @@ Run:
 
 ```bash
 gofmt -w store
-go test ./...
-go vet ./...
+go test -tags sqlite_fts5 ./...
+go vet -tags sqlite_fts5 ./...
 ```
 
 Expected: PASS.
@@ -822,19 +825,20 @@ func (s *Service) UpdateContent(ctx context.Context, input UpdateContentInput) (
 	now := time.Now().UTC().Format(time.RFC3339)
 	metadata := defaultJSON(input.MetadataJSON)
 
-	if err := s.queries.UpdateContentItemBody(ctx, store.UpdateContentItemBodyParams{
-		BodyMarkdown:    input.BodyMarkdown,
-		MetadataJson:    metadata,
-		CurrentRevision: nextRevision,
-		UpdatedAt:       now,
-		ID:              input.ContentID,
-		ProjectID:       input.ProjectID,
+	rows, err := s.queries.UpdateContentItemBody(ctx, store.UpdateContentItemBodyParams{
+		BodyMarkdown:      input.BodyMarkdown,
+		MetadataJson:      metadata,
+		CurrentRevision:   nextRevision,
+		UpdatedAt:         now,
+		ID:                input.ContentID,
+		ProjectID:         input.ProjectID,
 		CurrentRevision_2: input.ExpectedRevision,
-	}); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return ContentItem{}, ErrConflict
-		}
+	})
+	if err != nil {
 		return ContentItem{}, fmt.Errorf("update content item: %w", err)
+	}
+	if rows == 0 {
+		return ContentItem{}, ErrConflict
 	}
 
 	if err := s.queries.CreateRevision(ctx, store.CreateRevisionParams{
@@ -907,8 +911,8 @@ Run:
 
 ```bash
 gofmt -w project
-go test ./...
-go vet ./...
+go test -tags sqlite_fts5 ./...
+go vet -tags sqlite_fts5 ./...
 ```
 
 Expected: PASS.
@@ -1001,8 +1005,8 @@ Run:
 
 ```bash
 gofmt -w app project
-go test ./...
-go vet ./...
+go test -tags sqlite_fts5 ./...
+go vet -tags sqlite_fts5 ./...
 ```
 
 Expected: PASS.
@@ -1119,8 +1123,8 @@ Run:
 
 ```bash
 gofmt -w markdownio
-go test ./...
-go vet ./...
+go test -tags sqlite_fts5 ./...
+go vet -tags sqlite_fts5 ./...
 ```
 
 Expected: PASS.
@@ -1171,8 +1175,8 @@ Run:
 
 ```bash
 gofmt -w markdownio
-go test ./...
-go vet ./...
+go test -tags sqlite_fts5 ./...
+go vet -tags sqlite_fts5 ./...
 ```
 
 Expected: PASS.
@@ -1421,10 +1425,10 @@ Run:
 
 ```bash
 gofmt -w app
-go test ./...
+go test -tags sqlite_fts5 ./...
 cd frontend
 bun run build
-go vet ./...
+go vet -tags sqlite_fts5 ./...
 ```
 
 Expected: PASS.
@@ -1498,8 +1502,8 @@ Run:
 
 ```bash
 gofmt -w app project markdownio
-go test ./...
-go vet ./...
+go test -tags sqlite_fts5 ./...
+go vet -tags sqlite_fts5 ./...
 ```
 
 Expected: PASS.
@@ -1602,8 +1606,8 @@ Run:
 
 ```bash
 gofmt -w .
-go test ./...
-go vet ./...
+go test -tags sqlite_fts5 ./...
+go vet -tags sqlite_fts5 ./...
 ```
 
 Expected: PASS.

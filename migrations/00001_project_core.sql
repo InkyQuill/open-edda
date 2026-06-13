@@ -31,6 +31,7 @@ CREATE TABLE content_items (
   current_revision INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
+  UNIQUE(id, project_id),
   UNIQUE(project_id, kind, slug)
 );
 
@@ -46,11 +47,13 @@ CREATE TABLE entry_sections (
 CREATE TABLE entry_relations (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES story_projects(id) ON DELETE CASCADE,
-  source_item_id TEXT NOT NULL REFERENCES content_items(id) ON DELETE CASCADE,
-  target_item_id TEXT REFERENCES content_items(id) ON DELETE SET NULL,
+  source_item_id TEXT NOT NULL,
+  target_item_id TEXT,
   target_title TEXT NOT NULL,
   relation_type TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (source_item_id, project_id) REFERENCES content_items(id, project_id) ON DELETE CASCADE,
+  FOREIGN KEY (target_item_id, project_id) REFERENCES content_items(id, project_id) ON DELETE CASCADE
 );
 
 CREATE TABLE revisions (
@@ -68,14 +71,15 @@ CREATE TABLE revisions (
 CREATE TABLE attached_notes (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES story_projects(id) ON DELETE CASCADE,
-  content_item_id TEXT REFERENCES content_items(id) ON DELETE CASCADE,
+  content_item_id TEXT,
   selection_start INTEGER,
   selection_end INTEGER,
   title TEXT NOT NULL,
   body_markdown TEXT NOT NULL,
   source TEXT NOT NULL CHECK(source IN ('author', 'read_and_check')),
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (content_item_id, project_id) REFERENCES content_items(id, project_id) ON DELETE CASCADE
 );
 
 CREATE VIRTUAL TABLE content_search USING fts5(
