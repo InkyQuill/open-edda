@@ -93,6 +93,13 @@ export type AgentSession = {
   updatedAt: string;
 };
 
+export type SkillSelection = {
+  skillIds: string[];
+};
+
+export type CreateSessionRequest = Pick<AgentSession, "title" | "actionKind" | "modelVariantId" | "applyMode"> &
+  Partial<SkillSelection>;
+
 export type AgentMessage = {
   id: string;
   sessionId: string;
@@ -138,7 +145,7 @@ export type ContinuationRequest = {
   insert: boolean;
   continuationUnits: "word" | "sentence";
   continuationCount: number;
-};
+} & Partial<SkillSelection>;
 
 export type RewriteRequest = {
   contentId: string;
@@ -148,7 +155,7 @@ export type RewriteRequest = {
   expectedRevision: number;
   selectionStart: number;
   selectionEnd: number;
-};
+} & Partial<SkillSelection>;
 
 export type ContinuationResult = {
   session: AgentSession;

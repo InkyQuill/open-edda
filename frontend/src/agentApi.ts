@@ -5,6 +5,7 @@ import type {
   ChatTurnResult,
   ContinuationRequest,
   ContinuationResult,
+  CreateSessionRequest,
   GenerationCandidate,
   ModelVariant,
   ModelVariantRequest,
@@ -91,7 +92,7 @@ export function listSessions(projectId: string, limit?: number, signal?: AbortSi
 
 export function createSession(
   projectId: string,
-  input: Pick<AgentSession, "title" | "actionKind" | "modelVariantId" | "applyMode">,
+  input: CreateSessionRequest,
 ): Promise<AgentSession> {
   return requestJSON<AgentSession>(projectAgentPath(projectId, "sessions"), {
     method: "POST",
