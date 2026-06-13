@@ -408,7 +408,7 @@ func (q *Queries) ListProjectContentItems(ctx context.Context, projectID string)
 }
 
 const listRevisions = `-- name: ListRevisions :many
-SELECT revisions.id, revisions.content_item_id, revisions.revision_number, revisions.body_markdown, revisions.metadata_json, revisions.reason, revisions.created_by, revisions.created_at
+SELECT revisions.id, revisions.content_item_id, revisions.revision_number, revisions.body_markdown, revisions.metadata_json, revisions.reason, revisions.created_by, revisions.created_at, revisions.agent_session_id, revisions.action_kind, revisions.model_variant_id, revisions.skill_id
 FROM revisions
 JOIN content_items ON content_items.id = revisions.content_item_id
 WHERE revisions.content_item_id = ?1
@@ -439,6 +439,10 @@ func (q *Queries) ListRevisions(ctx context.Context, arg ListRevisionsParams) ([
 			&i.Reason,
 			&i.CreatedBy,
 			&i.CreatedAt,
+			&i.AgentSessionID,
+			&i.ActionKind,
+			&i.ModelVariantID,
+			&i.SkillID,
 		); err != nil {
 			return nil, err
 		}

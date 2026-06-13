@@ -96,6 +96,31 @@ func TestProjectCoreMigrationCreatesStoryProjects(t *testing.T) {
 	}
 }
 
+func TestAgentCoreTablesExist(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+
+	tables := []string{
+		"provider_configs",
+		"model_variants",
+		"prompt_profiles",
+		"agent_sessions",
+		"agent_messages",
+		"activity_events",
+		"prompt_records",
+		"generation_candidates",
+		"prompt_context_snapshots",
+		"tool_result_artifacts",
+	}
+	for _, table := range tables {
+		var name string
+		err := db.QueryRow(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&name)
+		if err != nil {
+			t.Fatalf("table %s missing: %v", table, err)
+		}
+	}
+}
+
 func TestSearchContentUsesFTSIndex(t *testing.T) {
 	db := openMigratedProjectCoreDB(t)
 	defer db.Close()
@@ -225,6 +250,12 @@ func openMigratedProjectCoreDB(t *testing.T) *sql.DB {
 	}
 
 	return db
+}
+
+func openTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+
+	return openMigratedProjectCoreDB(t)
 }
 
 func seedProjectScopedContent(t *testing.T, db *sql.DB) {

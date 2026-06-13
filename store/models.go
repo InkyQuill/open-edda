@@ -8,6 +8,36 @@ import (
 	"database/sql"
 )
 
+type ActivityEvent struct {
+	ID           string         `json:"id"`
+	ProjectID    string         `json:"project_id"`
+	SessionID    sql.NullString `json:"session_id"`
+	EventType    string         `json:"event_type"`
+	Summary      string         `json:"summary"`
+	MetadataJson string         `json:"metadata_json"`
+	CreatedAt    string         `json:"created_at"`
+}
+
+type AgentMessage struct {
+	ID           string `json:"id"`
+	SessionID    string `json:"session_id"`
+	Role         string `json:"role"`
+	BodyMarkdown string `json:"body_markdown"`
+	MetadataJson string `json:"metadata_json"`
+	CreatedAt    string `json:"created_at"`
+}
+
+type AgentSession struct {
+	ID             string         `json:"id"`
+	ProjectID      string         `json:"project_id"`
+	Title          string         `json:"title"`
+	ActionKind     string         `json:"action_kind"`
+	ModelVariantID sql.NullString `json:"model_variant_id"`
+	ApplyMode      string         `json:"apply_mode"`
+	CreatedAt      string         `json:"created_at"`
+	UpdatedAt      string         `json:"updated_at"`
+}
+
 type AttachedNote struct {
 	ID             string         `json:"id"`
 	ProjectID      string         `json:"project_id"`
@@ -65,15 +95,113 @@ type EntrySection struct {
 	SortOrder     int64  `json:"sort_order"`
 }
 
+type GenerationCandidate struct {
+	ID                string         `json:"id"`
+	ProjectID         string         `json:"project_id"`
+	SessionID         string         `json:"session_id"`
+	ContentItemID     string         `json:"content_item_id"`
+	ActionKind        string         `json:"action_kind"`
+	OperationKind     string         `json:"operation_kind"`
+	ExpectedRevision  int64          `json:"expected_revision"`
+	SelectionStart    sql.NullInt64  `json:"selection_start"`
+	SelectionEnd      sql.NullInt64  `json:"selection_end"`
+	InsertPosition    sql.NullInt64  `json:"insert_position"`
+	OriginalMarkdown  string         `json:"original_markdown"`
+	GeneratedMarkdown string         `json:"generated_markdown"`
+	Reason            string         `json:"reason"`
+	ModelVariantID    sql.NullString `json:"model_variant_id"`
+	Status            string         `json:"status"`
+	CreatedAt         string         `json:"created_at"`
+	UpdatedAt         string         `json:"updated_at"`
+}
+
+type ModelVariant struct {
+	ID                        string  `json:"id"`
+	ProviderConfigID          string  `json:"provider_config_id"`
+	Name                      string  `json:"name"`
+	Model                     string  `json:"model"`
+	Temperature               float64 `json:"temperature"`
+	MaxOutputTokens           int64   `json:"max_output_tokens"`
+	ContextWindowTokens       int64   `json:"context_window_tokens"`
+	InputPricePerMillion      float64 `json:"input_price_per_million"`
+	OutputPricePerMillion     float64 `json:"output_price_per_million"`
+	CacheReadPricePerMillion  float64 `json:"cache_read_price_per_million"`
+	CacheWritePricePerMillion float64 `json:"cache_write_price_per_million"`
+	RequestTokenField         string  `json:"request_token_field"`
+	ReasoningFormat           string  `json:"reasoning_format"`
+	CompatibilityJson         string  `json:"compatibility_json"`
+	CreatedAt                 string  `json:"created_at"`
+	UpdatedAt                 string  `json:"updated_at"`
+}
+
+type PromptContextSnapshot struct {
+	ID               string `json:"id"`
+	PromptRecordID   string `json:"prompt_record_id"`
+	SourceKey        string `json:"source_key"`
+	SourceVersion    string `json:"source_version"`
+	RenderedMarkdown string `json:"rendered_markdown"`
+	ValueJson        string `json:"value_json"`
+	CreatedAt        string `json:"created_at"`
+}
+
+type PromptProfile struct {
+	ID                        string `json:"id"`
+	ProjectID                 string `json:"project_id"`
+	Genre                     string `json:"genre"`
+	Tense                     string `json:"tense"`
+	Pov                       string `json:"pov"`
+	Voice                     string `json:"voice"`
+	InstructionsMarkdown      string `json:"instructions_markdown"`
+	PromptRecordRetentionDays int64  `json:"prompt_record_retention_days"`
+	CreatedAt                 string `json:"created_at"`
+	UpdatedAt                 string `json:"updated_at"`
+}
+
+type PromptRecord struct {
+	ID               string         `json:"id"`
+	ProjectID        string         `json:"project_id"`
+	SessionID        sql.NullString `json:"session_id"`
+	ProviderName     string         `json:"provider_name"`
+	ModelName        string         `json:"model_name"`
+	ActionKind       string         `json:"action_kind"`
+	RequestJson      string         `json:"request_json"`
+	ResponseJson     string         `json:"response_json"`
+	InputTokens      int64          `json:"input_tokens"`
+	OutputTokens     int64          `json:"output_tokens"`
+	CacheReadTokens  int64          `json:"cache_read_tokens"`
+	CacheWriteTokens int64          `json:"cache_write_tokens"`
+	TotalTokens      int64          `json:"total_tokens"`
+	InputCost        float64        `json:"input_cost"`
+	OutputCost       float64        `json:"output_cost"`
+	CacheReadCost    float64        `json:"cache_read_cost"`
+	CacheWriteCost   float64        `json:"cache_write_cost"`
+	TotalCost        float64        `json:"total_cost"`
+	CreatedAt        string         `json:"created_at"`
+}
+
+type ProviderConfig struct {
+	ID              string `json:"id"`
+	AuthorID        string `json:"author_id"`
+	Name            string `json:"name"`
+	BaseUrl         string `json:"base_url"`
+	ApiKeyEncrypted string `json:"api_key_encrypted"`
+	CreatedAt       string `json:"created_at"`
+	UpdatedAt       string `json:"updated_at"`
+}
+
 type Revision struct {
-	ID             string `json:"id"`
-	ContentItemID  string `json:"content_item_id"`
-	RevisionNumber int64  `json:"revision_number"`
-	BodyMarkdown   string `json:"body_markdown"`
-	MetadataJson   string `json:"metadata_json"`
-	Reason         string `json:"reason"`
-	CreatedBy      string `json:"created_by"`
-	CreatedAt      string `json:"created_at"`
+	ID             string         `json:"id"`
+	ContentItemID  string         `json:"content_item_id"`
+	RevisionNumber int64          `json:"revision_number"`
+	BodyMarkdown   string         `json:"body_markdown"`
+	MetadataJson   string         `json:"metadata_json"`
+	Reason         string         `json:"reason"`
+	CreatedBy      string         `json:"created_by"`
+	CreatedAt      string         `json:"created_at"`
+	AgentSessionID sql.NullString `json:"agent_session_id"`
+	ActionKind     string         `json:"action_kind"`
+	ModelVariantID sql.NullString `json:"model_variant_id"`
+	SkillID        string         `json:"skill_id"`
 }
 
 type StoryProject struct {
@@ -84,4 +212,17 @@ type StoryProject struct {
 	Language  string `json:"language"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
+}
+
+type ToolResultArtifact struct {
+	ID                   string         `json:"id"`
+	ProjectID            string         `json:"project_id"`
+	SessionID            sql.NullString `json:"session_id"`
+	ToolCallID           string         `json:"tool_call_id"`
+	ToolName             string         `json:"tool_name"`
+	FullResultJson       string         `json:"full_result_json"`
+	ModelVisibleMarkdown string         `json:"model_visible_markdown"`
+	Truncated            int64          `json:"truncated"`
+	FullResultBytes      int64          `json:"full_result_bytes"`
+	CreatedAt            string         `json:"created_at"`
 }

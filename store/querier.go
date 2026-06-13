@@ -9,22 +9,54 @@ import (
 )
 
 type Querier interface {
+	CreateActivityEvent(ctx context.Context, arg CreateActivityEventParams) error
+	CreateAgentMessage(ctx context.Context, arg CreateAgentMessageParams) error
+	CreateAgentSession(ctx context.Context, arg CreateAgentSessionParams) error
 	CreateContentItem(ctx context.Context, arg CreateContentItemParams) error
 	CreateEntryRelation(ctx context.Context, arg CreateEntryRelationParams) error
 	CreateEntrySection(ctx context.Context, arg CreateEntrySectionParams) error
+	CreateGenerationCandidate(ctx context.Context, arg CreateGenerationCandidateParams) error
+	CreateModelVariant(ctx context.Context, arg CreateModelVariantParams) error
+	CreatePromptContextSnapshot(ctx context.Context, arg CreatePromptContextSnapshotParams) error
+	CreatePromptRecord(ctx context.Context, arg CreatePromptRecordParams) error
+	CreateProviderConfig(ctx context.Context, arg CreateProviderConfigParams) error
 	CreateRevision(ctx context.Context, arg CreateRevisionParams) error
 	CreateStoryProject(ctx context.Context, arg CreateStoryProjectParams) error
+	CreateToolResultArtifact(ctx context.Context, arg CreateToolResultArtifactParams) error
+	DeleteExpiredPromptRecords(ctx context.Context, arg DeleteExpiredPromptRecordsParams) error
+	DeleteModelVariant(ctx context.Context, id string) error
+	DeleteProviderConfig(ctx context.Context, id string) error
+	GetAgentSession(ctx context.Context, arg GetAgentSessionParams) (AgentSession, error)
 	GetContentItem(ctx context.Context, arg GetContentItemParams) (ContentItem, error)
+	GetGenerationCandidate(ctx context.Context, arg GetGenerationCandidateParams) (GenerationCandidate, error)
+	GetModelVariant(ctx context.Context, id string) (ModelVariant, error)
+	GetPromptProfile(ctx context.Context, projectID string) (PromptProfile, error)
+	GetProviderConfig(ctx context.Context, id string) (ProviderConfig, error)
 	GetStoryProject(ctx context.Context, arg GetStoryProjectParams) (StoryProject, error)
 	GetStoryProjectByID(ctx context.Context, id string) (StoryProject, error)
+	ListActivityEvents(ctx context.Context, arg ListActivityEventsParams) ([]ActivityEvent, error)
+	ListAgentMessages(ctx context.Context, sessionID string) ([]AgentMessage, error)
+	ListAgentSessions(ctx context.Context, arg ListAgentSessionsParams) ([]AgentSession, error)
 	ListContentItems(ctx context.Context, arg ListContentItemsParams) ([]ContentItem, error)
 	ListEntryRelations(ctx context.Context, arg ListEntryRelationsParams) ([]EntryRelation, error)
 	ListEntrySections(ctx context.Context, arg ListEntrySectionsParams) ([]EntrySection, error)
+	ListGenerationCandidates(ctx context.Context, arg ListGenerationCandidatesParams) ([]GenerationCandidate, error)
+	ListModelVariantsByAuthor(ctx context.Context, authorID string) ([]ModelVariant, error)
+	ListModelVariantsByProvider(ctx context.Context, providerConfigID string) ([]ModelVariant, error)
 	ListProjectContentItems(ctx context.Context, projectID string) ([]ContentItem, error)
+	ListPromptContextSnapshots(ctx context.Context, promptRecordID string) ([]PromptContextSnapshot, error)
+	ListPromptRecords(ctx context.Context, arg ListPromptRecordsParams) ([]PromptRecord, error)
+	ListProviderConfigs(ctx context.Context, authorID string) ([]ProviderConfig, error)
 	ListRevisions(ctx context.Context, arg ListRevisionsParams) ([]Revision, error)
 	ListStoryProjects(ctx context.Context, authorID string) ([]StoryProject, error)
+	ListToolResultArtifacts(ctx context.Context, arg ListToolResultArtifactsParams) ([]ToolResultArtifact, error)
 	SearchContent(ctx context.Context, arg SearchContentParams) ([]ContentItem, error)
+	TouchAgentSession(ctx context.Context, arg TouchAgentSessionParams) error
 	UpdateContentItemBody(ctx context.Context, arg UpdateContentItemBodyParams) (int64, error)
+	UpdateGenerationCandidateStatus(ctx context.Context, arg UpdateGenerationCandidateStatusParams) error
+	UpdateModelVariant(ctx context.Context, arg UpdateModelVariantParams) error
+	UpdateProviderConfig(ctx context.Context, arg UpdateProviderConfigParams) error
+	UpsertPromptProfile(ctx context.Context, arg UpsertPromptProfileParams) error
 }
 
 var _ Querier = (*Queries)(nil)
