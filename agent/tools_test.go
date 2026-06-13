@@ -198,6 +198,116 @@ func TestExecuteToolRejectsSessionOutsideProject(t *testing.T) {
 	}
 }
 
+func TestExecuteToolValidatesSearchContentArguments(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Search Validation Project")
+	service := NewService(db, projectService, nil)
+	session := createTestSession(t, ctx, service, storyProject.ID)
+
+	tests := []struct {
+		name      string
+		arguments string
+	}{
+		{name: "invalid kind", arguments: `{"kind":"invalid"}`},
+		{name: "zero limit", arguments: `{"limit":0}`},
+		{name: "negative limit", arguments: `{"limit":-1}`},
+		{name: "too large limit", arguments: `{"limit":101}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := service.ExecuteTool(ctx, ToolCallInput{
+				ProjectID:     storyProject.ID,
+				SessionID:     session.ID,
+				ToolCallID:    "call-" + strings.ReplaceAll(tt.name, " ", "-"),
+				ToolName:      "search_content",
+				ArgumentsJSON: tt.arguments,
+			})
+			if err == nil {
+				t.Fatal("ExecuteTool() error = nil, want validation error")
+			}
+		})
+	}
+}
+
+func TestExecuteToolValidatesReadEntrySectionArgumentsAndKind(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Section Validation Project")
+	service := NewService(db, projectService, nil)
+	session := createTestSession(t, ctx, service, storyProject.ID)
+	seed := seedToolContent(t, ctx, projectService, storyProject.ID)
+
+	tests := []struct {
+		name      string
+		arguments string
+	}{
+		{name: "missing content ID", arguments: `{"heading":"Motivation"}`},
+		{name: "missing heading", arguments: `{"contentId":"` + seed.Character.ID + `"}`},
+		{name: "wrong kind", arguments: `{"contentId":"` + seed.Chapter.ID + `","heading":"Motivation"}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := service.ExecuteTool(ctx, ToolCallInput{
+				ProjectID:     storyProject.ID,
+				SessionID:     session.ID,
+				ToolCallID:    "call-" + strings.ReplaceAll(tt.name, " ", "-"),
+				ToolName:      "read_entry_section",
+				ArgumentsJSON: tt.arguments,
+			})
+			if err == nil {
+				t.Fatal("ExecuteTool() error = nil, want validation error")
+			}
+		})
+	}
+}
+
+func TestExecuteToolRollsBackActivityWhenArtifactInsertFails(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Rollback Tool Project")
+	service := NewService(db, projectService, nil)
+	session := createTestSession(t, ctx, service, storyProject.ID)
+	seedToolContent(t, ctx, projectService, storyProject.ID)
+
+	if _, err := db.Exec(`
+		CREATE TRIGGER block_tool_result_artifacts
+		BEFORE INSERT ON tool_result_artifacts
+		BEGIN
+			SELECT RAISE(ABORT, 'artifact insert blocked');
+		END;
+	`); err != nil {
+		t.Fatalf("create artifact-blocking trigger: %v", err)
+	}
+
+	_, err := service.ExecuteTool(ctx, ToolCallInput{
+		ProjectID:     storyProject.ID,
+		SessionID:     session.ID,
+		ToolCallID:    "call-artifact-fails",
+		ToolName:      "project_map",
+		ArgumentsJSON: `{}`,
+	})
+	if err == nil {
+		t.Fatal("ExecuteTool() error = nil, want artifact failure")
+	}
+
+	events, err := store.New(db).ListActivityEvents(ctx, store.ListActivityEventsParams{
+		ProjectID: storyProject.ID,
+		Limit:     10,
+	})
+	if err != nil {
+		t.Fatalf("ListActivityEvents() error = %v", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("activity event count after rollback = %d, want 0", len(events))
+	}
+}
+
 func TestExecuteToolBoundsModelVisibleOutput(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()
@@ -237,6 +347,98 @@ func TestExecuteToolBoundsModelVisibleOutput(t *testing.T) {
 	}
 	assertMarkdownContains(t, result.ModelVisibleMarkdown, "BEGIN", "END", "truncated")
 	assertFullJSONContains(t, result.FullResultJSON, "middle line with enough text")
+}
+
+func TestExecuteToolBoundsByteHeavySingleLineDirectRead(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Single Line Project")
+	service := NewService(db, projectService, nil)
+	session := createTestSession(t, ctx, service, storyProject.ID)
+
+	body := "BEGIN-" + strings.Repeat("Ж", 40_000) + "-END"
+	chapter, err := projectService.CreateContent(ctx, project.CreateContentInput{
+		ProjectID:    storyProject.ID,
+		Kind:         project.KindChapter,
+		Title:        "Single Line",
+		BodyMarkdown: body,
+		CreatedBy:    "author",
+	})
+	if err != nil {
+		t.Fatalf("CreateContent() error = %v", err)
+	}
+
+	result, err := service.ExecuteTool(ctx, ToolCallInput{
+		ProjectID:     storyProject.ID,
+		SessionID:     session.ID,
+		ToolCallID:    "call-single-line",
+		ToolName:      "read_content",
+		ArgumentsJSON: `{"contentId":"` + chapter.ID + `"}`,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool() error = %v", err)
+	}
+
+	if !result.Truncated {
+		t.Fatal("Truncated = false, want true")
+	}
+	if len([]byte(result.ModelVisibleMarkdown)) > 50*1024 {
+		t.Fatalf("model-visible bytes = %d, want <= 51200", len([]byte(result.ModelVisibleMarkdown)))
+	}
+	if !json.Valid([]byte(result.FullResultJSON)) {
+		t.Fatal("full result JSON is invalid")
+	}
+	assertMarkdownContains(t, result.ModelVisibleMarkdown, "BEGIN-", "-END", "truncated")
+}
+
+func TestExecuteToolBoundsByteHeavySingleLineListResult(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Single Line List Project")
+	service := NewService(db, projectService, nil)
+	session := createTestSession(t, ctx, service, storyProject.ID)
+
+	for _, input := range []project.CreateContentInput{
+		{
+			ProjectID:    storyProject.ID,
+			Kind:         project.KindProjectNote,
+			Title:        "BEGIN item",
+			BodyMarkdown: "needle " + strings.Repeat("Ж", 35_000),
+			CreatedBy:    "author",
+		},
+		{
+			ProjectID:    storyProject.ID,
+			Kind:         project.KindProjectNote,
+			Title:        "END item",
+			BodyMarkdown: "needle " + strings.Repeat("Я", 35_000),
+			CreatedBy:    "author",
+		},
+	} {
+		if _, err := projectService.CreateContent(ctx, input); err != nil {
+			t.Fatalf("CreateContent(%q) error = %v", input.Title, err)
+		}
+	}
+
+	result, err := service.ExecuteTool(ctx, ToolCallInput{
+		ProjectID:     storyProject.ID,
+		SessionID:     session.ID,
+		ToolCallID:    "call-list-single-line",
+		ToolName:      "search_content",
+		ArgumentsJSON: `{"query":"needle","kind":"project_note","limit":2}`,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool() error = %v", err)
+	}
+
+	if !result.Truncated {
+		t.Fatal("Truncated = false, want true")
+	}
+	if len([]byte(result.ModelVisibleMarkdown)) > 50*1024 {
+		t.Fatalf("model-visible bytes = %d, want <= 51200", len([]byte(result.ModelVisibleMarkdown)))
+	}
+	assertMarkdownContains(t, result.ModelVisibleMarkdown, "BEGIN item", "END item", "truncated")
 }
 
 type toolSeed struct {

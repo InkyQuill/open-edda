@@ -10,6 +10,42 @@ import (
 	"database/sql"
 )
 
+const createAttachedNote = `-- name: CreateAttachedNote :exec
+INSERT INTO attached_notes (
+  id, project_id, content_item_id, selection_start, selection_end,
+  title, body_markdown, source, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateAttachedNoteParams struct {
+	ID             string         `json:"id"`
+	ProjectID      string         `json:"project_id"`
+	ContentItemID  sql.NullString `json:"content_item_id"`
+	SelectionStart sql.NullInt64  `json:"selection_start"`
+	SelectionEnd   sql.NullInt64  `json:"selection_end"`
+	Title          string         `json:"title"`
+	BodyMarkdown   string         `json:"body_markdown"`
+	Source         string         `json:"source"`
+	CreatedAt      string         `json:"created_at"`
+	UpdatedAt      string         `json:"updated_at"`
+}
+
+func (q *Queries) CreateAttachedNote(ctx context.Context, arg CreateAttachedNoteParams) error {
+	_, err := q.db.ExecContext(ctx, createAttachedNote,
+		arg.ID,
+		arg.ProjectID,
+		arg.ContentItemID,
+		arg.SelectionStart,
+		arg.SelectionEnd,
+		arg.Title,
+		arg.BodyMarkdown,
+		arg.Source,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
 const createContentItem = `-- name: CreateContentItem :exec
 INSERT INTO content_items (
   id, project_id, kind, title, slug, body_markdown, metadata_json,
@@ -519,6 +555,54 @@ type SearchContentParams struct {
 
 func (q *Queries) SearchContent(ctx context.Context, arg SearchContentParams) ([]ContentItem, error) {
 	rows, err := q.db.QueryContext(ctx, searchContent, arg.Query, arg.ProjectID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ContentItem
+	for rows.Next() {
+		var i ContentItem
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Kind,
+			&i.Title,
+			&i.Slug,
+			&i.BodyMarkdown,
+			&i.MetadataJson,
+			&i.SortOrder,
+			&i.CurrentRevision,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchContentCandidates = `-- name: SearchContentCandidates :many
+SELECT content_items.id, content_items.project_id, content_items.kind, content_items.title, content_items.slug, content_items.body_markdown, content_items.metadata_json, content_items.sort_order, content_items.current_revision, content_items.created_at, content_items.updated_at
+FROM content_search(CAST(?1 AS TEXT))
+JOIN content_items ON content_items.rowid = content_search.rowid
+WHERE content_items.project_id = ?2
+ORDER BY rank
+`
+
+type SearchContentCandidatesParams struct {
+	Query     string `json:"query"`
+	ProjectID string `json:"project_id"`
+}
+
+func (q *Queries) SearchContentCandidates(ctx context.Context, arg SearchContentCandidatesParams) ([]ContentItem, error) {
+	rows, err := q.db.QueryContext(ctx, searchContentCandidates, arg.Query, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}

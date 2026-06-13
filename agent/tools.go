@@ -88,7 +88,19 @@ func (s *Service) ExecuteTool(ctx context.Context, input ToolCallInput) (ToolRes
 	if err != nil {
 		return ToolResult{}, fmt.Errorf("marshal activity metadata: %w", err)
 	}
-	if err := s.queries.CreateActivityEvent(ctx, store.CreateActivityEventParams{
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return ToolResult{}, fmt.Errorf("begin tool result transaction: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	queries := s.queries.WithTx(tx)
+	if err := queries.CreateActivityEvent(ctx, store.CreateActivityEventParams{
 		ID:           newID("event"),
 		ProjectID:    input.ProjectID,
 		SessionID:    sql.NullString{String: input.SessionID, Valid: input.SessionID != ""},
@@ -99,7 +111,7 @@ func (s *Service) ExecuteTool(ctx context.Context, input ToolCallInput) (ToolRes
 	}); err != nil {
 		return ToolResult{}, fmt.Errorf("create activity event: %w", err)
 	}
-	if err := s.queries.CreateToolResultArtifact(ctx, store.CreateToolResultArtifactParams{
+	if err := queries.CreateToolResultArtifact(ctx, store.CreateToolResultArtifactParams{
 		ID:                   newID("artifact"),
 		ProjectID:            input.ProjectID,
 		SessionID:            sql.NullString{String: input.SessionID, Valid: input.SessionID != ""},
@@ -113,6 +125,10 @@ func (s *Service) ExecuteTool(ctx context.Context, input ToolCallInput) (ToolRes
 	}); err != nil {
 		return ToolResult{}, fmt.Errorf("create tool result artifact: %w", err)
 	}
+	if err := tx.Commit(); err != nil {
+		return ToolResult{}, fmt.Errorf("commit tool result transaction: %w", err)
+	}
+	committed = true
 
 	return result, nil
 }
@@ -132,10 +148,20 @@ func (s *Service) executeContextTool(ctx context.Context, input ToolCallInput) (
 			Kind            project.ContentKind `json:"kind"`
 			MetadataFilters map[string]string   `json:"metadataFilters"`
 			Tags            []string            `json:"tags"`
-			Limit           int64               `json:"limit"`
+			Limit           *int64              `json:"limit"`
 		}
 		if err := decodeToolArgs(input.ArgumentsJSON, &args); err != nil {
 			return nil, false, err
+		}
+		if args.Kind != "" && !validToolContentKind(args.Kind) {
+			return nil, false, fmt.Errorf("invalid content kind %q", args.Kind)
+		}
+		var limit int64
+		if args.Limit != nil {
+			if *args.Limit <= 0 || *args.Limit > 100 {
+				return nil, false, fmt.Errorf("limit must be between 1 and 100")
+			}
+			limit = *args.Limit
 		}
 		items, err := s.projectService.SearchContent(ctx, project.SearchContentInput{
 			ProjectID:       input.ProjectID,
@@ -143,7 +169,7 @@ func (s *Service) executeContextTool(ctx context.Context, input ToolCallInput) (
 			Kind:            args.Kind,
 			MetadataFilters: args.MetadataFilters,
 			Tags:            args.Tags,
-			Limit:           args.Limit,
+			Limit:           limit,
 		})
 		return items, false, err
 	case "read_content":
@@ -162,6 +188,19 @@ func (s *Service) executeContextTool(ctx context.Context, input ToolCallInput) (
 		}
 		if err := decodeToolArgs(input.ArgumentsJSON, &args); err != nil {
 			return nil, false, err
+		}
+		if strings.TrimSpace(args.ContentID) == "" {
+			return nil, false, fmt.Errorf("contentId is required")
+		}
+		if strings.TrimSpace(args.Heading) == "" {
+			return nil, false, fmt.Errorf("heading is required")
+		}
+		item, err := s.projectService.GetContent(ctx, input.ProjectID, args.ContentID)
+		if err != nil {
+			return nil, false, err
+		}
+		if item.Kind != project.KindStoryBibleEntry {
+			return nil, false, fmt.Errorf("content %q kind = %q, want %q", args.ContentID, item.Kind, project.KindStoryBibleEntry)
 		}
 		sections, err := s.projectService.ListEntrySections(ctx, input.ProjectID, args.ContentID)
 		if err != nil {
@@ -193,6 +232,9 @@ func (s *Service) readContentTool(ctx context.Context, projectID, argsJSON strin
 	}
 	if err := decodeToolArgs(argsJSON, &args); err != nil {
 		return project.ContentItem{}, err
+	}
+	if strings.TrimSpace(args.ContentID) == "" {
+		return project.ContentItem{}, fmt.Errorf("contentId is required")
 	}
 	item, err := s.projectService.GetContent(ctx, projectID, args.ContentID)
 	if err != nil {
@@ -290,6 +332,10 @@ func boundModelVisible(markdown string, directRead bool) (string, bool) {
 }
 
 func boundDirectRead(lines []string) string {
+	text := strings.Join(lines, "\n")
+	if len(lines) <= 1 || longestLineBytes(lines) > maxToolVisibleBytes-256 {
+		return boundTextHeadTail(text, maxToolVisibleBytes-256, 3, 4)
+	}
 	keepLines := maxToolVisibleLines - 8
 	if keepLines < 2 {
 		keepLines = 2
@@ -323,10 +369,17 @@ func boundDirectRead(lines []string) string {
 			tailCount--
 		}
 	}
-	return truncateUTF8(strings.Join(lines, "\n"), maxToolVisibleBytes-256)
+	return boundTextHeadTail(text, maxToolVisibleBytes-256, 3, 4)
 }
 
 func boundListResult(lines []string) string {
+	if len(lines) <= 1 || longestLineBytes(lines) > maxToolVisibleBytes-256 {
+		lines = compactLongLines(lines, 4096)
+	}
+	text := strings.Join(lines, "\n")
+	if len([]byte(text)) <= maxToolVisibleBytes-256 && len(lines) <= maxToolVisibleLines {
+		return text
+	}
 	keepLines := maxToolVisibleLines - 8
 	if keepLines < 2 {
 		keepLines = 2
@@ -348,7 +401,62 @@ func boundListResult(lines []string) string {
 		headCount--
 		tailCount--
 	}
-	return truncateUTF8(strings.Join(lines, "\n"), maxToolVisibleBytes-256)
+	return boundTextHeadTail(text, maxToolVisibleBytes-256, 1, 2)
+}
+
+func compactLongLines(lines []string, maxBytes int) []string {
+	compacted := make([]string, len(lines))
+	for i, line := range lines {
+		if len([]byte(line)) > maxBytes {
+			compacted[i] = boundTextHeadTail(line, maxBytes, 1, 2)
+		} else {
+			compacted[i] = line
+		}
+	}
+	return compacted
+}
+
+func boundTextHeadTail(value string, maxBytes int, headWeight int, totalWeight int) string {
+	if len([]byte(value)) <= maxBytes {
+		return value
+	}
+	if maxBytes <= 16 {
+		return truncateUTF8(value, maxBytes)
+	}
+	separator := "\n\n...\n\n"
+	available := maxBytes - len([]byte(separator))
+	if available <= 0 {
+		return truncateUTF8(value, maxBytes)
+	}
+	headBytes := (available * headWeight) / totalWeight
+	tailBytes := available - headBytes
+	head := truncateUTF8(value, headBytes)
+	tail := utf8Tail(value, tailBytes)
+	return head + separator + tail
+}
+
+func utf8Tail(value string, maxBytes int) string {
+	if len([]byte(value)) <= maxBytes {
+		return value
+	}
+	if maxBytes <= 0 {
+		return ""
+	}
+	start := len(value) - maxBytes
+	for start < len(value) && !utf8.ValidString(value[start:]) {
+		start++
+	}
+	return value[start:]
+}
+
+func longestLineBytes(lines []string) int {
+	longest := 0
+	for _, line := range lines {
+		if size := len([]byte(line)); size > longest {
+			longest = size
+		}
+	}
+	return longest
 }
 
 func truncateUTF8(value string, maxBytes int) string {
@@ -404,4 +512,13 @@ func boolInt(value bool) int64 {
 		return 1
 	}
 	return 0
+}
+
+func validToolContentKind(kind project.ContentKind) bool {
+	switch kind {
+	case project.KindChapter, project.KindStoryBibleEntry, project.KindWritingBrief, project.KindProjectNote:
+		return true
+	default:
+		return false
+	}
 }

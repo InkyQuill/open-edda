@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -251,6 +252,90 @@ func TestSearchContentFiltersMetadataAndTags(t *testing.T) {
 	}
 	if matches[0].Title != "Mira" {
 		t.Fatalf("match title = %q, want Mira", matches[0].Title)
+	}
+}
+
+func TestSearchContentAppliesLimitAfterMetadataFilters(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	for _, input := range []CreateContentInput{
+		{
+			ProjectID:    "project-1",
+			Kind:         KindStoryBibleEntry,
+			Title:        "Ash Compass",
+			BodyMarkdown: "Alchemy lantern.",
+			MetadataJSON: `{"type":"artifact","status":"draft","tags":["alchemy"]}`,
+			CreatedBy:    "author",
+		},
+		{
+			ProjectID:    "project-1",
+			Kind:         KindStoryBibleEntry,
+			Title:        "Mira",
+			BodyMarkdown: "Alchemy lantern.",
+			MetadataJSON: `{"type":"character","status":"draft","tags":["alchemy"]}`,
+			CreatedBy:    "author",
+		},
+	} {
+		if _, err := service.CreateContent(ctx, input); err != nil {
+			t.Fatalf("CreateContent(%q) error = %v", input.Title, err)
+		}
+	}
+
+	matches, err := service.SearchContent(ctx, SearchContentInput{
+		ProjectID:       "project-1",
+		Query:           "alchemy",
+		MetadataFilters: map[string]string{"type": "character"},
+		Limit:           1,
+	})
+	if err != nil {
+		t.Fatalf("SearchContent() error = %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("SearchContent() returned %d matches, want 1: %#v", len(matches), matches)
+	}
+	if matches[0].Title != "Mira" {
+		t.Fatalf("match title = %q, want Mira", matches[0].Title)
+	}
+}
+
+func TestSearchContentValidatesKindAndClampsLimit(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	for i := range 105 {
+		if _, err := service.CreateContent(ctx, CreateContentInput{
+			ProjectID:    "project-1",
+			Kind:         KindProjectNote,
+			Title:        fmt.Sprintf("Note %03d", i),
+			BodyMarkdown: "lantern",
+			SortOrder:    int64(i),
+			CreatedBy:    "author",
+		}); err != nil {
+			t.Fatalf("CreateContent(%d) error = %v", i, err)
+		}
+	}
+
+	_, err := service.SearchContent(ctx, SearchContentInput{
+		ProjectID: "project-1",
+		Kind:      ContentKind("invalid"),
+	})
+	if err == nil {
+		t.Fatal("SearchContent() error = nil, want invalid kind error")
+	}
+
+	matches, err := service.SearchContent(ctx, SearchContentInput{
+		ProjectID: "project-1",
+		Query:     "lantern",
+		Limit:     250,
+	})
+	if err != nil {
+		t.Fatalf("SearchContent() error = %v", err)
+	}
+	if len(matches) != 100 {
+		t.Fatalf("SearchContent() returned %d matches, want capped 100", len(matches))
 	}
 }
 

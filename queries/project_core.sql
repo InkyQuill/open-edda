@@ -81,6 +81,12 @@ SELECT * FROM entry_relations
 WHERE project_id = ? AND source_item_id = ?
 ORDER BY target_title ASC;
 
+-- name: CreateAttachedNote :exec
+INSERT INTO attached_notes (
+  id, project_id, content_item_id, selection_start, selection_end,
+  title, body_markdown, source, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
 -- name: SearchContent :many
 SELECT content_items.*
 FROM content_search(CAST(sqlc.arg(query) AS TEXT))
@@ -88,3 +94,10 @@ JOIN content_items ON content_items.rowid = content_search.rowid
 WHERE content_items.project_id = sqlc.arg(project_id)
 ORDER BY rank
 LIMIT sqlc.arg(limit);
+
+-- name: SearchContentCandidates :many
+SELECT content_items.*
+FROM content_search(CAST(sqlc.arg(query) AS TEXT))
+JOIN content_items ON content_items.rowid = content_search.rowid
+WHERE content_items.project_id = sqlc.arg(project_id)
+ORDER BY rank;

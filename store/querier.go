@@ -13,6 +13,7 @@ type Querier interface {
 	CreateAgentMessage(ctx context.Context, arg CreateAgentMessageParams) error
 	CreateAgentMessageForProject(ctx context.Context, arg CreateAgentMessageForProjectParams) (int64, error)
 	CreateAgentSession(ctx context.Context, arg CreateAgentSessionParams) error
+	CreateAttachedNote(ctx context.Context, arg CreateAttachedNoteParams) error
 	CreateContentItem(ctx context.Context, arg CreateContentItemParams) error
 	CreateEntryRelation(ctx context.Context, arg CreateEntryRelationParams) error
 	CreateEntrySection(ctx context.Context, arg CreateEntrySectionParams) error
@@ -55,6 +56,7 @@ type Querier interface {
 	ListToolResultArtifacts(ctx context.Context, arg ListToolResultArtifactsParams) ([]ToolResultArtifact, error)
 	ListToolResultArtifactsByProject(ctx context.Context, projectID string) ([]ToolResultArtifact, error)
 	SearchContent(ctx context.Context, arg SearchContentParams) ([]ContentItem, error)
+	SearchContentCandidates(ctx context.Context, arg SearchContentCandidatesParams) ([]ContentItem, error)
 	TouchAgentSession(ctx context.Context, arg TouchAgentSessionParams) error
 	UpdateContentItemBody(ctx context.Context, arg UpdateContentItemBodyParams) (int64, error)
 	UpdateGenerationCandidateStatus(ctx context.Context, arg UpdateGenerationCandidateStatusParams) error

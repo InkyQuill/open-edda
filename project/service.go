@@ -316,11 +316,12 @@ func (s *Service) SearchContent(ctx context.Context, input SearchContentInput) (
 	if _, err := s.queries.GetStoryProjectByID(ctx, input.ProjectID); err != nil {
 		return nil, fmt.Errorf("get story project: %w", err)
 	}
-
-	limit := input.Limit
-	if limit <= 0 {
-		limit = 50
+	if input.Kind != "" && !validContentKind(input.Kind) {
+		return nil, fmt.Errorf("invalid content kind %q", input.Kind)
 	}
+
+	limit := normalizedSearchLimit(input.Limit)
+	hasPostFilters := len(input.MetadataFilters) > 0 || len(input.Tags) > 0 || input.Kind != ""
 
 	var (
 		items []store.ContentItem
@@ -336,11 +337,18 @@ func (s *Service) SearchContent(ctx context.Context, input SearchContentInput) (
 			items, err = s.queries.ListProjectContentItems(ctx, input.ProjectID)
 		}
 	} else {
-		items, err = s.queries.SearchContent(ctx, store.SearchContentParams{
-			Query:     input.Query,
-			ProjectID: input.ProjectID,
-			Limit:     limit,
-		})
+		if hasPostFilters {
+			items, err = s.queries.SearchContentCandidates(ctx, store.SearchContentCandidatesParams{
+				Query:     input.Query,
+				ProjectID: input.ProjectID,
+			})
+		} else {
+			items, err = s.queries.SearchContent(ctx, store.SearchContentParams{
+				Query:     input.Query,
+				ProjectID: input.ProjectID,
+				Limit:     limit,
+			})
+		}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("search content: %w", err)
@@ -521,24 +529,18 @@ func (s *Service) CreateAttachedNote(ctx context.Context, input CreateAttachedNo
 		UpdatedAt:      now,
 	}
 
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO attached_notes (
-			id, project_id, content_item_id, selection_start, selection_end,
-			title, body_markdown, source, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`,
-		note.ID,
-		note.ProjectID,
-		nullString(note.ContentItemID),
-		nullInt64(note.SelectionStart),
-		nullInt64(note.SelectionEnd),
-		note.Title,
-		note.BodyMarkdown,
-		note.Source,
-		note.CreatedAt,
-		note.UpdatedAt,
-	)
-	if err != nil {
+	if err := s.queries.CreateAttachedNote(ctx, store.CreateAttachedNoteParams{
+		ID:             note.ID,
+		ProjectID:      note.ProjectID,
+		ContentItemID:  nullString(note.ContentItemID),
+		SelectionStart: nullInt64(note.SelectionStart),
+		SelectionEnd:   nullInt64(note.SelectionEnd),
+		Title:          note.Title,
+		BodyMarkdown:   note.BodyMarkdown,
+		Source:         note.Source,
+		CreatedAt:      note.CreatedAt,
+		UpdatedAt:      note.UpdatedAt,
+	}); err != nil {
 		return AttachedNote{}, fmt.Errorf("create attached note: %w", err)
 	}
 
@@ -698,6 +700,16 @@ func contentMatchesMetadata(metadataJSON string, filters map[string]string, tags
 	}
 
 	return true, nil
+}
+
+func normalizedSearchLimit(limit int64) int64 {
+	if limit <= 0 {
+		return 50
+	}
+	if limit > 100 {
+		return 100
+	}
+	return limit
 }
 
 func nullString(value string) sql.NullString {
