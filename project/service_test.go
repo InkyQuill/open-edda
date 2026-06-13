@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"git.inkyquill.net/inky/writer/store"
@@ -244,6 +245,65 @@ func TestStructuredReplaceContentRangeCreatesRevision(t *testing.T) {
 		t.Fatalf("revision = %d, want 2", updated.CurrentRevision)
 	}
 	assertRevisionCount(t, ctx, db, chapter.ID, 2)
+}
+
+func TestStructuredInsertRejectsNonUTF8BoundaryByteOffsetWithoutPersisting(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	chapter := createStructuredWriteContent(t, ctx, service, KindChapter, "Opening", "éclair", `{}`)
+
+	_, err := service.InsertIntoContent(ctx, StructuredWriteInput{
+		ProjectID:         "project-1",
+		ContentID:         chapter.ID,
+		ExpectedRevision:  1,
+		GeneratedMarkdown: " bright",
+		InsertPosition:    1,
+		Reason:            "insert at invalid byte offset",
+		AgentSessionID:    "session-1",
+		ActionKind:        "rewrite",
+		ModelVariantID:    "model-1",
+	})
+	if err == nil {
+		t.Fatal("InsertIntoContent() error = nil, want UTF-8 boundary error")
+	}
+	if !strings.Contains(err.Error(), "UTF-8 rune boundary") {
+		t.Fatalf("InsertIntoContent() error = %v, want UTF-8 boundary error", err)
+	}
+
+	assertContentUnchanged(t, ctx, service, chapter.ID, "éclair", 1)
+	assertRevisionCount(t, ctx, db, chapter.ID, 1)
+}
+
+func TestStructuredReplaceRejectsNonUTF8BoundaryByteOffsetWithoutPersisting(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	chapter := createStructuredWriteContent(t, ctx, service, KindChapter, "Opening", "café noir", `{}`)
+
+	_, err := service.ReplaceContentRange(ctx, StructuredWriteInput{
+		ProjectID:         "project-1",
+		ContentID:         chapter.ID,
+		ExpectedRevision:  1,
+		GeneratedMarkdown: "e",
+		SelectionStart:    3,
+		SelectionEnd:      4,
+		Reason:            "replace at invalid byte offset",
+		AgentSessionID:    "session-1",
+		ActionKind:        "rewrite",
+		ModelVariantID:    "model-1",
+	})
+	if err == nil {
+		t.Fatal("ReplaceContentRange() error = nil, want UTF-8 boundary error")
+	}
+	if !strings.Contains(err.Error(), "UTF-8 rune boundary") {
+		t.Fatalf("ReplaceContentRange() error = %v, want UTF-8 boundary error", err)
+	}
+
+	assertContentUnchanged(t, ctx, service, chapter.ID, "café noir", 1)
+	assertRevisionCount(t, ctx, db, chapter.ID, 1)
 }
 
 func TestStructuredUpdateStoryBibleEntryBodyCreatesRevision(t *testing.T) {
@@ -750,6 +810,21 @@ func assertRevisionCount(t *testing.T, ctx context.Context, db *sql.DB, contentI
 	}
 	if count != want {
 		t.Fatalf("revision count = %d, want %d", count, want)
+	}
+}
+
+func assertContentUnchanged(t *testing.T, ctx context.Context, service *Service, contentID, wantBody string, wantRevision int64) {
+	t.Helper()
+
+	item, err := service.GetContent(ctx, "project-1", contentID)
+	if err != nil {
+		t.Fatalf("GetContent() error = %v", err)
+	}
+	if item.BodyMarkdown != wantBody {
+		t.Fatalf("body = %q, want %q", item.BodyMarkdown, wantBody)
+	}
+	if item.CurrentRevision != wantRevision {
+		t.Fatalf("revision = %d, want %d", item.CurrentRevision, wantRevision)
 	}
 }
 

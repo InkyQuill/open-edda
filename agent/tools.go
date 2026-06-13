@@ -394,6 +394,9 @@ func (s *Service) executeWriteTool(ctx context.Context, input ToolCallInput, ses
 		if strings.TrimSpace(args.Heading) == "" {
 			return nil, nil, fmt.Errorf("heading is required")
 		}
+		if strings.TrimSpace(args.GeneratedMarkdown) == "" {
+			return nil, nil, fmt.Errorf("generatedMarkdown is required")
+		}
 		if strings.TrimSpace(args.Reason) == "" {
 			return nil, nil, fmt.Errorf("reason is required")
 		}
@@ -440,6 +443,9 @@ func decodeStructuredWriteArgs(argumentsJSON string) (structuredWriteArgs, error
 	}
 	if args.ExpectedRevision <= 0 {
 		return structuredWriteArgs{}, fmt.Errorf("expectedRevision is required")
+	}
+	if strings.TrimSpace(args.GeneratedMarkdown) == "" {
+		return structuredWriteArgs{}, fmt.Errorf("generatedMarkdown is required")
 	}
 	if strings.TrimSpace(args.Reason) == "" {
 		return structuredWriteArgs{}, fmt.Errorf("reason is required")

@@ -247,6 +247,78 @@ func TestExecuteWriteToolValidatesTargetKind(t *testing.T) {
 	}
 }
 
+func TestExecuteWriteToolRejectsBlankGeneratedMarkdown(t *testing.T) {
+	tests := []struct {
+		name      string
+		toolName  string
+		arguments func(seed toolSeed) string
+	}{
+		{
+			name:     "append_to_chapter",
+			toolName: "append_to_chapter",
+			arguments: func(seed toolSeed) string {
+				return `{"contentId":"` + seed.Chapter.ID + `","expectedRevision":2,"generatedMarkdown":"   ","reason":"blank append"}`
+			},
+		},
+		{
+			name:     "insert_into_chapter",
+			toolName: "insert_into_chapter",
+			arguments: func(seed toolSeed) string {
+				return `{"contentId":"` + seed.Chapter.ID + `","expectedRevision":2,"insertPosition":3,"generatedMarkdown":"","reason":"blank insert"}`
+			},
+		},
+		{
+			name:     "replace_selection",
+			toolName: "replace_selection",
+			arguments: func(seed toolSeed) string {
+				return `{"contentId":"` + seed.Chapter.ID + `","expectedRevision":2,"selectionStart":0,"selectionEnd":3,"generatedMarkdown":"\n\t ","reason":"blank replace"}`
+			},
+		},
+		{
+			name:     "update_story_bible_entry",
+			toolName: "update_story_bible_entry",
+			arguments: func(seed toolSeed) string {
+				return `{"contentId":"` + seed.Character.ID + `","expectedRevision":1,"generatedMarkdown":" ","reason":"blank entry update"}`
+			},
+		},
+		{
+			name:     "update_entry_section",
+			toolName: "update_entry_section",
+			arguments: func(seed toolSeed) string {
+				return `{"contentId":"` + seed.Character.ID + `","heading":"Motivation","generatedMarkdown":"  ","reason":"blank section update"}`
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := openMigratedTestDB(t)
+			ctx := context.Background()
+			projectService := project.NewService(db)
+			storyProject := createTestProject(t, ctx, projectService, "author-1", "Blank Write Project")
+			service := NewService(db, projectService, nil)
+			session := createTestSession(t, ctx, service, storyProject.ID)
+			seed := seedToolContent(t, ctx, projectService, storyProject.ID)
+
+			_, err := service.ExecuteTool(ctx, ToolCallInput{
+				ProjectID:     storyProject.ID,
+				SessionID:     session.ID,
+				ToolCallID:    "call-blank-" + tt.name,
+				ToolName:      tt.toolName,
+				ArgumentsJSON: tt.arguments(seed),
+			})
+			if err == nil {
+				t.Fatal("ExecuteTool() error = nil, want blank generatedMarkdown validation error")
+			}
+			if !strings.Contains(err.Error(), "generatedMarkdown is required") {
+				t.Fatalf("ExecuteTool() error = %v, want generatedMarkdown validation error", err)
+			}
+
+			assertNoToolActivityOrArtifact(t, ctx, db, storyProject.ID, session.ID)
+		})
+	}
+}
+
 func TestExecuteContextToolsRecordsActivityAndArtifact(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -901,6 +973,33 @@ func assertWriteToolActivityAndArtifact(t *testing.T, ctx context.Context, db *s
 	}
 	if artifact.FullResultJson != result.FullResultJSON {
 		t.Fatal("artifact full JSON differs from returned full JSON")
+	}
+}
+
+func assertNoToolActivityOrArtifact(t *testing.T, ctx context.Context, db *sql.DB, projectID, sessionID string) {
+	t.Helper()
+
+	queries := store.New(db)
+	events, err := queries.ListActivityEvents(ctx, store.ListActivityEventsParams{
+		ProjectID: projectID,
+		Limit:     10,
+	})
+	if err != nil {
+		t.Fatalf("ListActivityEvents() error = %v", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("activity event count = %d, want 0", len(events))
+	}
+
+	artifacts, err := queries.ListToolResultArtifacts(ctx, store.ListToolResultArtifactsParams{
+		ProjectID: projectID,
+		SessionID: sql.NullString{String: sessionID, Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("ListToolResultArtifacts() error = %v", err)
+	}
+	if len(artifacts) != 0 {
+		t.Fatalf("artifact count = %d, want 0", len(artifacts))
 	}
 }
 

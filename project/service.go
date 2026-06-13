@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"git.inkyquill.net/inky/writer/markdownio"
 	"git.inkyquill.net/inky/writer/store"
@@ -478,6 +479,9 @@ func (s *Service) InsertIntoContent(ctx context.Context, input StructuredWriteIn
 	if input.InsertPosition < 0 || input.InsertPosition > int64(len(item.BodyMarkdown)) {
 		return ContentItem{}, fmt.Errorf("insert position out of range")
 	}
+	if !validUTF8ByteBoundary(item.BodyMarkdown, input.InsertPosition) {
+		return ContentItem{}, fmt.Errorf("insert position byte offset %d is not a UTF-8 rune boundary", input.InsertPosition)
+	}
 	position := int(input.InsertPosition)
 	body := item.BodyMarkdown[:position] + input.GeneratedMarkdown + item.BodyMarkdown[position:]
 	return s.writeContent(ctx, input, body)
@@ -490,6 +494,12 @@ func (s *Service) ReplaceContentRange(ctx context.Context, input StructuredWrite
 	}
 	if input.SelectionStart < 0 || input.SelectionEnd < input.SelectionStart || input.SelectionEnd > int64(len(item.BodyMarkdown)) {
 		return ContentItem{}, fmt.Errorf("selection range out of range")
+	}
+	if !validUTF8ByteBoundary(item.BodyMarkdown, input.SelectionStart) {
+		return ContentItem{}, fmt.Errorf("selection start byte offset %d is not a UTF-8 rune boundary", input.SelectionStart)
+	}
+	if !validUTF8ByteBoundary(item.BodyMarkdown, input.SelectionEnd) {
+		return ContentItem{}, fmt.Errorf("selection end byte offset %d is not a UTF-8 rune boundary", input.SelectionEnd)
 	}
 	start := int(input.SelectionStart)
 	end := int(input.SelectionEnd)
@@ -781,6 +791,16 @@ func revisionFromStore(revision store.Revision) Revision {
 		ModelVariantID: revision.ModelVariantID.String,
 		SkillID:        revision.SkillID,
 	}
+}
+
+func validUTF8ByteBoundary(value string, offset int64) bool {
+	if offset < 0 || offset > int64(len(value)) {
+		return false
+	}
+	if offset == 0 || offset == int64(len(value)) {
+		return true
+	}
+	return utf8.RuneStart(value[offset])
 }
 
 func contentMatchesMetadata(metadataJSON string, filters map[string]string, tags []string) (bool, error) {

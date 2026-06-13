@@ -148,14 +148,15 @@ type StructuredWriteInput struct {
 	ContentID         string
 	ExpectedRevision  int64
 	GeneratedMarkdown string
-	InsertPosition    int64
-	SelectionStart    int64
-	SelectionEnd      int64
-	Reason            string
-	AgentSessionID    string
-	ActionKind        string
-	ModelVariantID    string
-	SkillID           string
+	// InsertPosition, SelectionStart, and SelectionEnd are byte offsets and must be UTF-8 rune boundaries.
+	InsertPosition int64
+	SelectionStart int64
+	SelectionEnd   int64
+	Reason         string
+	AgentSessionID string
+	ActionKind     string
+	ModelVariantID string
+	SkillID        string
 }
 
 type UpdateEntrySectionInput struct {
