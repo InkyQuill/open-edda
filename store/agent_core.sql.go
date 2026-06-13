@@ -1252,6 +1252,37 @@ func (q *Queries) UpdateGenerationCandidateStatus(ctx context.Context, arg Updat
 	return err
 }
 
+const updateGenerationCandidateStatusIfStatus = `-- name: UpdateGenerationCandidateStatusIfStatus :execrows
+UPDATE generation_candidates
+SET status = ?1,
+    updated_at = ?2
+WHERE project_id = ?3
+  AND id = ?4
+  AND status = ?5
+`
+
+type UpdateGenerationCandidateStatusIfStatusParams struct {
+	Status         string `json:"status"`
+	UpdatedAt      string `json:"updated_at"`
+	ProjectID      string `json:"project_id"`
+	ID             string `json:"id"`
+	ExpectedStatus string `json:"expected_status"`
+}
+
+func (q *Queries) UpdateGenerationCandidateStatusIfStatus(ctx context.Context, arg UpdateGenerationCandidateStatusIfStatusParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateGenerationCandidateStatusIfStatus,
+		arg.Status,
+		arg.UpdatedAt,
+		arg.ProjectID,
+		arg.ID,
+		arg.ExpectedStatus,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const updateModelVariant = `-- name: UpdateModelVariant :exec
 UPDATE model_variants
 SET name = ?1,

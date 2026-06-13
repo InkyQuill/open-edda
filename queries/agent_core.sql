@@ -258,3 +258,11 @@ SET status = sqlc.arg(status),
     updated_at = sqlc.arg(updated_at)
 WHERE project_id = sqlc.arg(project_id)
   AND id = sqlc.arg(id);
+
+-- name: UpdateGenerationCandidateStatusIfStatus :execrows
+UPDATE generation_candidates
+SET status = sqlc.arg(status),
+    updated_at = sqlc.arg(updated_at)
+WHERE project_id = sqlc.arg(project_id)
+  AND id = sqlc.arg(id)
+  AND status = sqlc.arg(expected_status);

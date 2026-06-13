@@ -137,7 +137,7 @@ CREATE TABLE generation_candidates (
   generated_markdown TEXT NOT NULL,
   reason TEXT NOT NULL,
   model_variant_id TEXT REFERENCES model_variants(id) ON DELETE SET NULL,
-  status TEXT NOT NULL CHECK(status IN ('pending', 'accepted', 'rejected', 'conflict')),
+  status TEXT NOT NULL CHECK(status IN ('pending', 'applying', 'accepted', 'rejected', 'conflict')),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (content_item_id, project_id) REFERENCES content_items(id, project_id) ON DELETE CASCADE

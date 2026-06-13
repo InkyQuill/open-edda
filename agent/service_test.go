@@ -82,8 +82,8 @@ func TestContinuationPreviewCreatesPendingCandidateWithoutChangingChapter(t *tes
 	if result.Candidate.OperationKind != "insert" {
 		t.Fatalf("operation kind = %q, want insert", result.Candidate.OperationKind)
 	}
-	if result.Candidate.InsertPosition != int64(len("Existing")) {
-		t.Fatalf("insert position = %d, want %d", result.Candidate.InsertPosition, len("Existing"))
+	if result.Candidate.InsertPosition == nil || *result.Candidate.InsertPosition != int64(len("Existing")) {
+		t.Fatalf("insert position = %v, want %d", result.Candidate.InsertPosition, len("Existing"))
 	}
 	updated := mustGetContent(t, ctx, projectService, storyProject.ID, chapter.ID)
 	if updated.BodyMarkdown != chapter.BodyMarkdown || updated.CurrentRevision != chapter.CurrentRevision {
@@ -129,6 +129,48 @@ func TestAcceptContinuationPreviewCommitsOneStructuredWriteAndMarksAccepted(t *t
 	}
 	assertRevisionCount(t, ctx, db, chapter.ID, 2)
 	assertActivityEvent(t, ctx, db, storyProject.ID, "generation_candidate_accepted")
+}
+
+func TestAcceptCandidateSecondAcceptDoesNotMarkAcceptedCandidateConflict(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Continuation Double Accept Project")
+	provider := &fakeChatProvider{responses: []CompletionResponse{quickActionResponse("completion-1", "\n\nAccepted paragraph.")}}
+	service := NewService(db, projectService, provider)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 0)
+	chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Opening", "Existing text.")
+
+	preview, err := service.RunContinuation(ctx, ContinuationInput{
+		ProjectID:        storyProject.ID,
+		ContentID:        chapter.ID,
+		ModelVariantID:   model.ID,
+		ApplyMode:        ApplyModePreview,
+		ExpectedRevision: chapter.CurrentRevision,
+	})
+	if err != nil {
+		t.Fatalf("RunContinuation() error = %v", err)
+	}
+	if _, err := service.AcceptCandidate(ctx, AcceptCandidateInput{
+		ProjectID:   storyProject.ID,
+		CandidateID: preview.Candidate.ID,
+	}); err != nil {
+		t.Fatalf("AcceptCandidate(first) error = %v", err)
+	}
+	_, err = service.AcceptCandidate(ctx, AcceptCandidateInput{
+		ProjectID:   storyProject.ID,
+		CandidateID: preview.Candidate.ID,
+	})
+	if !errors.Is(err, project.ErrConflict) {
+		t.Fatalf("AcceptCandidate(second) error = %v, want project.ErrConflict", err)
+	}
+
+	candidate := mustGetGenerationCandidate(t, ctx, db, storyProject.ID, preview.Candidate.ID)
+	if candidate.Status != "accepted" {
+		t.Fatalf("candidate status = %q, want accepted", candidate.Status)
+	}
+	assertRevisionCount(t, ctx, db, chapter.ID, 2)
 }
 
 func TestRewriteDirectApplyReplacesSelectionAndCreatesRevision(t *testing.T) {
@@ -249,6 +291,102 @@ func TestRejectRewritePreviewMarksRejectedWithoutChangingChapter(t *testing.T) {
 	}
 }
 
+func TestRejectCandidateAcceptedCandidateReturnsConflictAndKeepsAccepted(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Reject Accepted Project")
+	provider := &fakeChatProvider{responses: []CompletionResponse{quickActionResponse("completion-1", "bright city")}}
+	service := NewService(db, projectService, provider)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 0)
+	chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Opening", "The old city waited.")
+
+	preview, err := service.RunRewrite(ctx, RewriteInput{
+		ProjectID:        storyProject.ID,
+		ContentID:        chapter.ID,
+		ModelVariantID:   model.ID,
+		ApplyMode:        ApplyModePreview,
+		ExpectedRevision: chapter.CurrentRevision,
+		SelectionStart:   4,
+		SelectionEnd:     12,
+	})
+	if err != nil {
+		t.Fatalf("RunRewrite() error = %v", err)
+	}
+	if _, err := service.AcceptCandidate(ctx, AcceptCandidateInput{
+		ProjectID:   storyProject.ID,
+		CandidateID: preview.Candidate.ID,
+	}); err != nil {
+		t.Fatalf("AcceptCandidate() error = %v", err)
+	}
+	_, err = service.RejectCandidate(ctx, RejectCandidateInput{
+		ProjectID:   storyProject.ID,
+		CandidateID: preview.Candidate.ID,
+	})
+	if !errors.Is(err, project.ErrConflict) {
+		t.Fatalf("RejectCandidate() error = %v, want project.ErrConflict", err)
+	}
+
+	candidate := mustGetGenerationCandidate(t, ctx, db, storyProject.ID, preview.Candidate.ID)
+	if candidate.Status != "accepted" {
+		t.Fatalf("candidate status = %q, want accepted", candidate.Status)
+	}
+}
+
+func TestRejectCandidateConflictCandidateReturnsConflictAndKeepsConflict(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Reject Conflict Project")
+	provider := &fakeChatProvider{responses: []CompletionResponse{quickActionResponse("completion-1", "bright city")}}
+	service := NewService(db, projectService, provider)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 0)
+	chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Opening", "The old city waited.")
+
+	preview, err := service.RunRewrite(ctx, RewriteInput{
+		ProjectID:        storyProject.ID,
+		ContentID:        chapter.ID,
+		ModelVariantID:   model.ID,
+		ApplyMode:        ApplyModePreview,
+		ExpectedRevision: chapter.CurrentRevision,
+		SelectionStart:   4,
+		SelectionEnd:     12,
+	})
+	if err != nil {
+		t.Fatalf("RunRewrite() error = %v", err)
+	}
+	if _, err := projectService.AppendToContent(ctx, project.StructuredWriteInput{
+		ProjectID:         storyProject.ID,
+		ContentID:         chapter.ID,
+		ExpectedRevision:  chapter.CurrentRevision,
+		GeneratedMarkdown: "\n\nAuthor edit.",
+		Reason:            "author edit",
+		ActionKind:        "author",
+	}); err != nil {
+		t.Fatalf("AppendToContent() error = %v", err)
+	}
+	if _, err := service.AcceptCandidate(ctx, AcceptCandidateInput{
+		ProjectID:   storyProject.ID,
+		CandidateID: preview.Candidate.ID,
+	}); !errors.Is(err, project.ErrConflict) {
+		t.Fatalf("AcceptCandidate() error = %v, want project.ErrConflict", err)
+	}
+	_, err = service.RejectCandidate(ctx, RejectCandidateInput{
+		ProjectID:   storyProject.ID,
+		CandidateID: preview.Candidate.ID,
+	})
+	if !errors.Is(err, project.ErrConflict) {
+		t.Fatalf("RejectCandidate() error = %v, want project.ErrConflict", err)
+	}
+
+	candidate := mustGetGenerationCandidate(t, ctx, db, storyProject.ID, preview.Candidate.ID)
+	if candidate.Status != "conflict" {
+		t.Fatalf("candidate status = %q, want conflict", candidate.Status)
+	}
+}
+
 func TestAcceptRewritePreviewWithStaleExpectedRevisionMarksConflict(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()
@@ -302,6 +440,35 @@ func TestAcceptRewritePreviewWithStaleExpectedRevisionMarksConflict(t *testing.T
 		t.Fatalf("candidate status = %q, want conflict", candidate.Status)
 	}
 	assertActivityEvent(t, ctx, db, storyProject.ID, "generation_candidate_conflict")
+}
+
+func TestGenerationCandidateJSONPreservesZeroOffsets(t *testing.T) {
+	zero := int64(0)
+	candidate := GenerationCandidate{
+		ID:                "candidate-1",
+		ProjectID:         "project-1",
+		SessionID:         "session-1",
+		ContentItemID:     "chapter-1",
+		ActionKind:        ActionKindRewrite,
+		OperationKind:     "replace",
+		ExpectedRevision:  1,
+		SelectionStart:    &zero,
+		SelectionEnd:      &zero,
+		InsertPosition:    &zero,
+		OriginalMarkdown:  "",
+		GeneratedMarkdown: "generated",
+		Status:            "pending",
+	}
+
+	payload, err := json.Marshal(candidate)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	for _, field := range []string{`"selectionStart":0`, `"selectionEnd":0`, `"insertPosition":0`} {
+		if !strings.Contains(string(payload), field) {
+			t.Fatalf("payload %s missing %s", payload, field)
+		}
+	}
 }
 
 func TestReadAndCheckStoresAssistantReportAndAttachedNote(t *testing.T) {
@@ -1406,6 +1573,19 @@ func assertRevisionCount(t *testing.T, ctx context.Context, db *sql.DB, contentI
 	if count != want {
 		t.Fatalf("revision count = %d, want %d", count, want)
 	}
+}
+
+func mustGetGenerationCandidate(t *testing.T, ctx context.Context, db *sql.DB, projectID, candidateID string) store.GenerationCandidate {
+	t.Helper()
+
+	candidate, err := store.New(db).GetGenerationCandidate(ctx, store.GetGenerationCandidateParams{
+		ProjectID: projectID,
+		ID:        candidateID,
+	})
+	if err != nil {
+		t.Fatalf("GetGenerationCandidate() error = %v", err)
+	}
+	return candidate
 }
 
 func assertActivityEvent(t *testing.T, ctx context.Context, db *sql.DB, projectID, eventType string) {

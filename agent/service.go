@@ -724,7 +724,10 @@ func (s *Service) AcceptCandidate(ctx context.Context, input AcceptCandidateInpu
 		return AcceptCandidateResult{}, fmt.Errorf("get generation candidate: %w", err)
 	}
 	if candidate.Status != "pending" {
-		return AcceptCandidateResult{}, fmt.Errorf("candidate status = %q, want pending", candidate.Status)
+		return AcceptCandidateResult{}, fmt.Errorf("candidate status = %q, want pending: %w", candidate.Status, project.ErrConflict)
+	}
+	if err := s.transitionCandidateStatus(ctx, input.ProjectID, input.CandidateID, "pending", "applying"); err != nil {
+		return AcceptCandidateResult{}, err
 	}
 
 	content, err := s.applyCandidateWrite(ctx, candidate.OperationKind, project.StructuredWriteInput{
@@ -742,7 +745,7 @@ func (s *Service) AcceptCandidate(ctx context.Context, input AcceptCandidateInpu
 	})
 	if err != nil {
 		if errors.Is(err, project.ErrConflict) {
-			if updateErr := s.updateCandidateStatus(ctx, input.ProjectID, input.CandidateID, "conflict"); updateErr != nil {
+			if updateErr := s.transitionCandidateStatus(ctx, input.ProjectID, input.CandidateID, "applying", "conflict"); updateErr != nil {
 				return AcceptCandidateResult{}, updateErr
 			}
 			if eventErr := s.createActivityEvent(ctx, candidate.ProjectID, candidate.SessionID, "generation_candidate_conflict", "Generation candidate conflicted", "{}"); eventErr != nil {
@@ -751,7 +754,7 @@ func (s *Service) AcceptCandidate(ctx context.Context, input AcceptCandidateInpu
 		}
 		return AcceptCandidateResult{}, err
 	}
-	if err := s.updateCandidateStatus(ctx, input.ProjectID, input.CandidateID, "accepted"); err != nil {
+	if err := s.transitionCandidateStatus(ctx, input.ProjectID, input.CandidateID, "applying", "accepted"); err != nil {
 		return AcceptCandidateResult{}, err
 	}
 	if err := s.createActivityEvent(ctx, candidate.ProjectID, candidate.SessionID, "generation_candidate_accepted", "Accepted generation candidate", "{}"); err != nil {
@@ -775,7 +778,10 @@ func (s *Service) RejectCandidate(ctx context.Context, input RejectCandidateInpu
 	if err != nil {
 		return GenerationCandidate{}, fmt.Errorf("get generation candidate: %w", err)
 	}
-	if err := s.updateCandidateStatus(ctx, input.ProjectID, input.CandidateID, "rejected"); err != nil {
+	if candidate.Status != "pending" {
+		return GenerationCandidate{}, fmt.Errorf("candidate status = %q, want pending: %w", candidate.Status, project.ErrConflict)
+	}
+	if err := s.transitionCandidateStatus(ctx, input.ProjectID, input.CandidateID, "pending", "rejected"); err != nil {
 		return GenerationCandidate{}, err
 	}
 	if err := s.createActivityEvent(ctx, candidate.ProjectID, candidate.SessionID, "generation_candidate_rejected", "Rejected generation candidate", "{}"); err != nil {
@@ -960,6 +966,9 @@ type generationCandidateInput struct {
 
 func (s *Service) createGenerationCandidate(ctx context.Context, input generationCandidateInput) (GenerationCandidate, error) {
 	now := nowString()
+	selectionStart := int64Ptr(input.SelectionStart, input.SelectionEnd > input.SelectionStart)
+	selectionEnd := int64Ptr(input.SelectionEnd, input.SelectionEnd > input.SelectionStart)
+	insertPosition := int64Ptr(input.InsertPosition, input.HasInsertPosition)
 	candidate := GenerationCandidate{
 		ID:                newID("candidate"),
 		ProjectID:         input.ProjectID,
@@ -968,9 +977,9 @@ func (s *Service) createGenerationCandidate(ctx context.Context, input generatio
 		ActionKind:        input.ActionKind,
 		OperationKind:     input.OperationKind,
 		ExpectedRevision:  input.ExpectedRevision,
-		SelectionStart:    input.SelectionStart,
-		SelectionEnd:      input.SelectionEnd,
-		InsertPosition:    input.InsertPosition,
+		SelectionStart:    selectionStart,
+		SelectionEnd:      selectionEnd,
+		InsertPosition:    insertPosition,
 		OriginalMarkdown:  input.OriginalMarkdown,
 		GeneratedMarkdown: input.GeneratedMarkdown,
 		Reason:            input.Reason,
@@ -987,9 +996,9 @@ func (s *Service) createGenerationCandidate(ctx context.Context, input generatio
 		ActionKind:        string(candidate.ActionKind),
 		OperationKind:     candidate.OperationKind,
 		ExpectedRevision:  candidate.ExpectedRevision,
-		SelectionStart:    nullInt64(input.SelectionStart, input.SelectionEnd > input.SelectionStart),
-		SelectionEnd:      nullInt64(input.SelectionEnd, input.SelectionEnd > input.SelectionStart),
-		InsertPosition:    nullInt64(input.InsertPosition, input.HasInsertPosition),
+		SelectionStart:    nullInt64(input.SelectionStart, selectionStart != nil),
+		SelectionEnd:      nullInt64(input.SelectionEnd, selectionEnd != nil),
+		InsertPosition:    nullInt64(input.InsertPosition, insertPosition != nil),
 		OriginalMarkdown:  candidate.OriginalMarkdown,
 		GeneratedMarkdown: candidate.GeneratedMarkdown,
 		Reason:            candidate.Reason,
@@ -1003,14 +1012,19 @@ func (s *Service) createGenerationCandidate(ctx context.Context, input generatio
 	return candidate, nil
 }
 
-func (s *Service) updateCandidateStatus(ctx context.Context, projectID, candidateID, status string) error {
-	if err := s.queries.UpdateGenerationCandidateStatus(ctx, store.UpdateGenerationCandidateStatusParams{
-		Status:    status,
-		UpdatedAt: nowString(),
-		ProjectID: projectID,
-		ID:        candidateID,
-	}); err != nil {
+func (s *Service) transitionCandidateStatus(ctx context.Context, projectID, candidateID, fromStatus, toStatus string) error {
+	affected, err := s.queries.UpdateGenerationCandidateStatusIfStatus(ctx, store.UpdateGenerationCandidateStatusIfStatusParams{
+		Status:         toStatus,
+		UpdatedAt:      nowString(),
+		ProjectID:      projectID,
+		ID:             candidateID,
+		ExpectedStatus: fromStatus,
+	})
+	if err != nil {
 		return fmt.Errorf("update generation candidate status: %w", err)
+	}
+	if affected == 0 {
+		return project.ErrConflict
 	}
 	return nil
 }
@@ -1423,9 +1437,9 @@ func generationCandidateFromStore(candidate store.GenerationCandidate) Generatio
 		ActionKind:        ActionKind(candidate.ActionKind),
 		OperationKind:     candidate.OperationKind,
 		ExpectedRevision:  candidate.ExpectedRevision,
-		SelectionStart:    valueInt64(candidate.SelectionStart),
-		SelectionEnd:      valueInt64(candidate.SelectionEnd),
-		InsertPosition:    valueInt64(candidate.InsertPosition),
+		SelectionStart:    int64Ptr(candidate.SelectionStart.Int64, candidate.SelectionStart.Valid),
+		SelectionEnd:      int64Ptr(candidate.SelectionEnd.Int64, candidate.SelectionEnd.Valid),
+		InsertPosition:    int64Ptr(candidate.InsertPosition.Int64, candidate.InsertPosition.Valid),
 		OriginalMarkdown:  candidate.OriginalMarkdown,
 		GeneratedMarkdown: candidate.GeneratedMarkdown,
 		Reason:            candidate.Reason,
@@ -1483,6 +1497,13 @@ func valueInt64(value sql.NullInt64) int64 {
 		return 0
 	}
 	return value.Int64
+}
+
+func int64Ptr(value int64, valid bool) *int64 {
+	if !valid {
+		return nil
+	}
+	return &value
 }
 
 func defaultJSON(value string) string {

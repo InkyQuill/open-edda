@@ -63,6 +63,7 @@ type Querier interface {
 	UpdateContentItemBody(ctx context.Context, arg UpdateContentItemBodyParams) (int64, error)
 	UpdateEntrySectionBody(ctx context.Context, arg UpdateEntrySectionBodyParams) (int64, error)
 	UpdateGenerationCandidateStatus(ctx context.Context, arg UpdateGenerationCandidateStatusParams) error
+	UpdateGenerationCandidateStatusIfStatus(ctx context.Context, arg UpdateGenerationCandidateStatusIfStatusParams) (int64, error)
 	UpdateModelVariant(ctx context.Context, arg UpdateModelVariantParams) error
 	UpdateProviderConfig(ctx context.Context, arg UpdateProviderConfigParams) error
 	UpsertPromptProfile(ctx context.Context, arg UpsertPromptProfileParams) error

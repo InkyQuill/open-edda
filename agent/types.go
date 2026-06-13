@@ -342,9 +342,9 @@ type GenerationCandidate struct {
 	ActionKind        ActionKind `json:"actionKind"`
 	OperationKind     string     `json:"operationKind"`
 	ExpectedRevision  int64      `json:"expectedRevision"`
-	SelectionStart    int64      `json:"selectionStart,omitempty"`
-	SelectionEnd      int64      `json:"selectionEnd,omitempty"`
-	InsertPosition    int64      `json:"insertPosition,omitempty"`
+	SelectionStart    *int64     `json:"selectionStart,omitempty"`
+	SelectionEnd      *int64     `json:"selectionEnd,omitempty"`
+	InsertPosition    *int64     `json:"insertPosition,omitempty"`
 	OriginalMarkdown  string     `json:"originalMarkdown,omitempty"`
 	GeneratedMarkdown string     `json:"generatedMarkdown"`
 	Reason            string     `json:"reason,omitempty"`
