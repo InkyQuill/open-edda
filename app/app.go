@@ -43,7 +43,7 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 func spaHandler(staticFS fs.FS) http.HandlerFunc {
 	fileServer := http.FileServer(http.FS(staticFS))
 	return func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") {
+		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
 			http.NotFound(w, r)
 			return
 		}

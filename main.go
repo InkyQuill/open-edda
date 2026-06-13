@@ -2,9 +2,11 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"git.inkyquill.net/inky/writer/app"
@@ -57,11 +59,26 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 		cleanup()
 		return nil, func() {}, err
 	}
+	if err := validateStaticPath(staticPath); err != nil {
+		cleanup()
+		return nil, func() {}, err
+	}
 
 	return &app.Dependencies{
 		ProjectService: project.NewService(db),
 		StaticFS:       os.DirFS(staticPath),
 	}, cleanup, nil
+}
+
+func validateStaticPath(staticPath string) error {
+	info, err := os.Stat(filepath.Join(staticPath, "index.html"))
+	if err != nil {
+		return fmt.Errorf("frontend build missing at %q: %w", staticPath, err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("frontend index at %q is a directory", staticPath)
+	}
+	return nil
 }
 
 func migrate(db *sql.DB, migrationsPath string) error {

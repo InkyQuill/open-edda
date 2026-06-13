@@ -56,11 +56,13 @@ func TestStaticFrontendServesIndexAndKeepsAPINotFound(t *testing.T) {
 		}
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/missing", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("api status = %d, want %d", rec.Code, http.StatusNotFound)
+	for _, path := range []string{"/api", "/api/missing"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("%s status = %d, want %d", path, rec.Code, http.StatusNotFound)
+		}
 	}
 }
 
