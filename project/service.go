@@ -50,6 +50,19 @@ func (s *Service) CreateProject(ctx context.Context, input CreateProjectInput) (
 	return project, nil
 }
 
+func (s *Service) ListProjects(ctx context.Context, authorID string) ([]StoryProject, error) {
+	projects, err := s.queries.ListStoryProjects(ctx, authorID)
+	if err != nil {
+		return nil, fmt.Errorf("list story projects: %w", err)
+	}
+
+	result := make([]StoryProject, 0, len(projects))
+	for _, project := range projects {
+		result = append(result, storyProjectFromStore(project))
+	}
+	return result, nil
+}
+
 func (s *Service) CreateContent(ctx context.Context, input CreateContentInput) (ContentItem, error) {
 	now := nowString()
 	createdBy, err := createdBy(input.CreatedBy)
@@ -104,6 +117,33 @@ func (s *Service) CreateContent(ctx context.Context, input CreateContentInput) (
 	}
 
 	return item, nil
+}
+
+func (s *Service) ListContent(ctx context.Context, projectID string, kind ContentKind) ([]ContentItem, error) {
+	items, err := s.queries.ListContentItems(ctx, store.ListContentItemsParams{
+		ProjectID: projectID,
+		Kind:      string(kind),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list content items: %w", err)
+	}
+
+	result := make([]ContentItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, contentItemFromStore(item))
+	}
+	return result, nil
+}
+
+func (s *Service) GetContent(ctx context.Context, projectID, contentID string) (ContentItem, error) {
+	item, err := s.queries.GetContentItem(ctx, store.GetContentItemParams{
+		ID:        contentID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return ContentItem{}, fmt.Errorf("get content item: %w", err)
+	}
+	return contentItemFromStore(item), nil
 }
 
 func (s *Service) UpdateContent(ctx context.Context, input UpdateContentInput) (ContentItem, error) {
@@ -177,6 +217,19 @@ func (s *Service) UpdateContent(ctx context.Context, input UpdateContentInput) (
 	return updated, nil
 }
 
+func (s *Service) ListRevisions(ctx context.Context, contentID string) ([]Revision, error) {
+	revisions, err := s.queries.ListRevisions(ctx, contentID)
+	if err != nil {
+		return nil, fmt.Errorf("list revisions: %w", err)
+	}
+
+	result := make([]Revision, 0, len(revisions))
+	for _, revision := range revisions {
+		result = append(result, revisionFromStore(revision))
+	}
+	return result, nil
+}
+
 func (s *Service) inTx(ctx context.Context, fn func(*store.Queries) error) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -201,6 +254,15 @@ func (s *Service) inTx(ctx context.Context, fn func(*store.Queries) error) error
 	return nil
 }
 
+func storyProjectFromStore(project store.StoryProject) StoryProject {
+	return StoryProject{
+		ID:       project.ID,
+		Title:    project.Title,
+		Slug:     project.Slug,
+		Language: project.Language,
+	}
+}
+
 func contentItemFromStore(item store.ContentItem) ContentItem {
 	return ContentItem{
 		ID:              item.ID,
@@ -212,6 +274,19 @@ func contentItemFromStore(item store.ContentItem) ContentItem {
 		MetadataJSON:    item.MetadataJson,
 		SortOrder:       item.SortOrder,
 		CurrentRevision: item.CurrentRevision,
+	}
+}
+
+func revisionFromStore(revision store.Revision) Revision {
+	return Revision{
+		ID:             revision.ID,
+		ContentItemID:  revision.ContentItemID,
+		RevisionNumber: revision.RevisionNumber,
+		BodyMarkdown:   revision.BodyMarkdown,
+		MetadataJSON:   revision.MetadataJson,
+		Reason:         revision.Reason,
+		CreatedBy:      revision.CreatedBy,
+		CreatedAt:      revision.CreatedAt,
 	}
 }
 

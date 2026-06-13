@@ -28,6 +28,17 @@ type ContentItem struct {
 	CurrentRevision int64       `json:"currentRevision"`
 }
 
+type Revision struct {
+	ID             string `json:"id"`
+	ContentItemID  string `json:"contentItemId"`
+	RevisionNumber int64  `json:"revisionNumber"`
+	BodyMarkdown   string `json:"bodyMarkdown"`
+	MetadataJSON   string `json:"metadataJson"`
+	Reason         string `json:"reason"`
+	CreatedBy      string `json:"createdBy"`
+	CreatedAt      string `json:"createdAt"`
+}
+
 type CreateProjectInput struct {
 	AuthorID string
 	Title    string

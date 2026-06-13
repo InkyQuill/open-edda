@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"git.inkyquill.net/inky/writer/project"
 	"github.com/go-chi/chi/v5"
 )
 
 // Dependencies holds services used by the application router.
-type Dependencies struct{}
+type Dependencies struct {
+	ProjectService *project.Service
+}
 
 // New builds the HTTP handler for the Writer service.
 func New(deps *Dependencies) http.Handler {
@@ -16,6 +19,11 @@ func New(deps *Dependencies) http.Handler {
 	r.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+	if deps != nil {
+		r.Route("/api", func(r chi.Router) {
+			project.RegisterRoutes(r, deps.ProjectService)
+		})
+	}
 	return r
 }
 
