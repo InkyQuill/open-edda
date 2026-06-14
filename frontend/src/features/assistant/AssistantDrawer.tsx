@@ -9,6 +9,7 @@ import { ModelStatus } from "../model-settings/ModelStatus";
 import { SkillChipsPanel } from "../skills/SkillChipsPanel";
 import { assistantActions } from "./assistantSlice";
 import {
+  loadAssistantMessages,
   loadAssistantSessions,
   sendAssistantMessage,
   startAssistantSession,
@@ -19,7 +20,7 @@ type AssistantDrawerProps = {
   contentId: string | null;
 };
 
-export function AssistantDrawer({ projectId, contentId }: AssistantDrawerProps) {
+export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
   const dispatch = useDispatch<AppDispatch>();
   const {
     activeSessionId,
@@ -30,23 +31,31 @@ export function AssistantDrawer({ projectId, contentId }: AssistantDrawerProps) 
     sessions,
     sessionsStatus,
   } = useSelector((state: RootState) => state.assistant);
+  const activeModelVariantId = useSelector((state: RootState) => state.modelSettings.activeModelVariantId);
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
   const activeMessages = activeSessionId ? (messagesBySessionId[activeSessionId] ?? []) : [];
   const trimmedDraft = draftMessage.trim();
   const isSending = messagesStatus === "pending";
   const isStarting = sessionsStatus === "pending";
+  const hasActiveModel = Boolean(activeModelVariantId);
 
   useEffect(() => {
     dispatch(assistantActions.resetForProject());
     void dispatch(loadAssistantSessions({ projectId }));
   }, [dispatch, projectId]);
 
+  useEffect(() => {
+    if (!activeSessionId) return;
+    void dispatch(loadAssistantMessages({ projectId, sessionId: activeSessionId }));
+  }, [activeSessionId, dispatch, projectId]);
+
   function handleNewChat(): void {
-    void dispatch(startAssistantSession({ projectId, contentId }));
+    if (!activeModelVariantId) return;
+    void dispatch(startAssistantSession({ projectId, modelVariantId: activeModelVariantId }));
   }
 
   function handleSend(): void {
-    if (!activeSessionId || !trimmedDraft) return;
+    if (!activeModelVariantId || !activeSessionId || !trimmedDraft) return;
     void dispatch(sendAssistantMessage({ projectId, sessionId: activeSessionId, bodyMarkdown: trimmedDraft }));
   }
 
@@ -64,11 +73,23 @@ export function AssistantDrawer({ projectId, contentId }: AssistantDrawerProps) 
           <h3 id="assistant-transcript-title" className="truncate text-sm font-medium text-foreground">
             {activeSession?.title ?? "Transcript"}
           </h3>
-          <Button type="button" variant="outline" size="xs" onClick={handleNewChat} disabled={isStarting}>
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            onClick={handleNewChat}
+            disabled={isStarting || !hasActiveModel}
+          >
             <Plus data-icon="inline-start" aria-hidden="true" />
             New chat
           </Button>
         </div>
+
+        {!hasActiveModel ? (
+          <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
+            Select a model before starting assistant chat.
+          </p>
+        ) : null}
 
         {sessions.length === 0 && sessionsStatus !== "pending" ? (
           <div className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
@@ -108,12 +129,12 @@ export function AssistantDrawer({ projectId, contentId }: AssistantDrawerProps) 
             onChange={(event) => dispatch(assistantActions.setDraftMessage(event.target.value))}
             placeholder="Message the assistant..."
             aria-label="Assistant message"
-            disabled={!activeSessionId || isSending}
+            disabled={!hasActiveModel || !activeSessionId || isSending}
           />
           <Button
             type="button"
             onClick={handleSend}
-            disabled={!activeSessionId || !trimmedDraft || isSending}
+            disabled={!hasActiveModel || !activeSessionId || !trimmedDraft || isSending}
           >
             <Send data-icon="inline-start" aria-hidden="true" />
             Send

@@ -145,6 +145,10 @@ func TestProjectAgentHTTPEndpoints(t *testing.T) {
 	if chat.PromptRecordID == "" {
 		t.Fatal("chat prompt record ID is empty")
 	}
+	messages := getJSON[[]Message](t, handler, "/api/projects/"+storyProject.ID+"/agent/sessions/"+session.ID+"/messages", http.StatusOK)
+	if len(messages) != 2 || messages[0].ID != chat.UserMessage.ID || messages[1].ID != chat.AssistantMessage.ID {
+		t.Fatalf("messages = %#v, want chat transcript", messages)
+	}
 
 	continuation := postJSON[ContinuationResult](t, handler, "/api/projects/"+storyProject.ID+"/agent/actions/continuation", `{
 		"contentId": "`+chapter.ID+`",

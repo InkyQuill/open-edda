@@ -1,6 +1,7 @@
 import type {
   AcceptCandidateResult,
   ActivityEvent,
+  AgentMessage,
   AgentSession,
   ChatTurnResult,
   ContinuationRequest,
@@ -30,7 +31,16 @@ async function requestJSON<T>(path: string, init?: RequestInit): Promise<T> {
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const response = await fetch(path, { ...init, headers });
   if (!response.ok) {
-    throw new Error(`${init?.method ?? "GET"} ${path} failed: ${response.status}`);
+    let message = `${init?.method ?? "GET"} ${path} failed: ${response.status}`;
+    try {
+      const body = (await response.json()) as { error?: unknown };
+      if (typeof body.error === "string" && body.error.trim()) {
+        message = body.error;
+      }
+    } catch {
+      // Keep the status-based fallback when the server returns a non-JSON error.
+    }
+    throw new Error(message);
   }
   return response.json() as Promise<T>;
 }
@@ -94,19 +104,34 @@ export function listSessions(projectId: string, limit?: number, signal?: AbortSi
 export function createSession(
   projectId: string,
   input: CreateSessionRequest,
+  signal?: AbortSignal,
 ): Promise<AgentSession> {
   return requestJSON<AgentSession>(projectAgentPath(projectId, "sessions"), {
     method: "POST",
     body: JSON.stringify(input),
+    signal,
   });
 }
 
-export function createSessionMessage(projectId: string, sessionId: string, bodyMarkdown: string): Promise<ChatTurnResult> {
+export function listSessionMessages(projectId: string, sessionId: string, signal?: AbortSignal): Promise<AgentMessage[]> {
+  return requestJSON<AgentMessage[]>(
+    `${projectAgentPath(projectId, "sessions")}/${encodeURIComponent(sessionId)}/messages`,
+    { signal },
+  );
+}
+
+export function createSessionMessage(
+  projectId: string,
+  sessionId: string,
+  bodyMarkdown: string,
+  signal?: AbortSignal,
+): Promise<ChatTurnResult> {
   return requestJSON<ChatTurnResult>(
     `${projectAgentPath(projectId, "sessions")}/${encodeURIComponent(sessionId)}/messages`,
     {
       method: "POST",
       body: JSON.stringify({ bodyMarkdown }),
+      signal,
     },
   );
 }

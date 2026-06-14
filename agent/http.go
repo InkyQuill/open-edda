@@ -118,6 +118,7 @@ func RegisterRoutes(r chi.Router, service *Service) {
 	r.Put("/projects/{projectID}/agent/prompt-profile", h.upsertPromptProfile)
 	r.Get("/projects/{projectID}/agent/sessions", h.listSessions)
 	r.Post("/projects/{projectID}/agent/sessions", h.createSession)
+	r.Get("/projects/{projectID}/agent/sessions/{sessionID}/messages", h.listSessionMessages)
 	r.Post("/projects/{projectID}/agent/sessions/{sessionID}/messages", h.createSessionMessage)
 	r.Post("/projects/{projectID}/agent/actions/continuation", h.runContinuation)
 	r.Post("/projects/{projectID}/agent/actions/rewrite", h.runRewrite)
@@ -304,6 +305,15 @@ func (h httpHandler) createSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, session)
+}
+
+func (h httpHandler) listSessionMessages(w http.ResponseWriter, r *http.Request) {
+	messages, err := h.service.ListMessages(r.Context(), chi.URLParam(r, "projectID"), chi.URLParam(r, "sessionID"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, messages)
 }
 
 func (h httpHandler) createSessionMessage(w http.ResponseWriter, r *http.Request) {
