@@ -250,6 +250,62 @@ type SkillRoutingHint struct {
 	CreatedAt   string `json:"created_at"`
 }
 
+type SkillScriptApproval struct {
+	ID                string `json:"id"`
+	ProjectID         string `json:"project_id"`
+	SkillID           string `json:"skill_id"`
+	SkillFileID       string `json:"skill_file_id"`
+	AuditID           string `json:"audit_id"`
+	Enabled           int64  `json:"enabled"`
+	RuntimeCommand    string `json:"runtime_command"`
+	TimeoutMs         int64  `json:"timeout_ms"`
+	MaxStdoutBytes    int64  `json:"max_stdout_bytes"`
+	MaxStderrBytes    int64  `json:"max_stderr_bytes"`
+	AllowNetwork      int64  `json:"allow_network"`
+	AllowProjectFiles int64  `json:"allow_project_files"`
+	ApprovedBy        string `json:"approved_by"`
+	ApprovedAt        string `json:"approved_at"`
+	UpdatedAt         string `json:"updated_at"`
+}
+
+type SkillScriptAudit struct {
+	ID                    string `json:"id"`
+	ProjectID             string `json:"project_id"`
+	SkillID               string `json:"skill_id"`
+	SkillFileID           string `json:"skill_file_id"`
+	RelativePath          string `json:"relative_path"`
+	Runtime               string `json:"runtime"`
+	DestructiveOperations int64  `json:"destructive_operations"`
+	FilesystemAccess      string `json:"filesystem_access"`
+	NetworkAccess         int64  `json:"network_access"`
+	ExternalDependencies  string `json:"external_dependencies"`
+	ExpectedInputsJson    string `json:"expected_inputs_json"`
+	ExpectedOutputsJson   string `json:"expected_outputs_json"`
+	RiskNotes             string `json:"risk_notes"`
+	Recommendation        string `json:"recommendation"`
+	AuditedAt             string `json:"audited_at"`
+}
+
+type SkillScriptRun struct {
+	ID           string         `json:"id"`
+	ProjectID    string         `json:"project_id"`
+	SessionID    sql.NullString `json:"session_id"`
+	SkillID      string         `json:"skill_id"`
+	SkillFileID  string         `json:"skill_file_id"`
+	ApprovalID   string         `json:"approval_id"`
+	ToolCallID   string         `json:"tool_call_id"`
+	Status       string         `json:"status"`
+	OutputKind   string         `json:"output_kind"`
+	InputJson    string         `json:"input_json"`
+	OutputJson   string         `json:"output_json"`
+	StdoutText   string         `json:"stdout_text"`
+	StderrText   string         `json:"stderr_text"`
+	ExitCode     int64          `json:"exit_code"`
+	DurationMs   int64          `json:"duration_ms"`
+	ErrorMessage string         `json:"error_message"`
+	CreatedAt    string         `json:"created_at"`
+}
+
 type StoryProject struct {
 	ID        string `json:"id"`
 	AuthorID  string `json:"author_id"`

@@ -27,6 +27,7 @@ type Querier interface {
 	CreateRevision(ctx context.Context, arg CreateRevisionParams) error
 	CreateSkillFile(ctx context.Context, arg CreateSkillFileParams) error
 	CreateSkillRoutingHint(ctx context.Context, arg CreateSkillRoutingHintParams) error
+	CreateSkillScriptRun(ctx context.Context, arg CreateSkillScriptRunParams) error
 	CreateStoryProject(ctx context.Context, arg CreateStoryProjectParams) error
 	CreateToolResultArtifact(ctx context.Context, arg CreateToolResultArtifactParams) error
 	DeleteExpiredPromptRecords(ctx context.Context, arg DeleteExpiredPromptRecordsParams) (int64, error)
@@ -46,6 +47,8 @@ type Querier interface {
 	GetSkillByProjectID(ctx context.Context, arg GetSkillByProjectIDParams) (Skill, error)
 	GetSkillByProjectName(ctx context.Context, arg GetSkillByProjectNameParams) (Skill, error)
 	GetSkillFile(ctx context.Context, arg GetSkillFileParams) (SkillFile, error)
+	GetSkillScriptApprovalByFile(ctx context.Context, arg GetSkillScriptApprovalByFileParams) (SkillScriptApproval, error)
+	GetSkillScriptAuditByFile(ctx context.Context, arg GetSkillScriptAuditByFileParams) (SkillScriptAudit, error)
 	GetStoryProject(ctx context.Context, arg GetStoryProjectParams) (StoryProject, error)
 	GetStoryProjectByID(ctx context.Context, id string) (StoryProject, error)
 	ListActivityEvents(ctx context.Context, arg ListActivityEventsParams) ([]ActivityEvent, error)
@@ -53,6 +56,7 @@ type Querier interface {
 	ListAgentMessagesForProject(ctx context.Context, arg ListAgentMessagesForProjectParams) ([]AgentMessage, error)
 	ListAgentSessions(ctx context.Context, arg ListAgentSessionsParams) ([]AgentSession, error)
 	ListContentItems(ctx context.Context, arg ListContentItemsParams) ([]ContentItem, error)
+	ListEnabledSkillScriptApprovals(ctx context.Context, projectID string) ([]SkillScriptApproval, error)
 	ListEntryRelations(ctx context.Context, arg ListEntryRelationsParams) ([]EntryRelation, error)
 	ListEntrySections(ctx context.Context, arg ListEntrySectionsParams) ([]EntrySection, error)
 	ListGenerationCandidates(ctx context.Context, arg ListGenerationCandidatesParams) ([]GenerationCandidate, error)
@@ -68,6 +72,9 @@ type Querier interface {
 	ListSessionSkills(ctx context.Context, arg ListSessionSkillsParams) ([]Skill, error)
 	ListSkillFiles(ctx context.Context, skillID string) ([]SkillFile, error)
 	ListSkillRoutingHints(ctx context.Context, skillID string) ([]SkillRoutingHint, error)
+	ListSkillScriptAudits(ctx context.Context, arg ListSkillScriptAuditsParams) ([]SkillScriptAudit, error)
+	ListSkillScriptRunsByProject(ctx context.Context, arg ListSkillScriptRunsByProjectParams) ([]SkillScriptRun, error)
+	ListSkillScriptRunsBySession(ctx context.Context, arg ListSkillScriptRunsBySessionParams) ([]SkillScriptRun, error)
 	ListSkillsByProject(ctx context.Context, projectID string) ([]Skill, error)
 	ListStoryProjects(ctx context.Context, authorID string) ([]StoryProject, error)
 	ListToolResultArtifacts(ctx context.Context, arg ListToolResultArtifactsParams) ([]ToolResultArtifact, error)
@@ -84,6 +91,8 @@ type Querier interface {
 	UpdateProviderConfig(ctx context.Context, arg UpdateProviderConfigParams) error
 	UpsertPromptProfile(ctx context.Context, arg UpsertPromptProfileParams) error
 	UpsertSkill(ctx context.Context, arg UpsertSkillParams) error
+	UpsertSkillScriptApproval(ctx context.Context, arg UpsertSkillScriptApprovalParams) error
+	UpsertSkillScriptAudit(ctx context.Context, arg UpsertSkillScriptAuditParams) error
 }
 
 var _ Querier = (*Queries)(nil)

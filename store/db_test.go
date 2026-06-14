@@ -143,6 +143,33 @@ func TestSkillCoreTablesExist(t *testing.T) {
 	}
 }
 
+func TestSkillScriptRuntimeTablesExist(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+
+	tables := []string{
+		"skill_script_audits",
+		"skill_script_approvals",
+		"skill_script_runs",
+	}
+	for _, table := range tables {
+		var name string
+		err := db.QueryRow(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&name)
+		if err != nil {
+			t.Fatalf("table %s missing: %v", table, err)
+		}
+	}
+	if !tableHasColumn(t, db, "skill_script_audits", "destructive_operations") {
+		t.Fatal("skill_script_audits.destructive_operations missing")
+	}
+	if !tableHasColumn(t, db, "skill_script_approvals", "runtime_command") {
+		t.Fatal("skill_script_approvals.runtime_command missing")
+	}
+	if !tableHasColumn(t, db, "skill_script_runs", "output_kind") {
+		t.Fatal("skill_script_runs.output_kind missing")
+	}
+}
+
 func TestAddSessionSkillRejectsCrossProjectSkill(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
