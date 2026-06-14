@@ -184,6 +184,7 @@ export function WorkspacePage() {
 
   return (
     <WorkspaceShell
+      projectId={projectId}
       projectTitle={activeProject?.title ?? "Untitled project"}
       contentItems={contentItems}
       contentLoading={contentLoading}

@@ -27,6 +27,7 @@ type WorkspaceRootState = {
 type ContextTab = "contents" | "world" | "notes";
 
 type WorkspaceShellProps = {
+  projectId: string;
   projectTitle: string;
   contentItems: ContentItem[];
   contentLoading: boolean;
@@ -79,6 +80,7 @@ function mobileSheetTitle(sheet: NonNullable<MobileSheet>): string {
 }
 
 export function WorkspaceShell({
+  projectId,
   projectTitle,
   contentItems,
   contentLoading,
@@ -95,7 +97,7 @@ export function WorkspaceShell({
     workspace.mode === "review" || workspace.activeRightTab === "tools" || workspace.activeRightTab === "revisions" ? (
       <ReviewDrawer />
     ) : (
-      <AssistantDrawer />
+      <AssistantDrawer projectId={projectId} contentId={selectedContent?.id ?? null} />
     );
 
   const contextDrawer = (
@@ -113,7 +115,7 @@ export function WorkspaceShell({
   );
 
   function renderMobileSheet(sheet: NonNullable<MobileSheet>) {
-    if (sheet === "assistant") return <AssistantDrawer />;
+    if (sheet === "assistant") return <AssistantDrawer projectId={projectId} contentId={selectedContent?.id ?? null} />;
     if (sheet === "review") return <ReviewDrawer />;
     if (sheet === "model") return <ModelStatus />;
     return (

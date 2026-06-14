@@ -97,8 +97,10 @@ export type SkillSelection = {
   skillIds: string[];
 };
 
-export type CreateSessionRequest = Pick<AgentSession, "title" | "actionKind" | "modelVariantId" | "applyMode"> &
-  Partial<SkillSelection>;
+export type CreateSessionRequest = Pick<AgentSession, "title" | "actionKind"> &
+  Partial<Pick<AgentSession, "modelVariantId" | "applyMode"> & SkillSelection> & {
+    contentId?: string | null;
+  };
 
 export type AgentMessage = {
   id: string;
