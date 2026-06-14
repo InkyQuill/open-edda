@@ -68,6 +68,22 @@ func TestContextToolDefinitionsExposeExplicitSchemas(t *testing.T) {
 	if _, ok := skillProps["skillId"]; !ok {
 		t.Fatal("skill schema missing skillId property")
 	}
+
+	sectionSchema := names["update_entry_section"].Function.Parameters
+	sectionRequired, ok := sectionSchema["required"].([]string)
+	if !ok {
+		t.Fatalf("update_entry_section schema required = %#v, want []string", sectionSchema["required"])
+	}
+	foundRevision := false
+	for _, r := range sectionRequired {
+		if r == "expectedRevision" {
+			foundRevision = true
+			break
+		}
+	}
+	if !foundRevision {
+		t.Fatal("update_entry_section schema does not require expectedRevision")
+	}
 }
 
 func TestExecuteWriteToolsRecordRevisionActivityAndArtifact(t *testing.T) {
@@ -142,7 +158,7 @@ func TestExecuteWriteToolsRecordRevisionActivityAndArtifact(t *testing.T) {
 			name:     "update_entry_section",
 			toolName: "update_entry_section",
 			arguments: func(seed toolSeed) string {
-				return `{"contentId":"` + seed.Character.ID + `","heading":"Motivation","generatedMarkdown":"Protect the glass city.","reason":"update motivation"}`
+				return `{"contentId":"` + seed.Character.ID + `","heading":"Motivation","generatedMarkdown":"Protect the glass city.","expectedRevision":1,"reason":"update motivation"}`
 			},
 			wantContent: func(seed toolSeed) (string, string, int64) {
 				return seed.Character.ID, "Alchemy notes mention the lantern.", 1
@@ -301,7 +317,7 @@ func TestExecuteWriteToolRejectsBlankGeneratedMarkdown(t *testing.T) {
 			name:     "update_entry_section",
 			toolName: "update_entry_section",
 			arguments: func(seed toolSeed) string {
-				return `{"contentId":"` + seed.Character.ID + `","heading":"Motivation","generatedMarkdown":"  ","reason":"blank section update"}`
+				return `{"contentId":"` + seed.Character.ID + `","heading":"Motivation","generatedMarkdown":"  ","expectedRevision":1,"reason":"blank section update"}`
 			},
 		},
 	}

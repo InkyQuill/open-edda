@@ -10,12 +10,16 @@ import (
 	"strconv"
 	"strings"
 
+	"git.inkyquill.net/inky/writer/auth"
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/skill"
 	"github.com/go-chi/chi/v5"
 )
 
-const placeholderAuthorID = "author-1"
+func authorID(r *http.Request) string {
+	return auth.MustAuthorIDFromContext(r.Context())
+}
+
 const defaultListLimit = 50
 
 type httpHandler struct {
@@ -126,7 +130,7 @@ func RegisterRoutes(r chi.Router, service *Service) {
 }
 
 func (h httpHandler) listProviderConfigs(w http.ResponseWriter, r *http.Request) {
-	providers, err := h.service.ListProviderConfigs(r.Context(), placeholderAuthorID)
+	providers, err := h.service.ListProviderConfigs(r.Context(), authorID(r))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -145,7 +149,7 @@ func (h httpHandler) createProviderConfig(w http.ResponseWriter, r *http.Request
 	}
 
 	provider, err := h.service.CreateProviderConfig(r.Context(), CreateProviderConfigInput{
-		AuthorID: placeholderAuthorID,
+		AuthorID: authorID(r),
 		Name:     input.Name,
 		BaseURL:  input.BaseURL,
 		APIKey:   input.APIKey,
@@ -168,7 +172,7 @@ func (h httpHandler) updateProviderConfig(w http.ResponseWriter, r *http.Request
 	}
 
 	provider, err := h.service.UpdateProviderConfig(r.Context(), UpdateProviderConfigInput{
-		AuthorID:   placeholderAuthorID,
+		AuthorID:   authorID(r),
 		ProviderID: chi.URLParam(r, "providerID"),
 		BaseURL:    input.BaseURL,
 		APIKey:     input.APIKey,
@@ -181,7 +185,7 @@ func (h httpHandler) updateProviderConfig(w http.ResponseWriter, r *http.Request
 }
 
 func (h httpHandler) listModelVariants(w http.ResponseWriter, r *http.Request) {
-	models, err := h.service.ListModelVariantsByProvider(r.Context(), placeholderAuthorID, chi.URLParam(r, "providerID"))
+	models, err := h.service.ListModelVariantsByProvider(r.Context(), authorID(r), chi.URLParam(r, "providerID"))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -200,7 +204,7 @@ func (h httpHandler) createModelVariant(w http.ResponseWriter, r *http.Request) 
 	}
 
 	model, err := h.service.CreateModelVariant(r.Context(), CreateModelVariantInput{
-		AuthorID:                  placeholderAuthorID,
+		AuthorID:                  authorID(r),
 		ProviderConfigID:          chi.URLParam(r, "providerID"),
 		Name:                      input.Name,
 		Model:                     input.Model,

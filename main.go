@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 
 	"git.inkyquill.net/inky/writer/agent"
 	"git.inkyquill.net/inky/writer/app"
+	"git.inkyquill.net/inky/writer/auth"
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/skill"
 	"git.inkyquill.net/inky/writer/store"
@@ -46,6 +46,10 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 	dbPath := getenvDefault("OPEN_EDDA_DB_PATH", "edda.db", "WRITER_DB_PATH")
 	migrationsPath := getenvDefault("OPEN_EDDA_MIGRATIONS_PATH", "migrations", "WRITER_MIGRATIONS_PATH")
 	staticPath := getenvDefault("OPEN_EDDA_STATIC_PATH", "frontend/dist", "WRITER_STATIC_PATH")
+	jwtSecret, err := jwtSecret()
+	if err != nil {
+		return nil, func() {}, err
+	}
 
 	db, err := store.Open(dbPath)
 	if err != nil {
@@ -57,26 +61,40 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 		cleanup()
 		return nil, func() {}, err
 	}
-	if err := ensurePlaceholderAuthor(db); err != nil {
-		cleanup()
-		return nil, func() {}, err
-	}
 	if err := validateStaticPath(staticPath); err != nil {
 		cleanup()
 		return nil, func() {}, err
 	}
 
+	authService := auth.NewService(db, jwtSecret)
 	projectService := project.NewService(db)
 	agentService := agent.NewService(db, projectService, nil)
 	skillService := skill.NewService(db)
 	agentService.SetSkillService(skillService)
 
 	return &app.Dependencies{
+		AuthService:    authService,
 		ProjectService: projectService,
 		AgentService:   agentService,
 		SkillService:   skillService,
 		StaticFS:       os.DirFS(staticPath),
 	}, cleanup, nil
+}
+
+func jwtSecret() (string, error) {
+	if secret := firstEnv("OPEN_EDDA_JWT_SECRET", "WRITER_JWT_SECRET"); secret != "" {
+		if err := auth.ValidateSecret(secret); err != nil {
+			return "", fmt.Errorf("JWT secret: %w", err)
+		}
+		return secret, nil
+	}
+	if secret := firstEnv("OPEN_EDDA_SECRET", "WRITER_SECRET"); secret != "" {
+		if err := auth.ValidateSecret(secret); err != nil {
+			return "", fmt.Errorf("application secret: %w", err)
+		}
+		return secret, nil
+	}
+	return "", fmt.Errorf("JWT secret is not configured; set OPEN_EDDA_JWT_SECRET or OPEN_EDDA_SECRET")
 }
 
 func validateStaticPath(staticPath string) error {
@@ -95,14 +113,6 @@ func migrate(db *sql.DB, migrationsPath string) error {
 		return err
 	}
 	return goose.Up(db, migrationsPath)
-}
-
-func ensurePlaceholderAuthor(db *sql.DB) error {
-	_, err := db.Exec(`
-		INSERT OR IGNORE INTO authors (id, email, password_hash, created_at)
-		VALUES (?, ?, ?, ?)
-	`, "author-1", "author@example.invalid", "placeholder", time.Now().UTC().Format(time.RFC3339Nano))
-	return err
 }
 
 func getenvDefault(name string, fallback string, legacyNames ...string) string {

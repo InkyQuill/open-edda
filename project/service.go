@@ -30,6 +30,19 @@ func NewService(db *sql.DB) *Service {
 	}
 }
 
+func (s *Service) AuthorOwnsProject(ctx context.Context, authorID, projectID string) (bool, error) {
+	if _, err := s.queries.GetStoryProject(ctx, store.GetStoryProjectParams{
+		ID:       projectID,
+		AuthorID: authorID,
+	}); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("get story project: %w", err)
+	}
+	return true, nil
+}
+
 func (s *Service) CreateProject(ctx context.Context, input CreateProjectInput) (StoryProject, error) {
 	now := nowString()
 	project := StoryProject{
@@ -604,17 +617,30 @@ func (s *Service) UpdateEntrySectionBody(ctx context.Context, input UpdateEntryS
 			return fmt.Errorf("content %q kind = %q, want %q", input.ContentID, item.Kind, KindStoryBibleEntry)
 		}
 
-		affected, err := queries.UpdateEntrySectionBody(ctx, store.UpdateEntrySectionBodyParams{
-			BodyMarkdown:  input.BodyMarkdown,
+		current, err := queries.GetEntrySection(ctx, store.GetEntrySectionParams{
 			ContentItemID: input.ContentID,
 			Heading:       input.Heading,
 			ProjectID:     input.ProjectID,
 		})
 		if err != nil {
+			return fmt.Errorf("get entry section: %w", err)
+		}
+		if current.CurrentRevision != input.ExpectedRevision {
+			return ErrConflict
+		}
+
+		affected, err := queries.UpdateEntrySectionBody(ctx, store.UpdateEntrySectionBodyParams{
+			BodyMarkdown:     input.BodyMarkdown,
+			ContentItemID:    input.ContentID,
+			Heading:          input.Heading,
+			ProjectID:        input.ProjectID,
+			ExpectedRevision: input.ExpectedRevision,
+		})
+		if err != nil {
 			return fmt.Errorf("update entry section: %w", err)
 		}
 		if affected == 0 {
-			return fmt.Errorf("entry section %q not found", input.Heading)
+			return ErrConflict
 		}
 
 		metadataJSON, err := json.Marshal(map[string]any{

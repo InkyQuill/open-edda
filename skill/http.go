@@ -5,8 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"git.inkyquill.net/inky/writer/project"
 	"github.com/go-chi/chi/v5"
@@ -28,6 +32,7 @@ func RegisterRoutes(r chi.Router, service *Service) {
 	h := httpHandler{service: service}
 	r.Get("/projects/{projectID}/skills", h.listSkills)
 	r.Post("/projects/{projectID}/skills/import", h.importSkill)
+	r.Post("/projects/{projectID}/skills/import-local", h.importLocalSkill)
 	r.Get("/projects/{projectID}/skills/{skillID}", h.getSkill)
 	r.Get("/projects/{projectID}/agent/sessions/{sessionID}/skills", h.listSessionSkills)
 	r.Put("/projects/{projectID}/agent/sessions/{sessionID}/skills", h.selectSessionSkills)
@@ -66,6 +71,83 @@ func (h httpHandler) importSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, skill)
+}
+
+func (h httpHandler) importLocalSkill(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectID")
+	var req struct {
+		Directory string `json:"directory"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+		return
+	}
+	if req.Directory == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "directory is required"})
+		return
+	}
+	directory, err := resolveLocalSkillDirectory(req.Directory)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "directory not accessible"})
+		return
+	}
+	imported, err := ParseSkillDirectory(directory)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid skill directory"})
+		return
+	}
+	skill, err := h.service.Install(r.Context(), InstallInput{
+		ProjectID:   projectID,
+		SourceType:  SourceTypeLocalDirectory,
+		SourceLabel: "local directory import",
+		Imported:    imported,
+	})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, skill)
+}
+
+func resolveLocalSkillDirectory(requested string) (string, error) {
+	base := os.Getenv("WRITER_SKILL_IMPORT_ROOT")
+	if base == "" {
+		return "", fmt.Errorf("local skill imports are disabled")
+	}
+	baseAbs, err := filepath.Abs(base)
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(requested) {
+		requested = filepath.Join(baseAbs, requested)
+	}
+	requestedAbs, err := filepath.Abs(requested)
+	if err != nil {
+		return "", err
+	}
+	baseResolved, err := filepath.EvalSymlinks(baseAbs)
+	if err != nil {
+		return "", err
+	}
+	requestedResolved, err := filepath.EvalSymlinks(requestedAbs)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(baseResolved, requestedResolved)
+	if err != nil {
+		return "", err
+	}
+	if rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." && !filepath.IsAbs(rel)) {
+		info, err := os.Stat(requestedResolved)
+		if err != nil {
+			return "", err
+		}
+		if !info.IsDir() {
+			return "", fmt.Errorf("path is not a directory")
+		}
+		return requestedResolved, nil
+	}
+	return "", fmt.Errorf("directory outside allowed root")
 }
 
 func (h httpHandler) getSkill(w http.ResponseWriter, r *http.Request) {

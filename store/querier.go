@@ -16,6 +16,7 @@ type Querier interface {
 	CreateAgentMessageForProject(ctx context.Context, arg CreateAgentMessageForProjectParams) (int64, error)
 	CreateAgentSession(ctx context.Context, arg CreateAgentSessionParams) error
 	CreateAttachedNote(ctx context.Context, arg CreateAttachedNoteParams) error
+	CreateAuthor(ctx context.Context, arg CreateAuthorParams) error
 	CreateContentItem(ctx context.Context, arg CreateContentItemParams) error
 	CreateEntryRelation(ctx context.Context, arg CreateEntryRelationParams) error
 	CreateEntrySection(ctx context.Context, arg CreateEntrySectionParams) error
@@ -36,7 +37,9 @@ type Querier interface {
 	DeleteSkillFiles(ctx context.Context, skillID string) error
 	DeleteSkillRoutingHints(ctx context.Context, skillID string) error
 	GetAgentSession(ctx context.Context, arg GetAgentSessionParams) (AgentSession, error)
+	GetAuthorByEmail(ctx context.Context, email string) (Author, error)
 	GetContentItem(ctx context.Context, arg GetContentItemParams) (ContentItem, error)
+	GetEntrySection(ctx context.Context, arg GetEntrySectionParams) (EntrySection, error)
 	GetGenerationCandidate(ctx context.Context, arg GetGenerationCandidateParams) (GenerationCandidate, error)
 	GetModelVariant(ctx context.Context, arg GetModelVariantParams) (ModelVariant, error)
 	GetModelVariantForProject(ctx context.Context, arg GetModelVariantForProjectParams) (ModelVariant, error)

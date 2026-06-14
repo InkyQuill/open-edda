@@ -95,11 +95,12 @@ type EntryRelation struct {
 }
 
 type EntrySection struct {
-	ID            string `json:"id"`
-	ContentItemID string `json:"content_item_id"`
-	Heading       string `json:"heading"`
-	BodyMarkdown  string `json:"body_markdown"`
-	SortOrder     int64  `json:"sort_order"`
+	ID              string `json:"id"`
+	ContentItemID   string `json:"content_item_id"`
+	Heading         string `json:"heading"`
+	BodyMarkdown    string `json:"body_markdown"`
+	SortOrder       int64  `json:"sort_order"`
+	CurrentRevision int64  `json:"current_revision"`
 }
 
 type GenerationCandidate struct {

@@ -55,6 +55,14 @@ Genre diagnosis for authors who need to confirm what emotional promise the story
 - Do not use Structured Writes in this skill.
 - Do not propose Story Bible changes unless genre diagnosis reveals a durable constraint the author wants recorded.
 
+## Bundled Data
+
+This skill includes reference data the agent can consult during genre diagnosis:
+
+- `data/genre-elements.json` — Genre element expectations and conventions.
+
+The agent should load this through the `skill` tool when diagnosing genre fit.
+
 ## Script Compatibility
 
 This rewrite adapts source genre checks and reference tables into Edda-native diagnosis and built-in genre guidance. Source helpers are not runnable in Milestone 3.5.

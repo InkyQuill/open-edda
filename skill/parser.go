@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"os"
 	"path"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -123,7 +126,7 @@ func ParseSkillArchive(reader io.ReaderAt, size int64, sourceLabel string) (Impo
 
 	return ImportedSkill{
 		Name:                 name,
-		DisplayName:          name,
+		DisplayName:          frontmatter.Name,
 		Description:          frontmatter.Description,
 		InstructionsMarkdown: instructions,
 		MetadataJSON:         frontmatterMetadataJSON(frontmatter),
@@ -251,10 +254,16 @@ func parseSkillMarkdown(body string) (skillFrontmatter, string, error) {
 func parseSkillFrontmatter(body string) (skillFrontmatter, error) {
 	var parsed skillFrontmatter
 	section := ""
+	var listAccumulator []string
+	currentKey := ""
 
 	for _, line := range strings.Split(body, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "- ") && section != "" {
+			listAccumulator = append(listAccumulator, trimScalar(strings.TrimPrefix(trimmed, "- ")))
 			continue
 		}
 		if !strings.Contains(trimmed, ":") {
@@ -264,6 +273,14 @@ func parseSkillFrontmatter(body string) (skillFrontmatter, error) {
 		key, value, _ := strings.Cut(trimmed, ":")
 		key = strings.TrimSpace(key)
 		value = strings.TrimSpace(value)
+
+		if len(listAccumulator) > 0 && currentKey != "" {
+			if err := setRoutingFieldList(routingForSection(&parsed, section), currentKey, listAccumulator); err != nil {
+				return skillFrontmatter{}, err
+			}
+			listAccumulator = nil
+			currentKey = ""
+		}
 
 		switch key {
 		case "name":
@@ -280,9 +297,19 @@ func parseSkillFrontmatter(body string) (skillFrontmatter, error) {
 			if section != "route" && section != "routing" {
 				continue
 			}
-			if err := setRoutingField(routingForSection(&parsed, section), key, value); err != nil {
-				return skillFrontmatter{}, err
+			if value != "" {
+				if err := setRoutingField(routingForSection(&parsed, section), key, value); err != nil {
+					return skillFrontmatter{}, err
+				}
+			} else {
+				currentKey = key
 			}
+		}
+	}
+
+	if len(listAccumulator) > 0 && currentKey != "" {
+		if err := setRoutingFieldList(routingForSection(&parsed, section), currentKey, listAccumulator); err != nil {
+			return skillFrontmatter{}, err
 		}
 	}
 
@@ -317,6 +344,22 @@ func setRoutingField(route *routingFrontmatter, key, value string) error {
 			return fmt.Errorf("invalid routing priority %q: %w", value, err)
 		}
 		route.Priority = priority
+	}
+	return nil
+}
+
+func setRoutingFieldList(route *routingFrontmatter, key string, items []string) error {
+	switch key {
+	case "actionKinds":
+		route.ActionKinds = items
+	case "actions":
+		route.Actions = items
+	case "contentKinds":
+		route.ContentKinds = items
+	case "content":
+		route.Content = items
+	case "tags":
+		route.Tags = items
 	}
 	return nil
 }
@@ -452,4 +495,130 @@ func mediaTypeForPath(relative string) string {
 		return mediaType
 	}
 	return "text/plain; charset=utf-8"
+}
+
+func ParseSkillDirectory(dirPath string) (ImportedSkill, error) {
+	info, err := os.Stat(dirPath)
+	if err != nil {
+		return ImportedSkill{}, fmt.Errorf("stat directory: %w", err)
+	}
+	if !info.IsDir() {
+		return ImportedSkill{}, fmt.Errorf("path is not a directory: %s", dirPath)
+	}
+
+	var entries []struct {
+		rel  string
+		body string
+	}
+	var totalBytes int64
+	err = filepath.WalkDir(dirPath, func(filePath string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if len(entries)+1 > maxSkillArchiveFiles {
+			return fmt.Errorf("skill directory contains more than %d files", maxSkillArchiveFiles)
+		}
+		rel, err := filepath.Rel(dirPath, filePath)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if safe, safeErr := safeRelativePath(rel); safeErr != nil {
+			return safeErr
+		} else {
+			rel = safe
+		}
+		raw, readErr := os.ReadFile(filePath)
+		if readErr != nil {
+			return fmt.Errorf("read %s: %w", rel, readErr)
+		}
+		if !utf8.Valid(raw) {
+			return fmt.Errorf("file %s is not valid UTF-8", rel)
+		}
+		if int64(len(raw)) > maxSkillFileBytes {
+			return fmt.Errorf("file %s exceeds max size", rel)
+		}
+		totalBytes += int64(len(raw))
+		if totalBytes > maxSkillArchiveBytes {
+			return fmt.Errorf("skill directory contents exceed %d bytes", maxSkillArchiveBytes)
+		}
+		entries = append(entries, struct {
+			rel  string
+			body string
+		}{rel: rel, body: string(raw)})
+		return nil
+	})
+	if err != nil {
+		return ImportedSkill{}, fmt.Errorf("walk directory: %w", err)
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].rel < entries[j].rel })
+
+	root := ""
+	for _, entry := range entries {
+		parts := strings.SplitN(entry.rel, "/", 2)
+		if root == "" {
+			root = parts[0]
+		} else if root != parts[0] {
+			root = ""
+			break
+		}
+	}
+	if root != "" && root != "SKILL.md" {
+		for i := range entries {
+			entries[i].rel = strings.TrimPrefix(entries[i].rel, root+"/")
+		}
+	}
+
+	var skillFile *struct {
+		rel  string
+		body string
+	}
+	for i := range entries {
+		if entries[i].rel == "SKILL.md" {
+			skillFile = &entries[i]
+			break
+		}
+	}
+	if skillFile == nil {
+		return ImportedSkill{}, fmt.Errorf("skill directory must contain SKILL.md")
+	}
+
+	frontmatter, instructions, err := parseSkillMarkdown(skillFile.body)
+	if err != nil {
+		return ImportedSkill{}, err
+	}
+	name, err := normalizeSkillName(frontmatter.Name)
+	if err != nil {
+		return ImportedSkill{}, fmt.Errorf("skill frontmatter name: %w", err)
+	}
+
+	imported := ImportedSkill{
+		Name:                 name,
+		DisplayName:          frontmatter.Name,
+		Description:          frontmatter.Description,
+		InstructionsMarkdown: strings.TrimSpace(instructions),
+		MetadataJSON:         frontmatterMetadataJSON(frontmatter),
+		SourceLabel:          "local directory import",
+		ScriptsDisabled:      true,
+		RoutingHints:         frontmatter.routingHints(),
+	}
+	for _, entry := range entries {
+		purpose, disabled := classifySkillFile(entry.rel)
+		file := ImportedSkillFile{
+			RelativePath:   entry.rel,
+			Purpose:        purpose,
+			MediaType:      mediaTypeForPath(entry.rel),
+			BodyText:       entry.body,
+			Bytes:          int64(len([]byte(entry.body))),
+			ScriptDisabled: disabled,
+		}
+		if purpose == FilePurposeScript {
+			imported.ScriptCount++
+		}
+		imported.Files = append(imported.Files, file)
+	}
+	return imported, nil
 }

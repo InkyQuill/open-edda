@@ -1,0 +1,8 @@
+# reverse-outliner
+
+- Source path: `docs/skills/suggested/fiction/structure/reverse-outliner/`
+- Final disposition: `deferred`
+- Why it is not included as a 3.5 built-in skill: The current value depends on a file/script analysis pipeline (6 scripts: `segment-book.ts`, `reverse-outline.ts`, `generate-outline.ts`, `detect-genre.ts`, `analyze-scene-batch.ts`, `track-characters.ts`). These scripts assume local Markdown file access and batch processing that needs an Edda-native runtime and structured intermediate storage before they can operate on database-backed Story Text and Story Bible.
+- What would need to change for reconsideration: An Edda-native analysis pipeline that reads Story Text and Story Bible from the database, produces structured outlines and scene analysis as Project Notes or Attached Notes, and exposes intermediate results through the `tool_result_artifacts` table. The Skill Script Runtime (Milestone 3.6) provides the single-script execution scaffolding, but reverse-outliner specifically needs a batch orchestration layer that runs multiple analysis passes, compares outputs, and produces a composite report.
+- Scripts/assets involved: yes. `scripts/segment-book.ts`, `scripts/reverse-outline.ts`, `scripts/generate-outline.ts`, `scripts/detect-genre.ts`, `scripts/analyze-scene-batch.ts`, `scripts/track-characters.ts`; `data/scene-markers.json`, `data/key-moments-by-genre.json`.
+- Future roadmap mapping: yes. Revisit as part of the Story Consistency Dashboard (Later milestone) or a dedicated Analysis Pipeline surface that can orchestrate multi-pass scaffolded analysis of database-backed project content.

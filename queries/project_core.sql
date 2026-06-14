@@ -73,15 +73,25 @@ ORDER BY entry_sections.sort_order ASC;
 
 -- name: UpdateEntrySectionBody :execrows
 UPDATE entry_sections
-SET body_markdown = sqlc.arg(body_markdown)
-WHERE content_item_id = sqlc.arg(content_item_id)
-  AND heading = sqlc.arg(heading)
+SET body_markdown = sqlc.arg(body_markdown),
+    current_revision = entry_sections.current_revision + 1
+WHERE entry_sections.content_item_id = sqlc.arg(content_item_id)
+  AND entry_sections.heading = sqlc.arg(heading)
+  AND entry_sections.current_revision = sqlc.arg(expected_revision)
   AND EXISTS (
     SELECT 1
     FROM content_items
     WHERE content_items.id = entry_sections.content_item_id
       AND content_items.project_id = sqlc.arg(project_id)
   );
+
+-- name: GetEntrySection :one
+SELECT entry_sections.*
+FROM entry_sections
+JOIN content_items ON content_items.id = entry_sections.content_item_id
+WHERE entry_sections.content_item_id = sqlc.arg(content_item_id)
+  AND entry_sections.heading = sqlc.arg(heading)
+  AND content_items.project_id = sqlc.arg(project_id);
 
 -- name: CreateEntryRelation :exec
 INSERT INTO entry_relations (

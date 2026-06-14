@@ -12,11 +12,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"git.inkyquill.net/inky/writer/auth"
 	"git.inkyquill.net/inky/writer/markdownio"
 	"github.com/go-chi/chi/v5"
 )
 
-const placeholderAuthorID = "author-1"
+func authorID(r *http.Request) string {
+	return auth.MustAuthorIDFromContext(r.Context())
+}
 
 const maxElysiumZipBytes = 10 << 20
 const maxElysiumFiles = 512
@@ -63,10 +66,11 @@ func RegisterRoutes(r chi.Router, service *Service) {
 	r.Get("/projects/{projectID}/content/{contentID}", h.getContent)
 	r.Put("/projects/{projectID}/content/{contentID}", h.updateContent)
 	r.Get("/projects/{projectID}/content/{contentID}/revisions", h.listRevisions)
+	r.Get("/projects/{projectID}/map", h.projectMap)
 }
 
 func (h httpHandler) listProjects(w http.ResponseWriter, r *http.Request) {
-	projects, err := h.service.ListProjects(r.Context(), placeholderAuthorID)
+	projects, err := h.service.ListProjects(r.Context(), authorID(r))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -83,7 +87,7 @@ func (h httpHandler) createProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	project, err := h.service.CreateProject(r.Context(), CreateProjectInput{
-		AuthorID: placeholderAuthorID,
+		AuthorID: authorID(r),
 		Title:    input.Title,
 		Language: input.Language,
 	})
@@ -109,7 +113,7 @@ func (h httpHandler) importElysium(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := h.service.ImportElysiumProject(r.Context(), placeholderAuthorID, "Imported Elysium", "en", items)
+	project, err := h.service.ImportElysiumProject(r.Context(), authorID(r), "Imported Elysium", "en", items)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -251,6 +255,15 @@ func (h httpHandler) listRevisions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, revisions)
+}
+
+func (h httpHandler) projectMap(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.ProjectMap(r.Context(), chi.URLParam(r, "projectID"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func importedItemFromContent(item ContentItem, sections []EntrySection, relations []EntryRelation) markdownio.ImportedItem {

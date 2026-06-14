@@ -58,6 +58,17 @@ Name generation for authors who want names that fit setting, culture, tone, and 
 - Propose Story Bible updates for confirmed names, naming conventions, or cast-tracker fields only after author confirmation.
 - Do not use Structured Writes in this skill.
 
+## Bundled Data
+
+This skill includes naming datasets and a template as Writer-native references:
+
+- `data/cultures/` — 52 culture-specific naming dataset files (given names, surnames, gender variants).
+- `data/phoneme-presets/` — 3 phoneme profiles for constructing fantasy or speculative names.
+- `data/mixed-pools/` — Contemporary American mixed naming pool.
+- `templates/cast-name-tracker.md` — Template for tracking character names and their narrative fit.
+
+The agent should load these through the `skill` tool when a naming session needs detailed reference material.
+
 ## Script Compatibility
 
 This rewrite preserves built-in naming datasets and the cast-tracker template as Edda-native references. Source helper scripts are not runnable in Milestone 3.5, so the skill works through guidance, built-in data, and reviewable name proposals only.

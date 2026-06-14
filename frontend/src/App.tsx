@@ -19,6 +19,7 @@ import {
   upsertPromptProfile,
 } from "./agentApi";
 import { getSkill, importSkill, listSessionSkills, listSkills, selectSessionSkills } from "./skillApi";
+import { login, register, clearToken, getToken } from "./authApi";
 import type {
   ActivityEvent,
   AgentMessage,
@@ -189,6 +190,12 @@ export function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isContentLoading, setIsContentLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => getToken() !== null);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [contentError, setContentError] = useState<string | null>(null);
 
   const [providers, setProviders] = useState<ProviderConfigSummary[]>([]);
@@ -204,6 +211,7 @@ export function App() {
   const [agentError, setAgentError] = useState<string | null>(null);
   const [skills, setSkills] = useState<WriterSkill[]>([]);
   const [skillError, setSkillError] = useState<string | null>(null);
+  const [textSelection, setTextSelection] = useState<{ start: number; end: number } | null>(null);
   const latestProjectIdRef = useRef<string | null>(selectedProjectId);
   latestProjectIdRef.current = selectedProjectId;
 
@@ -434,12 +442,88 @@ export function App() {
     setSelectedContentId(content.id);
   }
 
+  async function handleAuth(): Promise<void> {
+    setAuthError(null);
+    setIsAuthLoading(true);
+    try {
+      const fn = isRegistering ? register : login;
+      await fn(authEmail, authPassword);
+      setIsAuthenticated(true);
+      setAuthPassword("");
+      setAuthError(null);
+    } catch (cause: unknown) {
+      setAuthError(cause instanceof Error ? cause.message : "Authentication failed");
+    } finally {
+      setIsAuthLoading(false);
+    }
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <main className="app-shell">
+        <section className="auth-form-section">
+          <header>
+            <h1>Writer</h1>
+            <p>Self-hosted AI writing studio</p>
+          </header>
+          <form
+            className="auth-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleAuth();
+            }}
+          >
+            <label>
+              Email
+              <input
+                type="email"
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                required
+                autoComplete="email"
+              />
+            </label>
+            <label>
+              Password (min 8 characters)
+              <input
+                type="password"
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                required
+                minLength={8}
+                autoComplete={isRegistering ? "new-password" : "current-password"}
+              />
+            </label>
+            {authError ? <p className="auth-error" role="alert">{authError}</p> : null}
+            <button type="submit" disabled={isAuthLoading}>
+              {isAuthLoading ? "Please wait..." : isRegistering ? "Register" : "Login"}
+            </button>
+            <button type="button" className="pill-button" onClick={() => { setAuthError(null); setIsRegistering((v) => !v); }}>
+              {isRegistering ? "Already have an account? Login" : "New author? Register"}
+            </button>
+          </form>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="app-shell">
       <section className="project-dashboard">
         <header>
           <h1>Edda</h1>
           <p>self-hosted AI writing studio</p>
+          <button
+            className="pill-button"
+            type="button"
+            onClick={() => {
+              clearToken();
+              setIsAuthenticated(false);
+              setSelectedProjectId(null);
+            }}
+          >
+            Logout
+          </button>
         </header>
 
         <div className="project-list">
@@ -528,7 +612,7 @@ export function App() {
                     type="button"
                     data-active={item.id === selectedContentId}
                     aria-pressed={item.id === selectedContentId}
-                    onClick={() => setSelectedContentId(item.id)}
+                     onClick={() => { setSelectedContentId(item.id); setTextSelection(null); }}
                   >
                     <span>{item.title}</span>
                     <small>Revision {item.currentRevision}</small>
@@ -544,7 +628,22 @@ export function App() {
                     <h2>{selectedContent.title}</h2>
                     <p>{selectedContent.kind.replaceAll("_", " ")}</p>
                   </header>
-                  <textarea readOnly value={selectedContent.bodyMarkdown} aria-label={`${selectedContent.title} markdown`} />
+                   <textarea
+                     readOnly
+                     value={selectedContent.bodyMarkdown}
+                     aria-label={`${selectedContent.title} markdown`}
+                     onSelect={(e) => {
+                       const target = e.target as HTMLTextAreaElement;
+                       if (target.selectionStart !== target.selectionEnd) {
+                         setTextSelection({
+                           start: byteLength(target.value.slice(0, target.selectionStart)),
+                           end: byteLength(target.value.slice(0, target.selectionEnd)),
+                         });
+                       } else {
+                         setTextSelection(null);
+                       }
+                     }}
+                   />
                 </>
               ) : (
                 <p>Select an item to preview its Markdown.</p>
@@ -571,6 +670,8 @@ export function App() {
               onError={setAgentError}
               onRefreshTrail={refreshAgentTrail}
               onSessionsChange={setAgentSessions}
+              textSelection={textSelection}
+              onTextSelectionClear={() => setTextSelection(null)}
             />
           </section>
         </>
@@ -1135,6 +1236,8 @@ type AgentPanelProps = {
   onError: (message: string | null) => void;
   onRefreshTrail: (projectId: string) => void;
   onSessionsChange: React.Dispatch<React.SetStateAction<AgentSession[]>>;
+  textSelection: { start: number; end: number } | null;
+  onTextSelectionClear: () => void;
 };
 
 type AgentPanelScope = {
@@ -1163,6 +1266,8 @@ function AgentPanel({
   onError,
   onRefreshTrail,
   onSessionsChange,
+  textSelection,
+  onTextSelectionClear,
 }: AgentPanelProps) {
   const [applyMode, setApplyMode] = useState<ApplyMode>("preview");
   const [messageInput, setMessageInput] = useState("");
@@ -1171,6 +1276,7 @@ function AgentPanel({
   const [showActivity, setShowActivity] = useState(false);
   const [continuationUnits, setContinuationUnits] = useState<"word" | "sentence">("word");
   const [continuationCount, setContinuationCount] = useState(120);
+  const [continuationInsert, setContinuationInsert] = useState(false);
   const [guidance, setGuidance] = useState("");
   const [previewCandidate, setPreviewCandidate] = useState<GenerationCandidate | null>(null);
   const [readCheckReport, setReadCheckReport] = useState<string | null>(null);
@@ -1439,7 +1545,7 @@ function AgentPanel({
             guidance,
             expectedRevision,
             insertPosition: wholeSelectionEnd,
-            insert: false,
+            insert: continuationInsert,
             continuationUnits,
             continuationCount,
             skillIds: scopedSelectedSkillIds,
@@ -1451,8 +1557,8 @@ function AgentPanel({
               applyMode,
               guidance,
               expectedRevision,
-              selectionStart: 0,
-              selectionEnd: wholeSelectionEnd,
+              selectionStart: textSelection ? textSelection.start : 0,
+              selectionEnd: textSelection ? textSelection.end : wholeSelectionEnd,
               skillIds: scopedSelectedSkillIds,
             })
           : runReadAndCheck(launchScope.projectId, {
@@ -1461,8 +1567,8 @@ function AgentPanel({
               applyMode,
               guidance,
               expectedRevision,
-              selectionStart: 0,
-              selectionEnd: wholeSelectionEnd,
+              selectionStart: textSelection ? textSelection.start : 0,
+              selectionEnd: textSelection ? textSelection.end : wholeSelectionEnd,
               skillIds: scopedSelectedSkillIds,
             });
 
@@ -1665,6 +1771,12 @@ function AgentPanel({
             </select>
           </label>
           <NumberField label="Target count" value={continuationCount} step={1} onChange={setContinuationCount} />
+          <label className="field">
+            <span>
+              <input type="checkbox" checked={continuationInsert} onChange={(e) => setContinuationInsert(e.target.checked)} />
+              {" "}Insert at end (instead of append)
+            </span>
+          </label>
         </div>
         <label className="field">
           <span>Guidance</span>

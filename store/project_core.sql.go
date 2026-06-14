@@ -234,6 +234,35 @@ func (q *Queries) GetContentItem(ctx context.Context, arg GetContentItemParams) 
 	return i, err
 }
 
+const getEntrySection = `-- name: GetEntrySection :one
+SELECT entry_sections.id, entry_sections.content_item_id, entry_sections.heading, entry_sections.body_markdown, entry_sections.sort_order, entry_sections.current_revision
+FROM entry_sections
+JOIN content_items ON content_items.id = entry_sections.content_item_id
+WHERE entry_sections.content_item_id = ?1
+  AND entry_sections.heading = ?2
+  AND content_items.project_id = ?3
+`
+
+type GetEntrySectionParams struct {
+	ContentItemID string `json:"content_item_id"`
+	Heading       string `json:"heading"`
+	ProjectID     string `json:"project_id"`
+}
+
+func (q *Queries) GetEntrySection(ctx context.Context, arg GetEntrySectionParams) (EntrySection, error) {
+	row := q.db.QueryRowContext(ctx, getEntrySection, arg.ContentItemID, arg.Heading, arg.ProjectID)
+	var i EntrySection
+	err := row.Scan(
+		&i.ID,
+		&i.ContentItemID,
+		&i.Heading,
+		&i.BodyMarkdown,
+		&i.SortOrder,
+		&i.CurrentRevision,
+	)
+	return i, err
+}
+
 const getStoryProject = `-- name: GetStoryProject :one
 SELECT id, author_id, title, slug, language, created_at, updated_at FROM story_projects
 WHERE id = ? AND author_id = ?
@@ -368,7 +397,7 @@ func (q *Queries) ListEntryRelations(ctx context.Context, arg ListEntryRelations
 }
 
 const listEntrySections = `-- name: ListEntrySections :many
-SELECT entry_sections.id, entry_sections.content_item_id, entry_sections.heading, entry_sections.body_markdown, entry_sections.sort_order
+SELECT entry_sections.id, entry_sections.content_item_id, entry_sections.heading, entry_sections.body_markdown, entry_sections.sort_order, entry_sections.current_revision
 FROM entry_sections
 JOIN content_items ON content_items.id = entry_sections.content_item_id
 WHERE entry_sections.content_item_id = ?1
@@ -396,6 +425,7 @@ func (q *Queries) ListEntrySections(ctx context.Context, arg ListEntrySectionsPa
 			&i.Heading,
 			&i.BodyMarkdown,
 			&i.SortOrder,
+			&i.CurrentRevision,
 		); err != nil {
 			return nil, err
 		}
@@ -675,22 +705,25 @@ func (q *Queries) UpdateContentItemBody(ctx context.Context, arg UpdateContentIt
 
 const updateEntrySectionBody = `-- name: UpdateEntrySectionBody :execrows
 UPDATE entry_sections
-SET body_markdown = ?1
-WHERE content_item_id = ?2
-  AND heading = ?3
+SET body_markdown = ?1,
+    current_revision = entry_sections.current_revision + 1
+WHERE entry_sections.content_item_id = ?2
+  AND entry_sections.heading = ?3
+  AND entry_sections.current_revision = ?4
   AND EXISTS (
     SELECT 1
     FROM content_items
     WHERE content_items.id = entry_sections.content_item_id
-      AND content_items.project_id = ?4
+      AND content_items.project_id = ?5
   )
 `
 
 type UpdateEntrySectionBodyParams struct {
-	BodyMarkdown  string `json:"body_markdown"`
-	ContentItemID string `json:"content_item_id"`
-	Heading       string `json:"heading"`
-	ProjectID     string `json:"project_id"`
+	BodyMarkdown     string `json:"body_markdown"`
+	ContentItemID    string `json:"content_item_id"`
+	Heading          string `json:"heading"`
+	ExpectedRevision int64  `json:"expected_revision"`
+	ProjectID        string `json:"project_id"`
 }
 
 func (q *Queries) UpdateEntrySectionBody(ctx context.Context, arg UpdateEntrySectionBodyParams) (int64, error) {
@@ -698,6 +731,7 @@ func (q *Queries) UpdateEntrySectionBody(ctx context.Context, arg UpdateEntrySec
 		arg.BodyMarkdown,
 		arg.ContentItemID,
 		arg.Heading,
+		arg.ExpectedRevision,
 		arg.ProjectID,
 	)
 	if err != nil {

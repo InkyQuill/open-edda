@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -1552,6 +1553,7 @@ func usageWithCosts(usage Usage, model ModelVariant) Usage {
 
 func (s *Service) storePromptRecord(ctx context.Context, session Session, providerName string, model ModelVariant, usage Usage, requestJSON, responseJSON string, snapshots []ContextSourceSnapshot) (string, error) {
 	usage = usageWithCosts(usage, model)
+	requestJSON, responseJSON = redactSensitiveFields(requestJSON, responseJSON)
 	now := nowString()
 	promptRecordID := newID("prompt")
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -1796,7 +1798,58 @@ func isSQLiteConstraint(err error, code sqlite3.ErrNoExtended) bool {
 }
 
 func nullString(value string) sql.NullString {
-	return sql.NullString{String: value, Valid: value != ""}
+	if value == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: value, Valid: true}
+}
+
+func redactSensitiveFields(requestJSON, responseJSON string) (string, string) {
+	return scrubJSON(requestJSON), scrubJSON(responseJSON)
+}
+
+func scrubJSON(raw string) string {
+	var payload any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return raw
+	}
+	switch nested := payload.(type) {
+	case map[string]any:
+		scrubMap(nested)
+	case []any:
+		scrubSlice(nested)
+	}
+	clean, err := json.Marshal(payload)
+	if err != nil {
+		return raw
+	}
+	return string(clean)
+}
+
+func scrubMap(m map[string]any) {
+	delete(m, "api_key")
+	delete(m, "apiKey")
+	delete(m, "authorization")
+	delete(m, "Authorization")
+	for _, v := range m {
+		switch nested := v.(type) {
+		case map[string]any:
+			scrubMap(nested)
+		case []any:
+			scrubSlice(nested)
+		}
+	}
+}
+
+func scrubSlice(s []any) {
+	for _, v := range s {
+		switch nested := v.(type) {
+		case map[string]any:
+			scrubMap(nested)
+		case []any:
+			scrubSlice(nested)
+		}
+	}
 }
 
 func valueString(value sql.NullString) string {

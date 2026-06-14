@@ -58,8 +58,9 @@ func ContextToolDefinitions() []CompletionTool {
 			"contentId":         map[string]any{"type": "string"},
 			"heading":           map[string]any{"type": "string"},
 			"generatedMarkdown": map[string]any{"type": "string"},
+			"expectedRevision":  map[string]any{"type": "integer", "minimum": 1},
 			"reason":            map[string]any{"type": "string"},
-		}, "contentId", "heading", "generatedMarkdown", "reason")),
+		}, "contentId", "heading", "generatedMarkdown", "expectedRevision", "reason")),
 	}
 }
 
@@ -430,6 +431,7 @@ func (s *Service) executeWriteTool(ctx context.Context, input ToolCallInput, ses
 			ContentID         string `json:"contentId"`
 			Heading           string `json:"heading"`
 			GeneratedMarkdown string `json:"generatedMarkdown"`
+			ExpectedRevision  int64  `json:"expectedRevision"`
 			Reason            string `json:"reason"`
 		}
 		if err := decodeToolArgs(input.ArgumentsJSON, &args); err != nil {
@@ -444,6 +446,9 @@ func (s *Service) executeWriteTool(ctx context.Context, input ToolCallInput, ses
 		if strings.TrimSpace(args.GeneratedMarkdown) == "" {
 			return nil, nil, fmt.Errorf("generatedMarkdown is required")
 		}
+		if args.ExpectedRevision <= 0 {
+			return nil, nil, fmt.Errorf("expectedRevision must be >= 1")
+		}
 		if strings.TrimSpace(args.Reason) == "" {
 			return nil, nil, fmt.Errorf("reason is required")
 		}
@@ -451,14 +456,15 @@ func (s *Service) executeWriteTool(ctx context.Context, input ToolCallInput, ses
 			return nil, nil, err
 		}
 		section, err := s.projectService.UpdateEntrySectionBody(ctx, project.UpdateEntrySectionInput{
-			ProjectID:      input.ProjectID,
-			ContentID:      args.ContentID,
-			Heading:        args.Heading,
-			BodyMarkdown:   args.GeneratedMarkdown,
-			Reason:         args.Reason,
-			AgentSessionID: session.ID,
-			ActionKind:     string(session.ActionKind),
-			ModelVariantID: session.ModelVariantID,
+			ProjectID:        input.ProjectID,
+			ContentID:        args.ContentID,
+			Heading:          args.Heading,
+			BodyMarkdown:     args.GeneratedMarkdown,
+			ExpectedRevision: args.ExpectedRevision,
+			Reason:           args.Reason,
+			AgentSessionID:   session.ID,
+			ActionKind:       string(session.ActionKind),
+			ModelVariantID:   session.ModelVariantID,
 		})
 		if err != nil {
 			return nil, nil, err
