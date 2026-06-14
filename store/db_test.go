@@ -170,6 +170,44 @@ func TestSkillScriptRuntimeTablesExist(t *testing.T) {
 	}
 }
 
+func TestSkillScriptRuntimeProjectForeignKeys(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	seedSkillScriptRuntimeProjectRows(t, db)
+
+	expectForeignKeyFailure(t, db, "cross-project audit", `
+		INSERT INTO skill_script_audits (
+			id, project_id, skill_id, skill_file_id, relative_path, audited_at
+		) VALUES (
+			'audit-cross', 'project-2', 'skill-1', 'file-1', 'scripts/one.ts', '2026-06-13T00:00:00Z'
+		);
+	`)
+	expectForeignKeyFailure(t, db, "cross-project approval audit", `
+		INSERT INTO skill_script_approvals (
+			id, project_id, skill_id, skill_file_id, audit_id, approved_at, updated_at
+		) VALUES (
+			'approval-cross-audit', 'project-2', 'skill-2', 'file-2', 'audit-1',
+			'2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z'
+		);
+	`)
+	expectForeignKeyFailure(t, db, "cross-project run session", `
+		INSERT INTO skill_script_runs (
+			id, project_id, session_id, skill_id, skill_file_id, approval_id, status, created_at
+		) VALUES (
+			'run-cross-session', 'project-1', 'session-2', 'skill-1', 'file-1', 'approval-1',
+			'succeeded', '2026-06-13T00:00:00Z'
+		);
+	`)
+	expectForeignKeyFailure(t, db, "cross-project run approval", `
+		INSERT INTO skill_script_runs (
+			id, project_id, session_id, skill_id, skill_file_id, approval_id, status, created_at
+		) VALUES (
+			'run-cross-approval', 'project-2', 'session-2', 'skill-2', 'file-2', 'approval-1',
+			'succeeded', '2026-06-13T00:00:00Z'
+		);
+	`)
+}
+
 func TestAddSessionSkillRejectsCrossProjectSkill(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
@@ -701,6 +739,18 @@ func tableHasColumn(t *testing.T, db *sql.DB, tableName string, columnName strin
 	return false
 }
 
+func expectForeignKeyFailure(t *testing.T, db *sql.DB, label string, statement string) {
+	t.Helper()
+
+	_, err := db.Exec(statement)
+	if err == nil {
+		t.Fatalf("%s insert succeeded, want foreign key failure", label)
+	}
+	if !strings.Contains(err.Error(), "FOREIGN KEY constraint failed") {
+		t.Fatalf("%s error = %v, want foreign key failure", label, err)
+	}
+}
+
 func seedProjectScopedContent(t *testing.T, db *sql.DB) {
 	t.Helper()
 
@@ -719,6 +769,45 @@ func seedProjectScopedContent(t *testing.T, db *sql.DB) {
 			('item-2', 'project-2', 'story_bible_entry', 'Item Two', 'item-two', 'Body two', '{}', 1, 1, '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z');
 	`); err != nil {
 		t.Fatalf("seed project-scoped content: %v", err)
+	}
+}
+
+func seedSkillScriptRuntimeProjectRows(t *testing.T, db *sql.DB) {
+	t.Helper()
+
+	if _, err := db.Exec(`
+		INSERT INTO authors (id, email, password_hash, created_at)
+		VALUES ('author-1', 'author@example.com', 'hash', '2026-06-13T00:00:00Z');
+		INSERT INTO story_projects (id, author_id, title, slug, language, created_at, updated_at)
+		VALUES
+			('project-1', 'author-1', 'Project One', 'project-one', 'en', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z'),
+			('project-2', 'author-1', 'Project Two', 'project-two', 'en', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z');
+		INSERT INTO skills (
+			id, project_id, name, display_name, source_type, installed_at, updated_at
+		) VALUES
+			('skill-1', 'project-1', 'one', 'One', 'upload', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z'),
+			('skill-2', 'project-2', 'two', 'Two', 'upload', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z');
+		INSERT INTO skill_files (
+			id, skill_id, relative_path, purpose, body_text, created_at
+		) VALUES
+			('file-1', 'skill-1', 'scripts/one.ts', 'script', 'one', '2026-06-13T00:00:00Z'),
+			('file-2', 'skill-2', 'scripts/two.ts', 'script', 'two', '2026-06-13T00:00:00Z');
+		INSERT INTO agent_sessions (
+			id, project_id, title, action_kind, apply_mode, created_at, updated_at
+		) VALUES
+			('session-1', 'project-1', 'One', 'chat', 'preview', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z'),
+			('session-2', 'project-2', 'Two', 'chat', 'preview', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z');
+		INSERT INTO skill_script_audits (
+			id, project_id, skill_id, skill_file_id, relative_path, audited_at
+		) VALUES
+			('audit-1', 'project-1', 'skill-1', 'file-1', 'scripts/one.ts', '2026-06-13T00:00:00Z'),
+			('audit-2', 'project-2', 'skill-2', 'file-2', 'scripts/two.ts', '2026-06-13T00:00:00Z');
+		INSERT INTO skill_script_approvals (
+			id, project_id, skill_id, skill_file_id, audit_id, approved_at, updated_at
+		) VALUES
+			('approval-1', 'project-1', 'skill-1', 'file-1', 'audit-1', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z');
+	`); err != nil {
+		t.Fatalf("seed skill script runtime project rows: %v", err)
 	}
 }
 
