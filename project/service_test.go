@@ -481,6 +481,13 @@ func TestUpdateEntrySectionBodyRejectsStaleRevision(t *testing.T) {
 	if !errors.Is(err, ErrConflict) {
 		t.Fatalf("stale error = %v, want ErrConflict", err)
 	}
+	sections, err := service.ListEntrySections(ctx, "project-1", entry.ID)
+	if err != nil {
+		t.Fatalf("ListEntrySections() after stale update error = %v", err)
+	}
+	if len(sections) != 1 || sections[0].BodyMarkdown != "Protect the glass city." {
+		t.Fatalf("section after stale update = %#v, want unchanged body", sections)
+	}
 }
 
 func TestProjectMapReturnsContentSectionsAndRelations(t *testing.T) {

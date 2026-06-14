@@ -1,12 +1,17 @@
 package auth
 
 import (
-	"strings"
+	"crypto/rand"
+	"encoding/hex"
 	"time"
 )
 
 func newID(prefix string) string {
-	return prefix + "_" + strings.ReplaceAll(time.Now().UTC().Format("20060102150405.000000000"), ".", "")
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		panic("auth: generate id: " + err.Error())
+	}
+	return prefix + "_" + hex.EncodeToString(b[:])
 }
 
 func nowString() string {

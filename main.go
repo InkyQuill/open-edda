@@ -83,9 +83,15 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 
 func jwtSecret() (string, error) {
 	if secret := os.Getenv("WRITER_JWT_SECRET"); secret != "" {
+		if err := auth.ValidateSecret(secret); err != nil {
+			return "", fmt.Errorf("WRITER_JWT_SECRET: %w", err)
+		}
 		return secret, nil
 	}
 	if secret := os.Getenv("WRITER_SECRET"); secret != "" {
+		if err := auth.ValidateSecret(secret); err != nil {
+			return "", fmt.Errorf("WRITER_SECRET: %w", err)
+		}
 		return secret, nil
 	}
 	return "", fmt.Errorf("JWT secret is not configured; set WRITER_JWT_SECRET or WRITER_SECRET")

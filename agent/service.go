@@ -1809,11 +1809,16 @@ func redactSensitiveFields(requestJSON, responseJSON string) (string, string) {
 }
 
 func scrubJSON(raw string) string {
-	var payload map[string]any
+	var payload any
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		return raw
 	}
-	scrubMap(payload)
+	switch nested := payload.(type) {
+	case map[string]any:
+		scrubMap(nested)
+	case []any:
+		scrubSlice(nested)
+	}
 	clean, err := json.Marshal(payload)
 	if err != nil {
 		return raw

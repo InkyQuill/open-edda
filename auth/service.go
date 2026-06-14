@@ -29,6 +29,9 @@ type Service struct {
 }
 
 func NewService(db *sql.DB, secret string) *Service {
+	if err := ValidateSecret(secret); err != nil {
+		panic("auth: " + err.Error())
+	}
 	return &Service{db: db, queries: store.New(db), secret: secret}
 }
 

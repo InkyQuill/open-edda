@@ -635,7 +635,10 @@ export function App() {
                      onSelect={(e) => {
                        const target = e.target as HTMLTextAreaElement;
                        if (target.selectionStart !== target.selectionEnd) {
-                         setTextSelection({ start: target.selectionStart, end: target.selectionEnd });
+                         setTextSelection({
+                           start: byteLength(target.value.slice(0, target.selectionStart)),
+                           end: byteLength(target.value.slice(0, target.selectionEnd)),
+                         });
                        } else {
                          setTextSelection(null);
                        }

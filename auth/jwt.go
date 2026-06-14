@@ -8,6 +8,7 @@ import (
 )
 
 const tokenLifetime = 24 * time.Hour
+const MinSecretBytes = 32
 
 type Claims struct {
 	AuthorID string `json:"author_id"`
@@ -16,6 +17,9 @@ type Claims struct {
 }
 
 func GenerateToken(authorID, email, secret string) (string, error) {
+	if err := ValidateSecret(secret); err != nil {
+		return "", err
+	}
 	now := time.Now().UTC()
 	claims := Claims{
 		AuthorID: authorID,
@@ -30,6 +34,9 @@ func GenerateToken(authorID, email, secret string) (string, error) {
 }
 
 func ParseToken(tokenString, secret string) (*Claims, error) {
+	if err := ValidateSecret(secret); err != nil {
+		return nil, err
+	}
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
@@ -44,4 +51,11 @@ func ParseToken(tokenString, secret string) (*Claims, error) {
 		return nil, fmt.Errorf("invalid token")
 	}
 	return claims, nil
+}
+
+func ValidateSecret(secret string) error {
+	if len(secret) < MinSecretBytes {
+		return fmt.Errorf("JWT secret must be at least %d bytes", MinSecretBytes)
+	}
+	return nil
 }

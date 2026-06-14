@@ -45,6 +45,14 @@ func AuthorIDFromContext(ctx context.Context) (string, bool) {
 	return id, ok
 }
 
+func MustAuthorIDFromContext(ctx context.Context) string {
+	id, ok := AuthorIDFromContext(ctx)
+	if !ok {
+		panic("auth: missing author context; ensure auth.Required middleware is applied")
+	}
+	return id
+}
+
 func writeAuthError(w http.ResponseWriter, message string) {
 	writeJSON(w, http.StatusUnauthorized, map[string]string{"error": message})
 }

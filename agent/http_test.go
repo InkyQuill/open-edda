@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"git.inkyquill.net/inky/writer/auth"
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/skill"
 	"github.com/go-chi/chi/v5"
@@ -464,6 +465,12 @@ func TestProviderAndModelHTTPValidationAndConflicts(t *testing.T) {
 func newTestAgentHTTP(service *Service) http.Handler {
 	r := chi.NewRouter()
 	r.Route("/api", func(r chi.Router) {
+		r.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				ctx := context.WithValue(req.Context(), auth.AuthorIDKey, "author-1")
+				next.ServeHTTP(w, req.WithContext(ctx))
+			})
+		})
 		RegisterRoutes(r, service)
 	})
 	return r

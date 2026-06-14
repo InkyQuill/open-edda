@@ -1,8 +1,11 @@
+.artifacts/
+.supergoal/
 .superpowers/
 .worktrees/
 frontend/dist/
 frontend/node_modules/
 frontend/tsconfig.tsbuildinfo
 web/dist/
+writer
 *.db-shm
 *.db-wal

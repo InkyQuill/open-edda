@@ -15,7 +15,7 @@ import (
 func TestBuildDependenciesRequiresAuthForProjectRoutes(t *testing.T) {
 	t.Setenv("WRITER_DB_PATH", filepath.Join(t.TempDir(), "writer.db"))
 	t.Setenv("WRITER_MIGRATIONS_PATH", "migrations")
-	t.Setenv("WRITER_JWT_SECRET", "test-secret")
+	t.Setenv("WRITER_JWT_SECRET", "test-secret-32-bytes-minimum-value")
 	staticPath := t.TempDir()
 	if err := os.WriteFile(filepath.Join(staticPath, "index.html"), []byte("<!doctype html><html></html>"), 0o644); err != nil {
 		t.Fatalf("write static index: %v", err)
@@ -72,7 +72,7 @@ func TestBuildDependenciesRequiresAuthForProjectRoutes(t *testing.T) {
 func TestBuildDependenciesRejectsCrossAuthorProjectAccess(t *testing.T) {
 	t.Setenv("WRITER_DB_PATH", filepath.Join(t.TempDir(), "writer.db"))
 	t.Setenv("WRITER_MIGRATIONS_PATH", "migrations")
-	t.Setenv("WRITER_JWT_SECRET", "test-secret")
+	t.Setenv("WRITER_JWT_SECRET", "test-secret-32-bytes-minimum-value")
 	staticPath := t.TempDir()
 	if err := os.WriteFile(filepath.Join(staticPath, "index.html"), []byte("<!doctype html><html></html>"), 0o644); err != nil {
 		t.Fatalf("write static index: %v", err)
@@ -118,7 +118,7 @@ func TestBuildDependenciesRejectsCrossAuthorProjectAccess(t *testing.T) {
 func TestBuildDependenciesRejectsWrongPassword(t *testing.T) {
 	t.Setenv("WRITER_DB_PATH", filepath.Join(t.TempDir(), "writer.db"))
 	t.Setenv("WRITER_MIGRATIONS_PATH", "migrations")
-	t.Setenv("WRITER_JWT_SECRET", "test-secret")
+	t.Setenv("WRITER_JWT_SECRET", "test-secret-32-bytes-minimum-value")
 	staticPath := t.TempDir()
 	if err := os.WriteFile(filepath.Join(staticPath, "index.html"), []byte("<!doctype html><html></html>"), 0o644); err != nil {
 		t.Fatalf("write static index: %v", err)
@@ -175,7 +175,7 @@ func registerTestAuthor(t *testing.T, handler http.Handler, email string) string
 func TestBuildDependenciesRequiresFrontendBuild(t *testing.T) {
 	t.Setenv("WRITER_DB_PATH", filepath.Join(t.TempDir(), "writer.db"))
 	t.Setenv("WRITER_MIGRATIONS_PATH", "migrations")
-	t.Setenv("WRITER_JWT_SECRET", "test-secret")
+	t.Setenv("WRITER_JWT_SECRET", "test-secret-32-bytes-minimum-value")
 	t.Setenv("WRITER_STATIC_PATH", t.TempDir())
 
 	deps, cleanup, err := buildDependencies()

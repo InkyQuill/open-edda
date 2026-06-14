@@ -14,6 +14,7 @@ import (
 	"testing/fstest"
 
 	"git.inkyquill.net/inky/writer/agent"
+	"git.inkyquill.net/inky/writer/auth"
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/store"
 	"github.com/pressly/goose/v3"
@@ -108,11 +109,18 @@ func TestCreateProjectContent(t *testing.T) {
 
 func TestAppMountsAgentRoutes(t *testing.T) {
 	db := openMigratedTestDB(t)
+	secret := "test-secret-32-bytes-minimum-value"
+	token, err := auth.GenerateToken("author-1", "author@example.invalid", secret)
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
+	}
 	handler := New(&Dependencies{
+		AuthService:    auth.NewService(db, secret),
 		ProjectService: project.NewService(db),
 		AgentService:   agent.NewService(db, project.NewService(db), nil),
 	})
 	req := httptest.NewRequest(http.MethodGet, "/api/provider-configs", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -439,6 +447,36 @@ func zipFile(reader *zip.Reader, name string) *zip.File {
 }
 
 func newTestApp(t *testing.T) http.Handler {
+	t.Helper()
+
+	db := openMigratedTestDB(t)
+	secret := "test-secret-32-bytes-minimum-value"
+	token, err := auth.GenerateToken("author-1", "author@example.com", secret)
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
+	}
+	return authHeaderHandler{
+		token: token,
+		next: New(&Dependencies{
+			AuthService:    auth.NewService(db, secret),
+			ProjectService: project.NewService(db),
+		}),
+	}
+}
+
+type authHeaderHandler struct {
+	token string
+	next  http.Handler
+}
+
+func (h authHeaderHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Authorization") == "" {
+		r.Header.Set("Authorization", "Bearer "+h.token)
+	}
+	h.next.ServeHTTP(w, r)
+}
+
+func newUnauthenticatedTestApp(t *testing.T) http.Handler {
 	t.Helper()
 
 	db := openMigratedTestDB(t)

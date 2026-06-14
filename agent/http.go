@@ -17,10 +17,7 @@ import (
 )
 
 func authorID(r *http.Request) string {
-	if id, ok := auth.AuthorIDFromContext(r.Context()); ok {
-		return id
-	}
-	return "author-1"
+	return auth.MustAuthorIDFromContext(r.Context())
 }
 
 const defaultListLimit = 50
