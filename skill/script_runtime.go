@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	defaultScriptTimeoutMS      int64 = 5000
 	minScriptTimeoutMS          int64 = 100
 	maxScriptTimeoutMS          int64 = 30000
 	defaultScriptMaxStdoutBytes int64 = 65536
@@ -36,7 +35,19 @@ func (s *Service) ListScriptAudits(ctx context.Context, projectID, skillID strin
 	}
 	audits := make([]ScriptAudit, 0, len(rows))
 	for _, row := range rows {
-		audits = append(audits, scriptAuditFromStore(row))
+		audit := scriptAuditFromStore(row)
+		approval, err := s.queries.GetSkillScriptApprovalByFile(ctx, store.GetSkillScriptApprovalByFileParams{
+			ProjectID:   projectID,
+			SkillFileID: row.SkillFileID,
+		})
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("get script approval: %w", err)
+		}
+		if err == nil {
+			converted := scriptApprovalFromStore(approval)
+			audit.Approval = &converted
+		}
+		audits = append(audits, audit)
 	}
 	return audits, nil
 }
@@ -52,7 +63,6 @@ func (s *Service) UpdateScriptApproval(ctx context.Context, input UpdateScriptAp
 	if input.Enabled && input.RuntimeCommand == "" {
 		return ScriptApproval{}, ErrInvalidInput
 	}
-	input.TimeoutMS = defaultInt64(input.TimeoutMS, defaultScriptTimeoutMS)
 	if input.TimeoutMS < minScriptTimeoutMS || input.TimeoutMS > maxScriptTimeoutMS {
 		return ScriptApproval{}, ErrInvalidInput
 	}
@@ -283,7 +293,7 @@ func (s *Service) buildScriptEnvelope(ctx context.Context, project store.StoryPr
 			Heading:   heading,
 		})
 	}
-	for _, assetPath := range dedupeStrings(input.RequestedAssetPaths) {
+	for _, assetPath := range dedupeStrings(input.AssetPaths) {
 		file, err := s.queries.GetSkillFile(ctx, store.GetSkillFileParams{
 			ProjectID:    input.ProjectID,
 			SkillID:      input.SkillID,
@@ -507,13 +517,6 @@ func normalizedLimit(limit int64) int64 {
 		return 200
 	}
 	return limit
-}
-
-func defaultInt64(value, fallback int64) int64 {
-	if value == 0 {
-		return fallback
-	}
-	return value
 }
 
 func streamLimit(value, fallback int64) int64 {

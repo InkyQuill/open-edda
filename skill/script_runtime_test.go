@@ -120,15 +120,15 @@ func TestRunScriptPersistsReportRun(t *testing.T) {
 	approval := approveRuntimeScript(t, service, installed, false, false)
 
 	run, err := service.RunScript(ctx, RunScriptInput{
-		ProjectID:           "project-1",
-		SessionID:           "session-1",
-		SkillID:             installed.ID,
-		ScriptPath:          "scripts/analyze.sh",
-		ToolCallID:          "tool-call-1",
-		ContentIDs:          []string{"content-1"},
-		RequestedAssetPaths: []string{"templates/rewrite.md"},
-		Arguments:           map[string]any{"mode": "report"},
-		EntrySections:       []ScriptEntrySectionInput{{ContentID: "content-1", Heading: "Opening"}},
+		ProjectID:     "project-1",
+		SessionID:     "session-1",
+		SkillID:       installed.ID,
+		ScriptPath:    "scripts/analyze.sh",
+		ToolCallID:    "tool-call-1",
+		ContentIDs:    []string{"content-1"},
+		AssetPaths:    []string{"templates/rewrite.md"},
+		Arguments:     map[string]any{"mode": "report"},
+		EntrySections: []ScriptEntrySectionInput{{ContentID: "content-1", Heading: "Opening"}},
 	})
 	if err != nil {
 		t.Fatalf("RunScript() error = %v", err)
@@ -181,6 +181,29 @@ func TestRunScriptPersistsReportRun(t *testing.T) {
 	}
 }
 
+func TestListScriptAuditsIncludesApproval(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	installed := installRuntimeSkill(t, service)
+	approval := approveRuntimeScript(t, service, installed, false, false)
+
+	audits, err := service.ListScriptAudits(ctx, "project-1", installed.ID)
+	if err != nil {
+		t.Fatalf("ListScriptAudits() error = %v", err)
+	}
+	if len(audits) != 1 {
+		t.Fatalf("audit count = %d, want 1", len(audits))
+	}
+	if audits[0].Approval == nil {
+		t.Fatal("audit Approval is nil, want matching approval")
+	}
+	if audits[0].Approval.ID != approval.ID || audits[0].Approval.SkillFileID != scriptFileID(t, installed) {
+		t.Fatalf("audit Approval = %#v, want approval %#v", audits[0].Approval, approval)
+	}
+}
+
 func TestRunScriptPersistsRejectedRuntimeResult(t *testing.T) {
 	db := openMigratedTestDB(t)
 	service := NewService(db)
@@ -217,6 +240,44 @@ func TestRunScriptPersistsRejectedRuntimeResult(t *testing.T) {
 	}
 }
 
+func TestRunScriptPersistsFailedRuntimeResult(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	service.SetScriptRunner(&fakeScriptRunner{
+		result: runtime.RunResult{
+			Status:       runtime.StatusFailed,
+			StdoutText:   "",
+			StderrText:   "boom",
+			ExitCode:     1,
+			Duration:     4 * time.Millisecond,
+			ErrorMessage: "script exited with status 1",
+		},
+	})
+	ctx := context.Background()
+
+	installed := installRuntimeSkill(t, service)
+	approveRuntimeScript(t, service, installed, false, false)
+
+	run, err := service.RunScript(ctx, RunScriptInput{
+		ProjectID:   "project-1",
+		SkillID:     installed.ID,
+		SkillFileID: scriptFileID(t, installed),
+	})
+	if err != nil {
+		t.Fatalf("RunScript() error = %v", err)
+	}
+	if run.Status != ScriptRunStatusFailed || run.ErrorMessage != "script exited with status 1" {
+		t.Fatalf("run = %#v, want persisted failed result", run)
+	}
+	runs, err := service.ListScriptRunsByProject(ctx, "project-1", 10)
+	if err != nil {
+		t.Fatalf("ListScriptRunsByProject() error = %v", err)
+	}
+	if len(runs) != 1 || runs[0].Status != ScriptRunStatusFailed {
+		t.Fatalf("runs = %#v, want persisted failed run", runs)
+	}
+}
+
 func TestUpdateScriptApprovalRejectsNetworkAndProjectFiles(t *testing.T) {
 	db := openMigratedTestDB(t)
 	service := NewService(db)
@@ -249,6 +310,28 @@ func TestUpdateScriptApprovalRejectsNetworkAndProjectFiles(t *testing.T) {
 				t.Fatalf("UpdateScriptApproval() error = %v, want ErrInvalidInput", err)
 			}
 		})
+	}
+}
+
+func TestUpdateScriptApprovalRejectsTimeoutOutsideRange(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	installed := installRuntimeSkill(t, service)
+	for _, timeoutMS := range []int64{0, 99, 30001} {
+		_, err := service.UpdateScriptApproval(ctx, UpdateScriptApprovalInput{
+			ProjectID:      "project-1",
+			SkillID:        installed.ID,
+			SkillFileID:    scriptFileID(t, installed),
+			Enabled:        true,
+			RuntimeCommand: "sh scripts/analyze.sh",
+			TimeoutMS:      timeoutMS,
+			ApprovedBy:     "tester",
+		})
+		if !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("UpdateScriptApproval(timeout %d) error = %v, want ErrInvalidInput", timeoutMS, err)
+		}
 	}
 }
 

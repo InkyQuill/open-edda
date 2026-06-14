@@ -133,6 +133,7 @@ type ScriptAudit struct {
 	RiskNotes             string               `json:"riskNotes"`
 	Recommendation        ScriptRecommendation `json:"recommendation"`
 	AuditedAt             string               `json:"auditedAt"`
+	Approval              *ScriptApproval      `json:"approval,omitempty"`
 }
 
 type ScriptApproval struct {
@@ -168,16 +169,16 @@ type UpdateScriptApprovalInput struct {
 }
 
 type RunScriptInput struct {
-	ProjectID           string
-	SessionID           string
-	SkillID             string
-	SkillFileID         string
-	ScriptPath          string
-	ToolCallID          string
-	ContentIDs          []string
-	EntrySections       []ScriptEntrySectionInput
-	RequestedAssetPaths []string
-	Arguments           map[string]any
+	ProjectID     string
+	SessionID     string
+	SkillID       string
+	SkillFileID   string
+	ScriptPath    string
+	ToolCallID    string
+	ContentIDs    []string
+	EntrySections []ScriptEntrySectionInput
+	AssetPaths    []string
+	Arguments     map[string]any
 }
 
 type ScriptEntrySectionInput struct {
