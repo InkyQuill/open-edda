@@ -617,11 +617,11 @@ func (s *Service) UpdateEntrySectionBody(ctx context.Context, input UpdateEntryS
 		}
 
 		affected, err := queries.UpdateEntrySectionBody(ctx, store.UpdateEntrySectionBodyParams{
-			BodyMarkdown:      input.BodyMarkdown,
-			ContentItemID:     input.ContentID,
-			Heading:           input.Heading,
-			ProjectID:         input.ProjectID,
-			ExpectedRevision:  input.ExpectedRevision,
+			BodyMarkdown:     input.BodyMarkdown,
+			ContentItemID:    input.ContentID,
+			Heading:          input.Heading,
+			ProjectID:        input.ProjectID,
+			ExpectedRevision: input.ExpectedRevision,
 		})
 		if err != nil {
 			return fmt.Errorf("update entry section: %w", err)

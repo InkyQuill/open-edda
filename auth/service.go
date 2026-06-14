@@ -15,14 +15,14 @@ import (
 const bcryptCost = 12
 
 var (
-	ErrInvalidEmail    = errors.New("invalid email")
-	ErrPasswordTooShort = errors.New("password must be at least 8 characters")
+	ErrInvalidEmail       = errors.New("invalid email")
+	ErrPasswordTooShort   = errors.New("password must be at least 8 characters")
 	ErrInvalidCredentials = errors.New("invalid email or password")
-	ErrEmailTaken       = errors.New("email already registered")
+	ErrEmailTaken         = errors.New("email already registered")
 )
 
 type Service struct {
-	db     *sql.DB
+	db      *sql.DB
 	queries *store.Queries
 	secret  string
 }
