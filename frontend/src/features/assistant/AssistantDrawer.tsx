@@ -17,7 +17,6 @@ import {
 
 type AssistantDrawerProps = {
   projectId: string;
-  contentId: string | null;
 };
 
 export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
@@ -37,7 +36,10 @@ export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
   const trimmedDraft = draftMessage.trim();
   const isSending = messagesStatus === "pending";
   const isStarting = sessionsStatus === "pending";
-  const hasActiveModel = Boolean(activeModelVariantId);
+  const sessionModelVariantId = activeSession?.modelVariantId || null;
+  const chatModelVariantId = activeModelVariantId ?? sessionModelVariantId;
+  const canStartChat = Boolean(chatModelVariantId);
+  const canSend = Boolean(activeSessionId && sessionModelVariantId && trimmedDraft);
 
   useEffect(() => {
     dispatch(assistantActions.resetForProject());
@@ -50,12 +52,12 @@ export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
   }, [activeSessionId, dispatch, projectId]);
 
   function handleNewChat(): void {
-    if (!activeModelVariantId) return;
-    void dispatch(startAssistantSession({ projectId, modelVariantId: activeModelVariantId }));
+    if (!chatModelVariantId) return;
+    void dispatch(startAssistantSession({ projectId, modelVariantId: chatModelVariantId }));
   }
 
   function handleSend(): void {
-    if (!activeModelVariantId || !activeSessionId || !trimmedDraft) return;
+    if (!canSend || !activeSessionId) return;
     void dispatch(sendAssistantMessage({ projectId, sessionId: activeSessionId, bodyMarkdown: trimmedDraft }));
   }
 
@@ -78,14 +80,14 @@ export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
             variant="outline"
             size="xs"
             onClick={handleNewChat}
-            disabled={isStarting || !hasActiveModel}
+            disabled={isStarting || !canStartChat}
           >
             <Plus data-icon="inline-start" aria-hidden="true" />
             New chat
           </Button>
         </div>
 
-        {!hasActiveModel ? (
+        {!canStartChat ? (
           <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
             Select a model before starting assistant chat.
           </p>
@@ -129,12 +131,12 @@ export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
             onChange={(event) => dispatch(assistantActions.setDraftMessage(event.target.value))}
             placeholder="Message the assistant..."
             aria-label="Assistant message"
-            disabled={!hasActiveModel || !activeSessionId || isSending}
+            disabled={!activeSessionId || !sessionModelVariantId || isSending}
           />
           <Button
             type="button"
             onClick={handleSend}
-            disabled={!hasActiveModel || !activeSessionId || !trimmedDraft || isSending}
+            disabled={!canSend || isSending}
           >
             <Send data-icon="inline-start" aria-hidden="true" />
             Send

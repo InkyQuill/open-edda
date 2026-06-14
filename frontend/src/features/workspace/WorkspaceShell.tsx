@@ -97,7 +97,7 @@ export function WorkspaceShell({
     workspace.mode === "review" || workspace.activeRightTab === "tools" || workspace.activeRightTab === "revisions" ? (
       <ReviewDrawer />
     ) : (
-      <AssistantDrawer projectId={projectId} contentId={selectedContent?.id ?? null} />
+      <AssistantDrawer projectId={projectId} />
     );
 
   const contextDrawer = (
@@ -115,7 +115,7 @@ export function WorkspaceShell({
   );
 
   function renderMobileSheet(sheet: NonNullable<MobileSheet>) {
-    if (sheet === "assistant") return <AssistantDrawer projectId={projectId} contentId={selectedContent?.id ?? null} />;
+    if (sheet === "assistant") return <AssistantDrawer projectId={projectId} />;
     if (sheet === "review") return <ReviewDrawer />;
     if (sheet === "model") return <ModelStatus />;
     return (
