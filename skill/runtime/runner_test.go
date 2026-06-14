@@ -91,6 +91,77 @@ func TestRunnerTimesOut(t *testing.T) {
 	}
 }
 
+func TestRunnerTimesOutChildProcessGroup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process-group runner test is Unix-only")
+	}
+	runner := NewRunner()
+	start := time.Now()
+
+	result, err := runner.Run(context.Background(), RunRequest{
+		Command:        "sleep 10 & wait",
+		Timeout:        20 * time.Millisecond,
+		MaxStdoutBytes: 4096,
+		MaxStderrBytes: 1024,
+		Input:          Envelope{RuntimeVersion: RuntimeVersion},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != StatusTimedOut {
+		t.Fatalf("status = %s, want %s", result.Status, StatusTimedOut)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("Run() took %s, want child process group cleanup within 1s", elapsed)
+	}
+}
+
+func TestRunnerRejectsOversizedStdoutWithoutShortWriteFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sh-based runner test is Unix-only")
+	}
+	runner := NewRunner()
+
+	result, err := runner.Run(context.Background(), RunRequest{
+		Command:        `printf '%s' '{"kind":"report","title":"x","markdown":"this output is intentionally too long"}'`,
+		Timeout:        time.Second,
+		MaxStdoutBytes: 32,
+		MaxStderrBytes: 1024,
+		Input:          Envelope{RuntimeVersion: RuntimeVersion},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Status != StatusRejected {
+		t.Fatalf("status = %s, want %s; error=%s", result.Status, StatusRejected, result.ErrorMessage)
+	}
+	if !strings.Contains(result.ErrorMessage, "stdout exceeded") {
+		t.Fatalf("error = %q, want stdout cap/truncation error", result.ErrorMessage)
+	}
+	if strings.Contains(result.ErrorMessage, "short write") {
+		t.Fatalf("error = %q, want no accidental short write failure", result.ErrorMessage)
+	}
+}
+
+func TestShellCommandUsesPlatformShell(t *testing.T) {
+	name, args := shellCommand("echo ok")
+	if runtime.GOOS == "windows" {
+		if name != "cmd" {
+			t.Fatalf("command name = %q, want cmd", name)
+		}
+		if len(args) != 2 || args[0] != "/C" || args[1] != "echo ok" {
+			t.Fatalf("command args = %#v, want /C command", args)
+		}
+		return
+	}
+	if name != "sh" {
+		t.Fatalf("command name = %q, want sh", name)
+	}
+	if len(args) != 2 || args[0] != "-c" || args[1] != "echo ok" {
+		t.Fatalf("command args = %#v, want -c command", args)
+	}
+}
+
 func TestMain(m *testing.M) {
 	if os.Getenv("OPEN_EDDA_TEST_HELPER") == "echo_report" {
 		var input Envelope

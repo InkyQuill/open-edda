@@ -54,6 +54,11 @@ func (r *Runner) Run(ctx context.Context, request RunRequest) (RunResult, error)
 	commandName, commandArgs := shellCommand(request.Command)
 	cmd := exec.CommandContext(runCtx, commandName, commandArgs...)
 	cmd.Dir = workdir
+	configureCommand(cmd)
+	cmd.Cancel = func() error {
+		return cancelCommand(cmd)
+	}
+	cmd.WaitDelay = 200 * time.Millisecond
 	cmd.Env = []string{
 		"OPEN_EDDA_SKILL_RUNTIME=1",
 		"NO_COLOR=1",
@@ -67,6 +72,7 @@ func (r *Runner) Run(ctx context.Context, request RunRequest) (RunResult, error)
 
 	start := time.Now()
 	err = cmd.Run()
+	_ = cancelCommand(cmd)
 	result := RunResult{
 		Status:     StatusSucceeded,
 		StdoutText: stdout.String(),
@@ -142,20 +148,21 @@ type limitedBuffer struct {
 }
 
 func (b *limitedBuffer) Write(p []byte) (int, error) {
+	originalLen := len(p)
 	if b.limit <= 0 {
-		return len(p), nil
+		return originalLen, nil
 	}
 	remaining := b.limit - int64(b.buf.Len())
 	if remaining <= 0 {
 		b.truncated = true
-		return len(p), nil
+		return originalLen, nil
 	}
 	if int64(len(p)) > remaining {
 		b.truncated = true
 		p = p[:remaining]
 	}
 	_, _ = b.buf.Write(p)
-	return len(p), nil
+	return originalLen, nil
 }
 
 func (b *limitedBuffer) String() string {
