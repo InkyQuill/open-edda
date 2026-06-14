@@ -18,7 +18,7 @@ func TestRunnerExecutesJSONEnvelope(t *testing.T) {
 	runner := NewRunner()
 
 	result, err := runner.Run(context.Background(), RunRequest{
-		Command:        fmt.Sprintf("OPEN_EDDA_TEST_HELPER=echo_report %q", os.Args[0]),
+		Command:        fmt.Sprintf("GORACE=atexit_sleep_ms=0 OPEN_EDDA_TEST_HELPER=echo_report %q", os.Args[0]),
 		Timeout:        time.Second,
 		MaxStdoutBytes: 4096,
 		MaxStderrBytes: 1024,
