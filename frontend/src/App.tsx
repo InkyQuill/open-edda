@@ -794,6 +794,9 @@ function SkillDetail({
       listProjectScriptRuns(projectId, abortController.signal),
     ])
       .then(([audits, runs]) => {
+        if (abortController.signal.aborted) {
+          return;
+        }
         const nextDraftCommands = Object.fromEntries(
           audits.map((audit) => [audit.skillFileId, audit.approval?.runtimeCommand ?? ""]),
         );
@@ -819,11 +822,18 @@ function SkillDetail({
 
   function saveApproval(audit: ScriptAudit, enabled: boolean): void {
     const runtimeCommand = (draftCommands[audit.skillFileId] ?? audit.approval?.runtimeCommand ?? "").trim();
+    const approvalPolicy = {
+      timeoutMs: audit.approval?.timeoutMs ?? defaultScriptRuntimePolicy.timeoutMs,
+      maxStdoutBytes: audit.approval?.maxStdoutBytes ?? defaultScriptRuntimePolicy.maxStdoutBytes,
+      maxStderrBytes: audit.approval?.maxStderrBytes ?? defaultScriptRuntimePolicy.maxStderrBytes,
+      allowNetwork: false,
+      allowProjectFiles: false,
+    };
     setSavingScriptFileId(audit.skillFileId);
     void updateScriptApproval(projectId, audit.skillId, audit.skillFileId, {
       enabled,
       runtimeCommand,
-      ...defaultScriptRuntimePolicy,
+      ...approvalPolicy,
     })
       .then((approval) => {
         setScriptAudits((audits) =>
@@ -855,7 +865,7 @@ function SkillDetail({
           <h3>{skill.displayName}</h3>
           <p>{skill.name}</p>
         </div>
-        {skill.scriptCount > 0 ? <span className="skill-badge skill-badge-warning">Scripts disabled</span> : null}
+        {skill.scriptCount > 0 ? <span className="skill-badge skill-badge-warning">Runtime helpers</span> : null}
       </header>
       {(skill.routingHints ?? []).length > 0 ? <SkillChips skill={skill} showScriptStatus={false} /> : null}
       <div className="skill-detail-body">
