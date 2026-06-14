@@ -278,6 +278,74 @@ func TestRunScriptPersistsFailedRuntimeResult(t *testing.T) {
 	}
 }
 
+func TestRunScriptRejectsUnsafeStoredApprovalOrAudit(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(t *testing.T, db interface {
+			Exec(query string, args ...any) (sql.Result, error)
+		}, skillFileID string)
+	}{
+		{
+			name: "network approval",
+			mutate: func(t *testing.T, db interface {
+				Exec(query string, args ...any) (sql.Result, error)
+			}, skillFileID string) {
+				t.Helper()
+				if _, err := db.Exec(`UPDATE skill_script_approvals SET allow_network = 1 WHERE skill_file_id = ?`, skillFileID); err != nil {
+					t.Fatalf("mutate approval: %v", err)
+				}
+			},
+		},
+		{
+			name: "project files approval",
+			mutate: func(t *testing.T, db interface {
+				Exec(query string, args ...any) (sql.Result, error)
+			}, skillFileID string) {
+				t.Helper()
+				if _, err := db.Exec(`UPDATE skill_script_approvals SET allow_project_files = 1 WHERE skill_file_id = ?`, skillFileID); err != nil {
+					t.Fatalf("mutate approval: %v", err)
+				}
+			},
+		},
+		{
+			name: "destructive audit",
+			mutate: func(t *testing.T, db interface {
+				Exec(query string, args ...any) (sql.Result, error)
+			}, skillFileID string) {
+				t.Helper()
+				if _, err := db.Exec(`UPDATE skill_script_audits SET destructive_operations = 1 WHERE skill_file_id = ?`, skillFileID); err != nil {
+					t.Fatalf("mutate audit: %v", err)
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db := openMigratedTestDB(t)
+			service := NewService(db)
+			runner := &fakeScriptRunner{result: runtime.RunResult{Status: runtime.StatusSucceeded}}
+			service.SetScriptRunner(runner)
+			ctx := context.Background()
+
+			installed := installRuntimeSkill(t, service)
+			scriptID := scriptFileID(t, installed)
+			approveRuntimeScript(t, service, installed, false, false)
+			tc.mutate(t, db, scriptID)
+
+			_, err := service.RunScript(ctx, RunScriptInput{
+				ProjectID:   "project-1",
+				SkillID:     installed.ID,
+				SkillFileID: scriptID,
+			})
+			if !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("RunScript() error = %v, want ErrInvalidInput", err)
+			}
+			if len(runner.requests) != 0 {
+				t.Fatalf("runner requests = %d, want 0", len(runner.requests))
+			}
+		})
+	}
+}
+
 func TestUpdateScriptApprovalRejectsNetworkAndProjectFiles(t *testing.T) {
 	db := openMigratedTestDB(t)
 	service := NewService(db)
@@ -310,6 +378,40 @@ func TestUpdateScriptApprovalRejectsNetworkAndProjectFiles(t *testing.T) {
 				t.Fatalf("UpdateScriptApproval() error = %v, want ErrInvalidInput", err)
 			}
 		})
+	}
+}
+
+func TestUpdateScriptApprovalAllowsDisablingUnsafeStoredApproval(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	installed := installRuntimeSkill(t, service)
+	scriptID := scriptFileID(t, installed)
+	approveRuntimeScript(t, service, installed, false, false)
+	if _, err := db.Exec(`UPDATE skill_script_approvals SET allow_network = 1, allow_project_files = 1 WHERE skill_file_id = ?`, scriptID); err != nil {
+		t.Fatalf("mutate approval: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE skill_script_audits SET destructive_operations = 1 WHERE skill_file_id = ?`, scriptID); err != nil {
+		t.Fatalf("mutate audit: %v", err)
+	}
+
+	approval, err := service.UpdateScriptApproval(ctx, UpdateScriptApprovalInput{
+		ProjectID:         "project-1",
+		SkillID:           installed.ID,
+		SkillFileID:       scriptID,
+		Enabled:           false,
+		RuntimeCommand:    "",
+		TimeoutMS:         5000,
+		AllowNetwork:      true,
+		AllowProjectFiles: true,
+		ApprovedBy:        "tester",
+	})
+	if err != nil {
+		t.Fatalf("UpdateScriptApproval() error = %v", err)
+	}
+	if approval.Enabled || approval.AllowNetwork || approval.AllowProjectFiles {
+		t.Fatalf("approval = %#v, want disabled safe policy", approval)
 	}
 }
 

@@ -56,9 +56,6 @@ func (s *Service) UpdateScriptApproval(ctx context.Context, input UpdateScriptAp
 	if strings.TrimSpace(input.ProjectID) == "" || strings.TrimSpace(input.SkillID) == "" || strings.TrimSpace(input.SkillFileID) == "" {
 		return ScriptApproval{}, ErrInvalidInput
 	}
-	if input.AllowNetwork || input.AllowProjectFiles {
-		return ScriptApproval{}, ErrInvalidInput
-	}
 	input.RuntimeCommand = strings.TrimSpace(input.RuntimeCommand)
 	if input.Enabled && input.RuntimeCommand == "" {
 		return ScriptApproval{}, ErrInvalidInput
@@ -79,8 +76,15 @@ func (s *Service) UpdateScriptApproval(ctx context.Context, input UpdateScriptAp
 		}
 		return ScriptApproval{}, fmt.Errorf("get script audit: %w", err)
 	}
-	if audit.SkillID != input.SkillID || audit.DestructiveOperations != 0 {
+	if audit.SkillID != input.SkillID {
 		return ScriptApproval{}, ErrInvalidInput
+	}
+	if input.Enabled && (audit.DestructiveOperations != 0 || input.AllowNetwork || input.AllowProjectFiles) {
+		return ScriptApproval{}, ErrInvalidInput
+	}
+	if !input.Enabled {
+		input.AllowNetwork = false
+		input.AllowProjectFiles = false
 	}
 
 	now := nowString()
@@ -153,6 +157,19 @@ func (s *Service) RunScript(ctx context.Context, input RunScriptInput) (ScriptRu
 		return ScriptRun{}, fmt.Errorf("get script approval: %w", err)
 	}
 	if approval.SkillID != input.SkillID || approval.Enabled == 0 || strings.TrimSpace(approval.RuntimeCommand) == "" {
+		return ScriptRun{}, ErrInvalidInput
+	}
+	audit, err := s.queries.GetSkillScriptAuditByFile(ctx, store.GetSkillScriptAuditByFileParams{
+		ProjectID:   input.ProjectID,
+		SkillFileID: scriptFile.ID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ScriptRun{}, ErrInvalidInput
+		}
+		return ScriptRun{}, fmt.Errorf("get script audit: %w", err)
+	}
+	if audit.SkillID != input.SkillID || audit.DestructiveOperations != 0 || approval.AllowNetwork != 0 || approval.AllowProjectFiles != 0 {
 		return ScriptRun{}, ErrInvalidInput
 	}
 
