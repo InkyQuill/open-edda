@@ -208,6 +208,35 @@ func TestSkillScriptRuntimeProjectForeignKeys(t *testing.T) {
 	`)
 }
 
+func TestSkillScriptRuntimeRunSurvivesSessionDelete(t *testing.T) {
+	db := openTestDB(t)
+	defer db.Close()
+	seedSkillScriptRuntimeProjectRows(t, db)
+
+	if _, err := db.Exec(`
+		INSERT INTO skill_script_runs (
+			id, project_id, session_id, skill_id, skill_file_id, approval_id, status, created_at
+		) VALUES (
+			'run-1', 'project-1', 'session-1', 'skill-1', 'file-1', 'approval-1',
+			'succeeded', '2026-06-13T00:00:00Z'
+		);
+	`); err != nil {
+		t.Fatalf("insert skill script run: %v", err)
+	}
+
+	if _, err := db.Exec(`DELETE FROM agent_sessions WHERE id = 'session-1'`); err != nil {
+		t.Fatalf("delete agent session: %v", err)
+	}
+
+	var sessionID sql.NullString
+	if err := db.QueryRow(`SELECT session_id FROM skill_script_runs WHERE id = 'run-1'`).Scan(&sessionID); err != nil {
+		t.Fatalf("query skill script run after session delete: %v", err)
+	}
+	if sessionID.Valid {
+		t.Fatalf("session_id = %q, want NULL after session delete", sessionID.String)
+	}
+}
+
 func TestAddSessionSkillRejectsCrossProjectSkill(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()

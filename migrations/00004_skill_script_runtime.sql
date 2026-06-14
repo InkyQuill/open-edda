@@ -51,7 +51,7 @@ CREATE TABLE skill_script_approvals (
 CREATE TABLE skill_script_runs (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES story_projects(id) ON DELETE CASCADE,
-  session_id TEXT,
+  session_id TEXT REFERENCES agent_sessions(id) ON DELETE SET NULL,
   skill_id TEXT NOT NULL,
   skill_file_id TEXT NOT NULL,
   approval_id TEXT NOT NULL,
@@ -66,11 +66,40 @@ CREATE TABLE skill_script_runs (
   duration_ms INTEGER NOT NULL DEFAULT 0,
   error_message TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
-  FOREIGN KEY (session_id, project_id) REFERENCES agent_sessions(id, project_id) ON DELETE CASCADE,
   FOREIGN KEY (skill_id, project_id) REFERENCES skills(id, project_id) ON DELETE CASCADE,
   FOREIGN KEY (skill_file_id, skill_id) REFERENCES skill_files(id, skill_id) ON DELETE CASCADE,
   FOREIGN KEY (approval_id, project_id, skill_file_id) REFERENCES skill_script_approvals(id, project_id, skill_file_id) ON DELETE RESTRICT
 );
+
+-- +goose StatementBegin
+CREATE TRIGGER skill_script_runs_session_project_insert
+BEFORE INSERT ON skill_script_runs
+FOR EACH ROW
+WHEN NEW.session_id IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM agent_sessions
+    WHERE agent_sessions.id = NEW.session_id
+      AND agent_sessions.project_id = NEW.project_id
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'FOREIGN KEY constraint failed');
+END;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+CREATE TRIGGER skill_script_runs_session_project_update
+BEFORE UPDATE OF project_id, session_id ON skill_script_runs
+FOR EACH ROW
+WHEN NEW.session_id IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM agent_sessions
+    WHERE agent_sessions.id = NEW.session_id
+      AND agent_sessions.project_id = NEW.project_id
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'FOREIGN KEY constraint failed');
+END;
+-- +goose StatementEnd
 
 CREATE INDEX idx_skill_script_audits_project ON skill_script_audits(project_id, skill_id);
 CREATE INDEX idx_skill_script_approvals_project ON skill_script_approvals(project_id, skill_id, enabled);
@@ -78,6 +107,8 @@ CREATE INDEX idx_skill_script_runs_project ON skill_script_runs(project_id, crea
 CREATE INDEX idx_skill_script_runs_session ON skill_script_runs(project_id, session_id, created_at DESC);
 
 -- +goose Down
+DROP TRIGGER IF EXISTS skill_script_runs_session_project_update;
+DROP TRIGGER IF EXISTS skill_script_runs_session_project_insert;
 DROP INDEX IF EXISTS idx_skill_script_runs_session;
 DROP INDEX IF EXISTS idx_skill_script_runs_project;
 DROP INDEX IF EXISTS idx_skill_script_approvals_project;
