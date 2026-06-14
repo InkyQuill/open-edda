@@ -115,13 +115,29 @@ describe("modelSettingsSlice", () => {
   });
 
   it("defaults to the first provider when provider configs load without a current selection", () => {
-    const loaded = modelSettingsReducer(
-      initialModelSettingsState,
-      loadProviderConfigs.fulfilled([providerAlpha, providerBeta], "request-1"),
-    );
+    const loading = modelSettingsReducer(initialModelSettingsState, loadProviderConfigs.pending("request-1"));
+
+    const loaded = modelSettingsReducer(loading, loadProviderConfigs.fulfilled([providerAlpha, providerBeta], "request-1"));
 
     expect(loaded.providers).toEqual([providerAlpha, providerBeta]);
     expect(loaded.selectedProviderId).toBe("provider-alpha");
+  });
+
+  it("ignores stale provider config loads", () => {
+    const loadingFirst = modelSettingsReducer(initialModelSettingsState, loadProviderConfigs.pending("request-1"));
+    const loadingSecond = modelSettingsReducer(loadingFirst, loadProviderConfigs.pending("request-2"));
+
+    const loadedSecond = modelSettingsReducer(loadingSecond, loadProviderConfigs.fulfilled([providerBeta], "request-2"));
+
+    const staleLoadedFirst = modelSettingsReducer(
+      loadedSecond,
+      loadProviderConfigs.fulfilled([providerAlpha], "request-1"),
+    );
+
+    expect(staleLoadedFirst.providers).toEqual([providerBeta]);
+    expect(staleLoadedFirst.selectedProviderId).toBe("provider-beta");
+    expect(staleLoadedFirst.providersStatus).toBe("succeeded");
+    expect(staleLoadedFirst.error).toBeNull();
   });
 
   it("defaults to the first model for the selected provider when models load", () => {
@@ -182,5 +198,44 @@ describe("modelSettingsSlice", () => {
     expect(staleLoaded.modelsStatus).toBe("idle");
     expect(staleLoaded.loadingModelProviderId).toBeNull();
     expect(staleLoaded.modelVariantsByProviderId["provider-alpha"]).toBeUndefined();
+  });
+
+  it("ignores stale duplicate model loads for the same provider", () => {
+    const state: ModelSettingsState = {
+      ...initialModelSettingsState,
+      selectedProviderId: "provider-alpha",
+      providers: [providerAlpha],
+    };
+
+    const loadingFirst = modelSettingsReducer(
+      state,
+      loadModelVariants.pending("request-1", { providerId: "provider-alpha" }),
+    );
+    const loadingSecond = modelSettingsReducer(
+      loadingFirst,
+      loadModelVariants.pending("request-2", { providerId: "provider-alpha" }),
+    );
+
+    const staleRejectedFirst = modelSettingsReducer(
+      loadingSecond,
+      loadModelVariants.rejected(new Error("First request failed"), "request-1", {
+        providerId: "provider-alpha",
+      }),
+    );
+
+    const loadedSecond = modelSettingsReducer(
+      staleRejectedFirst,
+      loadModelVariants.fulfilled([modelVariant("model-alpha-latest", "provider-alpha")], "request-2", {
+        providerId: "provider-alpha",
+      }),
+    );
+
+    expect(loadedSecond.modelsStatus).toBe("succeeded");
+    expect(loadedSecond.error).toBeNull();
+    expect(loadedSecond.loadingModelProviderId).toBeNull();
+    expect(loadedSecond.modelVariantsByProviderId["provider-alpha"]).toEqual([
+      modelVariant("model-alpha-latest", "provider-alpha"),
+    ]);
+    expect(loadedSecond.activeModelVariantId).toBe("model-alpha-latest");
   });
 });

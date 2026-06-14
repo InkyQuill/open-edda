@@ -43,6 +43,13 @@ export function ModelSettingsPanel() {
     }
   }
 
+  function handleRefresh(): void {
+    void dispatch(loadProviderConfigs());
+    if (selectedProviderId) {
+      void dispatch(loadModelVariants({ providerId: selectedProviderId }));
+    }
+  }
+
   return (
     <section className="flex h-full min-h-0 flex-col gap-4" aria-labelledby="model-settings-title">
       <header className="flex items-start justify-between gap-3">
@@ -54,7 +61,7 @@ export function ModelSettingsPanel() {
             {selectedProvider ? selectedProvider.name : "No provider selected"}
           </p>
         </div>
-        <Button type="button" variant="outline" size="icon-sm" aria-label="Refresh model settings" onClick={() => void dispatch(loadProviderConfigs())}>
+        <Button type="button" variant="outline" size="icon-sm" aria-label="Refresh model settings" onClick={handleRefresh}>
           <Settings2 />
         </Button>
       </header>
@@ -106,6 +113,7 @@ export function ModelSettingsPanel() {
                 type="button"
                 variant={provider.id === selectedProviderId ? "secondary" : "outline"}
                 className="h-auto justify-start px-3 py-2 text-left"
+                aria-pressed={provider.id === selectedProviderId}
                 onClick={() => handleProviderSelect(provider.id)}
               >
                 <Server data-icon="inline-start" aria-hidden="true" />
@@ -145,6 +153,7 @@ export function ModelSettingsPanel() {
                 type="button"
                 variant={model.id === activeModelVariantId ? "secondary" : "outline"}
                 className="h-auto justify-start px-3 py-2 text-left"
+                aria-pressed={model.id === activeModelVariantId}
                 onClick={() => dispatch(modelSettingsActions.setActiveModelVariantId(model.id))}
               >
                 {model.id === activeModelVariantId ? (

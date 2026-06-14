@@ -12,6 +12,8 @@ export type ModelSettingsState = {
   modelVariantsByProviderId: Record<string, ModelVariant[]>;
   providersStatus: AsyncStatus;
   modelsStatus: AsyncStatus;
+  providersRequestId: string | null;
+  modelsRequestId: string | null;
   loadingModelProviderId: string | null;
   error: string | null;
 };
@@ -23,6 +25,8 @@ export const initialModelSettingsState: ModelSettingsState = {
   modelVariantsByProviderId: {},
   providersStatus: "idle",
   modelsStatus: "idle",
+  providersRequestId: null,
+  modelsRequestId: null,
   loadingModelProviderId: null,
   error: null,
 };
@@ -68,11 +72,14 @@ const modelSettingsSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(loadProviderConfigs.pending, (state) => {
+      .addCase(loadProviderConfigs.pending, (state, action) => {
+        state.providersRequestId = action.meta.requestId;
         state.providersStatus = "pending";
         state.error = null;
       })
       .addCase(loadProviderConfigs.fulfilled, (state, action) => {
+        if (state.providersRequestId !== action.meta.requestId) return;
+        state.providersRequestId = null;
         state.providers = action.payload;
         state.providersStatus = "succeeded";
         state.error = null;
@@ -87,18 +94,22 @@ const modelSettingsSlice = createSlice({
         }
       })
       .addCase(loadProviderConfigs.rejected, (state, action) => {
+        if (state.providersRequestId !== action.meta.requestId) return;
+        state.providersRequestId = null;
         state.providersStatus = "failed";
         state.error = errorMessage(action.error.message, "Could not load providers");
       })
       .addCase(loadModelVariants.pending, (state, action) => {
         state.loadingModelProviderId = action.meta.arg.providerId;
+        state.modelsRequestId = action.meta.requestId;
         state.modelsStatus = "pending";
         state.error = null;
       })
       .addCase(loadModelVariants.fulfilled, (state, action) => {
         const providerId = action.meta.arg.providerId;
-        if (providerId !== state.loadingModelProviderId) return;
+        if (providerId !== state.loadingModelProviderId || state.modelsRequestId !== action.meta.requestId) return;
         state.loadingModelProviderId = null;
+        state.modelsRequestId = null;
 
         if (providerId !== state.selectedProviderId) {
           state.modelsStatus = "idle";
@@ -115,8 +126,9 @@ const modelSettingsSlice = createSlice({
       })
       .addCase(loadModelVariants.rejected, (state, action) => {
         const providerId = action.meta.arg.providerId;
-        if (providerId !== state.loadingModelProviderId) return;
+        if (providerId !== state.loadingModelProviderId || state.modelsRequestId !== action.meta.requestId) return;
         state.loadingModelProviderId = null;
+        state.modelsRequestId = null;
 
         if (providerId !== state.selectedProviderId) return;
         state.modelsStatus = "failed";
