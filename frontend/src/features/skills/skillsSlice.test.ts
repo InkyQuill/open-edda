@@ -45,6 +45,39 @@ describe("skillsSlice", () => {
     expect(loaded.skillsRequestId).toBeNull();
   });
 
+  it("clears project-scoped skills state when loading a different project", () => {
+    const currentProjectState = {
+      ...initialSkillsState,
+      projectId: "project-1",
+      skills: [skill("continuity", "Continuity")],
+      skillsStatus: "succeeded" as const,
+      sessionSkillsStatus: "succeeded" as const,
+      activeSessionId: "session-1",
+      selectedSkillIds: ["continuity"],
+      confirmedSelectedSkillIds: ["continuity"],
+      saveStatus: "pending" as const,
+      saveRequestId: "save-1",
+      savingSessionId: "session-1",
+    };
+
+    const pending = skillsReducer(
+      currentProjectState,
+      loadProjectSkills.pending("request-2", { projectId: "project-2" }),
+    );
+
+    expect(pending.projectId).toBe("project-2");
+    expect(pending.skills).toEqual([]);
+    expect(pending.skillsStatus).toBe("pending");
+    expect(pending.skillsRequestId).toBe("request-2");
+    expect(pending.sessionSkillsStatus).toBe("idle");
+    expect(pending.activeSessionId).toBeNull();
+    expect(pending.selectedSkillIds).toEqual([]);
+    expect(pending.confirmedSelectedSkillIds).toEqual([]);
+    expect(pending.saveStatus).toBe("idle");
+    expect(pending.saveRequestId).toBeNull();
+    expect(pending.savingSessionId).toBeNull();
+  });
+
   it("toggles a selected skill id", () => {
     const selected = skillsReducer(initialSkillsState, skillsActions.toggleSelectedSkillId("continuity"));
     const unselected = skillsReducer(selected, skillsActions.toggleSelectedSkillId("continuity"));

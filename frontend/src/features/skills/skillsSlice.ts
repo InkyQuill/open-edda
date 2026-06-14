@@ -40,6 +40,22 @@ export const initialSkillsState: SkillsState = {
   error: null,
 };
 
+function clearProjectScopedState(state: SkillsState, projectId: string): void {
+  if (state.projectId === projectId) return;
+  state.projectId = projectId;
+  state.skills = [];
+  state.sessionSkillsStatus = "idle";
+  state.sessionSkillsRequestId = null;
+  state.loadingSessionId = null;
+  state.activeSessionId = null;
+  state.selectedSkillIds = [];
+  state.confirmedSelectedSkillIds = [];
+  state.saveStatus = "idle";
+  state.saveRequestId = null;
+  state.savingSessionId = null;
+  state.importStatus = "idle";
+}
+
 const skillsSlice = createSlice({
   name: "skills",
   initialState: initialSkillsState,
@@ -73,7 +89,7 @@ const skillsSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(loadProjectSkills.pending, (state, action) => {
-        state.projectId = action.meta.arg.projectId;
+        clearProjectScopedState(state, action.meta.arg.projectId);
         state.skillsStatus = "pending";
         state.skillsRequestId = action.meta.requestId;
         state.error = null;

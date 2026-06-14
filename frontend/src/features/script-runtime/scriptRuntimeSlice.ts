@@ -41,7 +41,16 @@ function clearProjectData(state: ScriptRuntimeState, projectId: string): void {
   state.projectId = projectId;
   state.auditsBySkillId = {};
   state.runs = [];
+  state.auditsStatus = "idle";
+  state.runsStatus = "idle";
+  state.approvalStatus = "idle";
+  state.auditsRequestId = null;
+  state.runsRequestId = null;
+  state.approvalRequestId = null;
+  state.loadingAuditSkillId = null;
+  state.updatingAuditId = null;
   state.selectedAuditId = null;
+  state.error = null;
 }
 
 const scriptRuntimeSlice = createSlice({

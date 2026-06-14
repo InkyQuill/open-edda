@@ -242,6 +242,36 @@ describe("scriptRuntimeSlice", () => {
     expect(stale).toEqual(pending);
   });
 
+  it("clears pending approval markers when loading runtime data for a different project", () => {
+    const approvalPending = scriptRuntimeReducer(
+      {
+        ...initialScriptRuntimeState,
+        projectId: "project-1",
+        auditsBySkillId: { "skill-1": [audit()] },
+        runs: [run()],
+      },
+      setScriptApproval.pending("approval-request", {
+        projectId: "project-1",
+        audit: audit(),
+        enabled: true,
+      }),
+    );
+
+    const switchedProject = scriptRuntimeReducer(
+      approvalPending,
+      loadScriptRuns.pending("runs-request", { projectId: "project-2" }),
+    );
+
+    expect(switchedProject.projectId).toBe("project-2");
+    expect(switchedProject.auditsBySkillId).toEqual({});
+    expect(switchedProject.runs).toEqual([]);
+    expect(switchedProject.runsStatus).toBe("pending");
+    expect(switchedProject.runsRequestId).toBe("runs-request");
+    expect(switchedProject.approvalStatus).toBe("idle");
+    expect(switchedProject.approvalRequestId).toBeNull();
+    expect(switchedProject.updatingAuditId).toBeNull();
+  });
+
   it("rejects approval updates when the audit has no configured runtime command", async () => {
     const dispatch = vi.fn();
     const getState = vi.fn();
