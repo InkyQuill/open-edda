@@ -124,6 +124,34 @@ _Avoid_: Activity trail, public transcript
 A project-installable agent procedure that can include instructions, routing metadata, templates, data files, and optional executable helpers.
 _Avoid_: Prompt snippet, preset, macro
 
+**Skill Mention**:
+A `$`-prefixed reference used in Agent Sessions and skill search to select or discover a skill by name.
+_Avoid_: Slash command, entity mention
+
+**Entity Mention**:
+An `@`-prefixed reference to story project content such as a chapter, Story Bible Entry, Entry Section, or note.
+_Avoid_: Skill mention, command
+
+**Slash Command**:
+A `/`-prefixed explicit command for application actions, distinct from skill mentions and entity mentions.
+_Avoid_: Skill picker, prompt shortcut
+
+**Built-In Skill Library**:
+The curated set of Writer-shipped skills available on first run, with daily writing skills enabled by default and specialized skills available for authors to enable when relevant.
+_Avoid_: Inbuilt skills, bundled prompts, skill dump
+
+**Default Skill**:
+A built-in skill enabled on first run because it supports common daily fiction writing work such as drafting, revision, story diagnosis, dialogue, character work, or story-world brainstorming.
+_Avoid_: Required skill, always-on prompt
+
+**Optional Skill**:
+A built-in skill installed but disabled by default because it supports specialized genres, advanced workflows, publishing-adjacent work, or infrequent author needs.
+_Avoid_: Secondary skill, hidden skill
+
+**Archived Skill**:
+A reviewed skill that is intentionally not shipped with the built-in skill library because it is outside Writer's fiction-writing focus, depends on unsupported integrations or script execution, or would create more routing noise than author value.
+_Avoid_: Bad skill, deleted skill
+
 **Admin-Approved Script**:
 A skill helper script that a server administrator has explicitly allowed to run in the web service environment.
 _Avoid_: Bundled script, trusted script

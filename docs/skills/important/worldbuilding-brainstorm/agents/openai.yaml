@@ -1,0 +1,4 @@
+interface:
+  display_name: "Worldbuilding Brainstorm"
+  short_description: "Guided lore brainstorming with safe file updates"
+  default_prompt: "Use $worldbuilding-brainstorm to discuss and record a lore or character change without editing story prose."
