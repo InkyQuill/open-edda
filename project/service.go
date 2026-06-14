@@ -30,6 +30,19 @@ func NewService(db *sql.DB) *Service {
 	}
 }
 
+func (s *Service) AuthorOwnsProject(ctx context.Context, authorID, projectID string) (bool, error) {
+	if _, err := s.queries.GetStoryProject(ctx, store.GetStoryProjectParams{
+		ID:       projectID,
+		AuthorID: authorID,
+	}); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("get story project: %w", err)
+	}
+	return true, nil
+}
+
 func (s *Service) CreateProject(ctx context.Context, input CreateProjectInput) (StoryProject, error) {
 	now := nowString()
 	project := StoryProject{

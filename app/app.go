@@ -41,6 +41,9 @@ func New(deps *Dependencies) http.Handler {
 			r.Group(func(r chi.Router) {
 				if deps.AuthService != nil {
 					r.Use(auth.Required(deps.AuthService))
+					if deps.ProjectService != nil {
+						r.Use(requireProjectAccess(deps.ProjectService))
+					}
 				}
 				project.RegisterRoutes(r, deps.ProjectService)
 				agent.RegisterRoutes(r, deps.AgentService)
@@ -53,6 +56,49 @@ func New(deps *Dependencies) http.Handler {
 		}
 	}
 	return r
+}
+
+func requireProjectAccess(projectService *project.Service) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			projectID, ok := projectIDFromPath(r.URL.Path)
+			if !ok {
+				next.ServeHTTP(w, r)
+				return
+			}
+			authorID, ok := auth.AuthorIDFromContext(r.Context())
+			if !ok {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing author context"})
+				return
+			}
+			owns, err := projectService.AuthorOwnsProject(r.Context(), authorID, projectID)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "project access check failed"})
+				return
+			}
+			if !owns {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": "project not found"})
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func projectIDFromPath(path string) (string, bool) {
+	const prefix = "/api/projects/"
+	if !strings.HasPrefix(path, prefix) {
+		return "", false
+	}
+	rest := strings.TrimPrefix(path, prefix)
+	if rest == "" {
+		return "", false
+	}
+	projectID, _, _ := strings.Cut(rest, "/")
+	if projectID == "" || projectID == "import" {
+		return "", false
+	}
+	return projectID, true
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

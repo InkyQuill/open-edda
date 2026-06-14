@@ -3,7 +3,7 @@ export type AuthResponse = {
   author: { id: string; email: string };
 };
 
-export async function getToken(): Promise<string | null> {
+export function getToken(): string | null {
   return localStorage.getItem("open_edda_token");
 }
 
