@@ -5,6 +5,11 @@ import { useNavigate, useParams } from "react-router-dom";
 import { listContent, listProjects } from "../../api";
 import { Button } from "../../shared/ui/button";
 import type { ContentItem, ContentKind, StoryProject } from "../../types";
+import { assistantActions } from "../assistant/assistantSlice";
+import { modelSettingsActions } from "../model-settings/modelSettingsSlice";
+import { reviewActions } from "../review/reviewSlice";
+import { scriptRuntimeActions } from "../script-runtime/scriptRuntimeSlice";
+import { skillsActions } from "../skills/skillsSlice";
 import {
   loadProjectWorkspaceState,
   saveProjectWorkspaceState,
@@ -76,6 +81,11 @@ export function WorkspacePage() {
 
   useEffect(() => {
     if (!projectId) return;
+    dispatch(assistantActions.resetForProject());
+    dispatch(modelSettingsActions.resetForProject());
+    dispatch(reviewActions.resetForProject());
+    dispatch(scriptRuntimeActions.resetForProject());
+    dispatch(skillsActions.resetForProject());
     dispatch(workspaceActions.hydrateProjectState(loadProjectWorkspaceState(projectId)));
     setHydratedProjectId(projectId);
   }, [dispatch, projectId]);
