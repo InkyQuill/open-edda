@@ -211,6 +211,7 @@ export function App() {
   const [agentError, setAgentError] = useState<string | null>(null);
   const [skills, setSkills] = useState<WriterSkill[]>([]);
   const [skillError, setSkillError] = useState<string | null>(null);
+  const [textSelection, setTextSelection] = useState<{ start: number; end: number } | null>(null);
   const latestProjectIdRef = useRef<string | null>(selectedProjectId);
   latestProjectIdRef.current = selectedProjectId;
 
@@ -611,7 +612,7 @@ export function App() {
                     type="button"
                     data-active={item.id === selectedContentId}
                     aria-pressed={item.id === selectedContentId}
-                    onClick={() => setSelectedContentId(item.id)}
+                     onClick={() => { setSelectedContentId(item.id); setTextSelection(null); }}
                   >
                     <span>{item.title}</span>
                     <small>Revision {item.currentRevision}</small>
@@ -627,7 +628,19 @@ export function App() {
                     <h2>{selectedContent.title}</h2>
                     <p>{selectedContent.kind.replaceAll("_", " ")}</p>
                   </header>
-                  <textarea readOnly value={selectedContent.bodyMarkdown} aria-label={`${selectedContent.title} markdown`} />
+                   <textarea
+                     readOnly
+                     value={selectedContent.bodyMarkdown}
+                     aria-label={`${selectedContent.title} markdown`}
+                     onSelect={(e) => {
+                       const target = e.target as HTMLTextAreaElement;
+                       if (target.selectionStart !== target.selectionEnd) {
+                         setTextSelection({ start: target.selectionStart, end: target.selectionEnd });
+                       } else {
+                         setTextSelection(null);
+                       }
+                     }}
+                   />
                 </>
               ) : (
                 <p>Select an item to preview its Markdown.</p>
@@ -654,6 +667,8 @@ export function App() {
               onError={setAgentError}
               onRefreshTrail={refreshAgentTrail}
               onSessionsChange={setAgentSessions}
+              textSelection={textSelection}
+              onTextSelectionClear={() => setTextSelection(null)}
             />
           </section>
         </>
@@ -1218,6 +1233,8 @@ type AgentPanelProps = {
   onError: (message: string | null) => void;
   onRefreshTrail: (projectId: string) => void;
   onSessionsChange: React.Dispatch<React.SetStateAction<AgentSession[]>>;
+  textSelection: { start: number; end: number } | null;
+  onTextSelectionClear: () => void;
 };
 
 type AgentPanelScope = {
@@ -1246,6 +1263,8 @@ function AgentPanel({
   onError,
   onRefreshTrail,
   onSessionsChange,
+  textSelection,
+  onTextSelectionClear,
 }: AgentPanelProps) {
   const [applyMode, setApplyMode] = useState<ApplyMode>("preview");
   const [messageInput, setMessageInput] = useState("");
@@ -1254,6 +1273,7 @@ function AgentPanel({
   const [showActivity, setShowActivity] = useState(false);
   const [continuationUnits, setContinuationUnits] = useState<"word" | "sentence">("word");
   const [continuationCount, setContinuationCount] = useState(120);
+  const [continuationInsert, setContinuationInsert] = useState(false);
   const [guidance, setGuidance] = useState("");
   const [previewCandidate, setPreviewCandidate] = useState<GenerationCandidate | null>(null);
   const [readCheckReport, setReadCheckReport] = useState<string | null>(null);
@@ -1521,8 +1541,8 @@ function AgentPanel({
             applyMode,
             guidance,
             expectedRevision,
-            insertPosition: wholeSelectionEnd,
-            insert: false,
+            insertPosition: continuationInsert ? wholeSelectionEnd : wholeSelectionEnd,
+            insert: continuationInsert,
             continuationUnits,
             continuationCount,
             skillIds: scopedSelectedSkillIds,
@@ -1534,8 +1554,8 @@ function AgentPanel({
               applyMode,
               guidance,
               expectedRevision,
-              selectionStart: 0,
-              selectionEnd: wholeSelectionEnd,
+              selectionStart: textSelection ? textSelection.start : 0,
+              selectionEnd: textSelection ? textSelection.end : wholeSelectionEnd,
               skillIds: scopedSelectedSkillIds,
             })
           : runReadAndCheck(launchScope.projectId, {
@@ -1544,8 +1564,8 @@ function AgentPanel({
               applyMode,
               guidance,
               expectedRevision,
-              selectionStart: 0,
-              selectionEnd: wholeSelectionEnd,
+              selectionStart: textSelection ? textSelection.start : 0,
+              selectionEnd: textSelection ? textSelection.end : wholeSelectionEnd,
               skillIds: scopedSelectedSkillIds,
             });
 
@@ -1748,6 +1768,12 @@ function AgentPanel({
             </select>
           </label>
           <NumberField label="Target count" value={continuationCount} step={1} onChange={setContinuationCount} />
+          <label className="field">
+            <span>
+              <input type="checkbox" checked={continuationInsert} onChange={(e) => setContinuationInsert(e.target.checked)} />
+              {" "}Insert at end (instead of append)
+            </span>
+          </label>
         </div>
         <label className="field">
           <span>Guidance</span>
