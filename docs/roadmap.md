@@ -8,9 +8,9 @@ This roadmap tracks product milestones separately from implementation plans. Det
 | --- | --- | --- | --- |
 | 1 | Project Core | Implemented | `docs/superpowers/plans/2026-06-13-writer-project-core.md` |
 | 2 | Agent Core | Implemented | `docs/superpowers/plans/2026-06-13-writer-agent-core.md` |
-| 3 | Skill Core | Planned | `docs/superpowers/plans/2026-06-13-writer-skill-core.md` |
-| 3.5 | Elysium Skill Library Rewrite | Planned | `docs/superpowers/plans/2026-06-14-writer-skill-library-rewrite.md` |
-| 3.6 | Skill Script Runtime | Planned | Needs dedicated plan after Milestone 3.5 script audit |
+| 3 | Skill Core | Implemented | `docs/superpowers/plans/2026-06-13-writer-skill-core.md` |
+| 3.5 | Elysium Skill Library Rewrite | Implemented | `docs/superpowers/plans/2026-06-14-writer-skill-library-rewrite.md` |
+| 3.6 | Skill Script Runtime | Planned | `docs/superpowers/plans/2026-06-14-open-edda-skill-script-runtime.md` |
 | 4 | Daily Writing Polish | Planned | Needs dedicated plan |
 | Later | Local Sync And Collaboration | Deferred | Needs specs after v1 is stable |
 
