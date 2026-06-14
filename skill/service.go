@@ -11,18 +11,28 @@ import (
 	"sync/atomic"
 	"time"
 
+	"git.inkyquill.net/inky/writer/skill/runtime"
 	"git.inkyquill.net/inky/writer/store"
 )
 
 var ErrInvalidInput = errors.New("invalid skill input")
 
 type Service struct {
-	db      *sql.DB
-	queries *store.Queries
+	db           *sql.DB
+	queries      *store.Queries
+	scriptRunner ScriptRunner
 }
 
 func NewService(db *sql.DB) *Service {
-	return &Service{db: db, queries: store.New(db)}
+	return &Service{db: db, queries: store.New(db), scriptRunner: runtime.NewRunner()}
+}
+
+type ScriptRunner interface {
+	Run(context.Context, runtime.RunRequest) (runtime.RunResult, error)
+}
+
+func (s *Service) SetScriptRunner(runner ScriptRunner) {
+	s.scriptRunner = runner
 }
 
 func (s *Service) Install(ctx context.Context, input InstallInput) (Skill, error) {
@@ -69,8 +79,9 @@ func (s *Service) Install(ctx context.Context, input InstallInput) (Skill, error
 			return fmt.Errorf("delete old routing hints: %w", err)
 		}
 		for _, file := range input.Imported.Files {
+			fileID := newID("skillfile")
 			if err := q.CreateSkillFile(ctx, store.CreateSkillFileParams{
-				ID:             newID("skillfile"),
+				ID:             fileID,
 				SkillID:        skillID,
 				RelativePath:   file.RelativePath,
 				Purpose:        string(file.Purpose),
@@ -81,6 +92,27 @@ func (s *Service) Install(ctx context.Context, input InstallInput) (Skill, error
 				CreatedAt:      now,
 			}); err != nil {
 				return fmt.Errorf("create skill file %s: %w", file.RelativePath, err)
+			}
+			if file.Purpose == FilePurposeScript {
+				if err := q.UpsertSkillScriptAudit(ctx, store.UpsertSkillScriptAuditParams{
+					ID:                    newID("scriptaudit"),
+					ProjectID:             input.ProjectID,
+					SkillID:               skillID,
+					SkillFileID:           fileID,
+					RelativePath:          file.RelativePath,
+					Runtime:               runtimeFromScriptPath(file.RelativePath),
+					DestructiveOperations: 0,
+					FilesystemAccess:      "temp_workspace",
+					NetworkAccess:         0,
+					ExternalDependencies:  "",
+					ExpectedInputsJson:    defaultScriptExpectedInputsJSON(),
+					ExpectedOutputsJson:   defaultScriptExpectedOutputsJSON(),
+					RiskNotes:             "Imported script is disabled until explicitly approved.",
+					Recommendation:        string(ScriptRecommendationDisabled),
+					AuditedAt:             now,
+				}); err != nil {
+					return fmt.Errorf("create script audit %s: %w", file.RelativePath, err)
+				}
 			}
 		}
 		for _, hint := range input.Imported.RoutingHints {
