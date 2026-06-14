@@ -1,7 +1,14 @@
 import type { ScriptApproval, ScriptAudit, ScriptRun } from "./scriptRuntimeTypes";
+import { getToken } from "./authApi";
 
 async function requestJSON<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
+  const token = getToken();
+  const headers = new Headers(init?.headers);
+  if (!headers.has("Content-Type") && init?.body) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(path, { ...init, headers });
   if (!response.ok) {
     let message = `${init?.method ?? "GET"} ${path} failed: ${response.status}`;
     try {

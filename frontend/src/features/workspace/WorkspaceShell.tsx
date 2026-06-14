@@ -15,6 +15,7 @@ import { ModelSettingsPanel } from "../model-settings/ModelSettingsPanel";
 import { ModelStatus } from "../model-settings/ModelStatus";
 import { ContextDrawer } from "../notes/ContextDrawer";
 import { ReviewDrawer } from "../review/ReviewDrawer";
+import { ScriptRuntimePanel } from "../script-runtime/ScriptRuntimePanel";
 import { Button } from "../../shared/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../../shared/ui/sheet";
 import type { ContentItem, ContentKind } from "../../types";
@@ -80,6 +81,17 @@ function mobileSheetTitle(sheet: NonNullable<MobileSheet>): string {
   }
 }
 
+function ModelToolsPanel({ projectId }: { projectId: string }) {
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-6 overflow-auto pr-1">
+      <div className="shrink-0">
+        <ModelSettingsPanel />
+      </div>
+      <ScriptRuntimePanel projectId={projectId} />
+    </div>
+  );
+}
+
 export function WorkspaceShell({
   projectId,
   projectTitle,
@@ -96,7 +108,7 @@ export function WorkspaceShell({
   const activeLeftTab = toContextTab(workspace.activeLeftTab);
   const rightDrawer =
     workspace.activeRightTab === "model" ? (
-      <ModelSettingsPanel />
+      <ModelToolsPanel projectId={projectId} />
     ) : workspace.mode === "review" || workspace.activeRightTab === "tools" || workspace.activeRightTab === "revisions" ? (
       <ReviewDrawer projectId={projectId} />
     ) : (
@@ -120,7 +132,7 @@ export function WorkspaceShell({
   function renderMobileSheet(sheet: NonNullable<MobileSheet>) {
     if (sheet === "assistant") return <AssistantDrawer projectId={projectId} />;
     if (sheet === "review") return <ReviewDrawer projectId={projectId} />;
-    if (sheet === "model") return <ModelSettingsPanel />;
+    if (sheet === "model") return <ModelToolsPanel projectId={projectId} />;
     return (
       <ContextDrawer
         activeTab={sheet === "world-notes" ? "world" : "contents"}

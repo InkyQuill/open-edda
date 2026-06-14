@@ -1,17 +1,178 @@
 import { describe, expect, it } from "vitest";
+import type { ScriptApproval, ScriptAudit, ScriptRun } from "../../scriptRuntimeTypes";
+import { loadScriptAudits, loadScriptRuns, setScriptApproval } from "./scriptRuntimeThunks";
 import {
   initialScriptRuntimeState,
   scriptRuntimeActions,
   scriptRuntimeReducer,
 } from "./scriptRuntimeSlice";
 
+function approval(overrides: Partial<ScriptApproval> = {}): ScriptApproval {
+  return {
+    id: "approval-1",
+    projectId: "project-1",
+    skillId: "skill-1",
+    skillFileId: "file-1",
+    auditId: "audit-1",
+    enabled: true,
+    runtimeCommand: "node",
+    timeoutMs: 5000,
+    maxStdoutBytes: 65536,
+    maxStderrBytes: 16384,
+    allowNetwork: false,
+    allowProjectFiles: false,
+    approvedBy: "Pavel",
+    approvedAt: "2026-06-14T00:00:00.000Z",
+    updatedAt: "2026-06-14T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function audit(overrides: Partial<ScriptAudit> = {}): ScriptAudit {
+  return {
+    id: "audit-1",
+    projectId: "project-1",
+    skillId: "skill-1",
+    skillFileId: "file-1",
+    relativePath: "scripts/check.ts",
+    runtime: "bun",
+    destructiveOperations: false,
+    filesystemAccess: "none",
+    networkAccess: false,
+    externalDependencies: "none",
+    expectedInputsJson: "{}",
+    expectedOutputsJson: "{}",
+    riskNotes: "Reads prompt context only.",
+    recommendation: "approve_with_limits",
+    auditedAt: "2026-06-14T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function run(overrides: Partial<ScriptRun> = {}): ScriptRun {
+  return {
+    id: "run-1",
+    projectId: "project-1",
+    sessionId: "session-1",
+    skillId: "skill-1",
+    skillFileId: "file-1",
+    approvalId: "approval-1",
+    toolCallId: "tool-call-1",
+    status: "succeeded",
+    outputKind: "markdown",
+    inputJson: "{}",
+    outputJson: "{}",
+    stdoutText: "ok",
+    stderrText: "",
+    exitCode: 0,
+    errorMessage: "",
+    durationMs: 42,
+    createdAt: "2026-06-14T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
 describe("scriptRuntimeSlice", () => {
+  it("stores script audits by skill id", () => {
+    const pending = scriptRuntimeReducer(
+      initialScriptRuntimeState,
+      loadScriptAudits.pending("request-1", { projectId: "project-1", skillId: "skill-1" }),
+    );
+
+    expect(pending.projectId).toBe("project-1");
+    expect(pending.auditsStatus).toBe("pending");
+    expect(pending.auditsRequestId).toBe("request-1");
+    expect(pending.loadingAuditSkillId).toBe("skill-1");
+
+    const loaded = scriptRuntimeReducer(
+      pending,
+      loadScriptAudits.fulfilled([audit()], "request-1", { projectId: "project-1", skillId: "skill-1" }),
+    );
+
+    expect(loaded.auditsStatus).toBe("succeeded");
+    expect(loaded.auditsBySkillId).toEqual({ "skill-1": [audit()] });
+    expect(loaded.auditsRequestId).toBeNull();
+    expect(loaded.loadingAuditSkillId).toBeNull();
+  });
+
+  it("stores project script runs", () => {
+    const pending = scriptRuntimeReducer(
+      initialScriptRuntimeState,
+      loadScriptRuns.pending("request-1", { projectId: "project-1" }),
+    );
+
+    expect(pending.projectId).toBe("project-1");
+    expect(pending.runsStatus).toBe("pending");
+    expect(pending.runsRequestId).toBe("request-1");
+
+    const loaded = scriptRuntimeReducer(
+      pending,
+      loadScriptRuns.fulfilled([run()], "request-1", { projectId: "project-1" }),
+    );
+
+    expect(loaded.runsStatus).toBe("succeeded");
+    expect(loaded.runs).toEqual([run()]);
+    expect(loaded.runsRequestId).toBeNull();
+  });
+
+  it("selects an audit", () => {
+    const selected = scriptRuntimeReducer(initialScriptRuntimeState, scriptRuntimeActions.selectAudit("audit-1"));
+
+    expect(selected.selectedAuditId).toBe("audit-1");
+  });
+
+  it("updates approval status on the matching audit", () => {
+    const updatedApproval = approval({ enabled: true });
+    const enabledAudit = audit({ approval: updatedApproval });
+    const state = {
+      ...initialScriptRuntimeState,
+      projectId: "project-1",
+      auditsBySkillId: {
+        "skill-1": [audit()],
+        "skill-2": [audit({ id: "audit-2", skillId: "skill-2", skillFileId: "file-2" })],
+      },
+    };
+
+    const pending = scriptRuntimeReducer(
+      state,
+      setScriptApproval.pending("request-1", { projectId: "project-1", audit: audit(), enabled: true }),
+    );
+
+    expect(pending.approvalStatus).toBe("pending");
+    expect(pending.approvalRequestId).toBe("request-1");
+    expect(pending.updatingAuditId).toBe("audit-1");
+
+    const updated = scriptRuntimeReducer(
+      pending,
+      setScriptApproval.fulfilled(updatedApproval, "request-1", {
+        projectId: "project-1",
+        audit: audit(),
+        enabled: true,
+      }),
+    );
+
+    expect(updated.approvalStatus).toBe("succeeded");
+    expect(updated.auditsBySkillId["skill-1"]).toEqual([enabledAudit]);
+    expect(updated.auditsBySkillId["skill-2"]?.[0]?.approval).toBeUndefined();
+    expect(updated.approvalRequestId).toBeNull();
+    expect(updated.updatingAuditId).toBeNull();
+  });
+
   it("resets project-scoped script runtime state", () => {
     const loaded = scriptRuntimeReducer(
       {
         ...initialScriptRuntimeState,
+        projectId: "project-1",
+        auditsBySkillId: { "skill-1": [audit()] },
+        runs: [run()],
         auditsStatus: "succeeded",
         runsStatus: "pending",
+        approvalStatus: "failed",
+        auditsRequestId: "audits-request",
+        runsRequestId: "runs-request",
+        approvalRequestId: "approval-request",
+        loadingAuditSkillId: "skill-1",
+        updatingAuditId: "audit-1",
         selectedAuditId: "audit-1",
         error: "Could not load runs",
       },
