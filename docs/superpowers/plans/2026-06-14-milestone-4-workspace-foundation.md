@@ -253,7 +253,7 @@ export function AppRoutes() {
       <Route element={<RequireAuth />}>
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/projects/:projectId" element={<WorkspacePage />} />
-        <Route path="/projects/:projectId/content/:contentId" element={<WorkspacePage />} />
+        <Route path="/projects/:projectId/content/:contentKind/:contentId" element={<WorkspacePage />} />
       </Route>
       <Route path="/" element={<Navigate to="/projects" replace />} />
       <Route path="*" element={<Navigate to="/projects" replace />} />
@@ -749,7 +749,7 @@ Expected: TypeScript passes for route/auth/project files.
 `WorkspacePage` must use:
 
 ```ts
-const { projectId, contentId } = useParams();
+const { projectId, contentKind, contentId } = useParams();
 ```
 
 Then load:
@@ -765,7 +765,7 @@ Then load:
 When a user clicks a content row, navigate to:
 
 ```ts
-navigate(`/projects/${projectId}/content/${item.id}`);
+navigate(`/projects/${projectId}/content/${item.kind}/${item.id}`);
 ```
 
 Do not store route-owned `projectId` or `contentId` in Redux.
@@ -997,7 +997,7 @@ Open:
 http://127.0.0.1:5173/login
 http://127.0.0.1:5173/projects
 http://127.0.0.1:5173/projects/<projectId>
-http://127.0.0.1:5173/projects/<projectId>/content/<contentId>
+http://127.0.0.1:5173/projects/<projectId>/content/<contentKind>/<contentId>
 ```
 
 Smoke checks:

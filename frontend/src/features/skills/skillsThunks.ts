@@ -15,13 +15,16 @@ export const loadSessionSkills = createAsyncThunk(
 
 export const saveSessionSkills = createAsyncThunk(
   "skills/saveSessionSkills",
-  async ({
-    projectId,
-    sessionId,
-    skillIds,
-  }: {
-    projectId: string;
-    sessionId: string;
-    skillIds: string[];
-  }) => selectSessionSkills(projectId, sessionId, skillIds),
+  async (
+    {
+      projectId,
+      sessionId,
+      skillIds,
+    }: {
+      projectId: string;
+      sessionId: string;
+      skillIds: string[];
+    },
+    { signal },
+  ) => selectSessionSkills(projectId, sessionId, skillIds, signal),
 );

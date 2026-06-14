@@ -16,6 +16,10 @@ type ContextDrawerProps = {
   onTabChange: (tab: "contents" | "world" | "notes") => void;
 };
 
+function isContextTab(value: string): value is ContextDrawerProps["activeTab"] {
+  return value === "contents" || value === "world" || value === "notes";
+}
+
 const contentKindOptions: Array<{ kind: ContentKind; label: string }> = [
   { kind: "chapter", label: "Chapters" },
   { kind: "story_bible_entry", label: "World" },
@@ -38,7 +42,9 @@ export function ContextDrawer({
     <aside className="flex h-full flex-col gap-4" aria-label="Workspace context">
       <Tabs
         value={activeTab}
-        onValueChange={(value) => onTabChange(value as "contents" | "world" | "notes")}
+        onValueChange={(value) => {
+          if (isContextTab(value)) onTabChange(value);
+        }}
         className="min-h-0 flex-1"
       >
         <TabsList className="w-full">

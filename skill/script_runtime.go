@@ -190,9 +190,11 @@ func (s *Service) RunScript(ctx context.Context, input RunScriptInput) (ScriptRu
 	}
 	result, runErr := runner.Run(ctx, request)
 	if runErr != nil {
-		result = runtime.RunResult{
-			Status:       runtime.StatusFailed,
-			ErrorMessage: runErr.Error(),
+		if result.Status == "" {
+			result.Status = runtime.StatusFailed
+		}
+		if strings.TrimSpace(result.ErrorMessage) == "" {
+			result.ErrorMessage = runErr.Error()
 		}
 	}
 

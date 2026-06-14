@@ -149,6 +149,7 @@ const assistantSlice = createSlice({
       })
       .addCase(sendAssistantMessage.pending, (state, action) => {
         state.projectId = action.meta.arg.projectId;
+        // Ignore in-flight transcript loads that predate the optimistic send.
         state.messagesRequestId = null;
         state.sendMessageRequestId = action.meta.requestId;
         state.messagesStatus = "pending";

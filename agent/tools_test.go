@@ -621,6 +621,43 @@ func TestSkillScriptToolRequiresEnabledScript(t *testing.T) {
 	assertNoToolArtifactForCall(t, ctx, db, storyProject.ID, session.ID, "tool-script-1")
 }
 
+func TestSkillScriptToolRequiresScriptPath(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	skillService := skill.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Skill Script Missing Path Project")
+	service := NewService(db, projectService, nil)
+	service.SetSkillService(skillService)
+	installed := installEnabledScriptSkill(t, ctx, skillService, storyProject.ID)
+	session, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:  storyProject.ID,
+		Title:      "Missing script path session",
+		ActionKind: ActionKindChat,
+		ApplyMode:  ApplyModePreview,
+		SkillIDs:   []string{installed.ID},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	_, err = service.ExecuteTool(ctx, ToolCallInput{
+		ProjectID:     storyProject.ID,
+		SessionID:     session.ID,
+		ToolCallID:    "tool-script-missing-path",
+		ToolName:      "skill_script",
+		ArgumentsJSON: `{"skillId":"` + installed.ID + `","scriptPath":"  "}`,
+	})
+	if err == nil {
+		t.Fatal("ExecuteTool() error = nil, want missing scriptPath")
+	}
+	if !strings.Contains(err.Error(), "scriptPath is required") {
+		t.Fatalf("ExecuteTool() error = %v, want missing scriptPath", err)
+	}
+
+	assertNoToolArtifactForCall(t, ctx, db, storyProject.ID, session.ID, "tool-script-missing-path")
+}
+
 func TestSkillScriptToolRequiresSelectedSkill(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()
@@ -714,6 +751,7 @@ func TestSkillScriptToolStoresPersistedRunnerFailure(t *testing.T) {
 	skillService.SetScriptRunner(&agentFakeScriptRunner{
 		result: scriptruntime.RunResult{
 			Status:       scriptruntime.StatusFailed,
+			Output:       scriptruntime.ScriptOutput{Kind: scriptruntime.OutputKindReport, Title: "Partial report", Markdown: "Partial output."},
 			ErrorMessage: "script exited with status 1",
 			StderrText:   "boom",
 			ExitCode:     1,
@@ -753,6 +791,8 @@ func TestSkillScriptToolStoresPersistedRunnerFailure(t *testing.T) {
 		"# Skill Script Result",
 		"Status: failed",
 		"script exited with status 1",
+		"# Skill Script: Partial report",
+		"Partial output.",
 		"did not modify project content",
 	)
 	assertFullJSONContains(t, result.FullResultJSON,

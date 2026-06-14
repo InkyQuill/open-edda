@@ -112,12 +112,11 @@ const skillsSlice = createSlice({
         state.error = action.error.message ?? "Could not load skills";
       })
       .addCase(loadSessionSkills.pending, (state, action) => {
-        state.projectId = action.meta.arg.projectId;
+        clearProjectScopedState(state, action.meta.arg.projectId);
         state.sessionSkillsStatus = "pending";
         state.sessionSkillsRequestId = action.meta.requestId;
         state.loadingSessionId = action.meta.arg.sessionId;
         state.activeSessionId = action.meta.arg.sessionId;
-        state.selectedSkillIds = [];
         if (state.savingSessionId !== action.meta.arg.sessionId) {
           state.saveStatus = "idle";
           state.saveRequestId = null;
@@ -158,7 +157,7 @@ const skillsSlice = createSlice({
         state.error = action.error.message ?? "Could not load session skills";
       })
       .addCase(saveSessionSkills.pending, (state, action) => {
-        state.projectId = action.meta.arg.projectId;
+        clearProjectScopedState(state, action.meta.arg.projectId);
         state.saveStatus = "pending";
         state.saveRequestId = action.meta.requestId;
         state.savingSessionId = action.meta.arg.sessionId;

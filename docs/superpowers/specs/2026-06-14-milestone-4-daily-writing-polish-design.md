@@ -217,7 +217,7 @@ Required coverage:
   - desktop Assistant mode,
   - desktop Draft mode with max-width editor,
   - mobile Draft mode with sheets,
-  - deep link to `/projects/:projectId/content/:contentId`.
+  - deep link to `/projects/:projectId/content/:contentKind/:contentId`.
 
 Backend integration tests remain in Go. Milestone 4 may add backend endpoints only where required for daily writing polish, such as revision restore or attached note workflows.
 

@@ -48,11 +48,17 @@ export function listSessionSkills(projectId: string, sessionId: string, signal?:
   );
 }
 
-export function selectSessionSkills(projectId: string, sessionId: string, skillIds: string[]): Promise<WriterSkill[]> {
+export function selectSessionSkills(
+  projectId: string,
+  sessionId: string,
+  skillIds: string[],
+  signal?: AbortSignal,
+): Promise<WriterSkill[]> {
   return requestJSON<WriterSkill[]>(
     `/api/projects/${encodeURIComponent(projectId)}/agent/sessions/${encodeURIComponent(sessionId)}/skills`,
     {
       method: "PUT",
+      signal,
       body: JSON.stringify({ skillIds }),
       headers: { "Content-Type": "application/json" },
     },

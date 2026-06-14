@@ -331,6 +331,11 @@ func (s *Service) executeContextTool(ctx context.Context, input ToolCallInput, s
 		if strings.TrimSpace(input.SessionID) == "" {
 			return nil, false, nil, fmt.Errorf("session ID is required for skill_script")
 		}
+		args.SkillID = strings.TrimSpace(args.SkillID)
+		args.ScriptPath = strings.TrimSpace(args.ScriptPath)
+		if args.ScriptPath == "" {
+			return nil, false, nil, fmt.Errorf("scriptPath is required")
+		}
 		if err := s.requireSessionSkill(ctx, input.ProjectID, input.SessionID, args.SkillID); err != nil {
 			return nil, false, nil, err
 		}
@@ -669,7 +674,22 @@ func renderSkillScriptMarkdown(status skill.ScriptRunStatus, outputKind string, 
 	var output scriptruntime.ScriptOutput
 	if strings.TrimSpace(outputJSON) != "" && outputJSON != "{}" {
 		if err := json.Unmarshal([]byte(outputJSON), &output); err == nil && output.Kind != "" {
-			return renderScriptOutputMarkdown(output)
+			if status == skill.ScriptRunStatusSucceeded && strings.TrimSpace(errorMessage) == "" {
+				return renderScriptOutputMarkdown(output)
+			}
+			var b strings.Builder
+			b.WriteString("# Skill Script Result\n\n")
+			fmt.Fprintf(&b, "Status: %s\n", status)
+			if outputKind != "" {
+				fmt.Fprintf(&b, "Output kind: %s\n", outputKind)
+			}
+			if strings.TrimSpace(errorMessage) != "" {
+				fmt.Fprintf(&b, "\nError: %s\n", errorMessage)
+			}
+			b.WriteString("\n")
+			b.WriteString(renderScriptOutputMarkdown(output))
+			b.WriteString("\n\n_This result is reviewable and did not modify project content._")
+			return b.String()
 		}
 	}
 
