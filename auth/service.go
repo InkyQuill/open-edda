@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"git.inkyquill.net/inky/writer/store"
+	"github.com/mattn/go-sqlite3"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -58,7 +59,7 @@ func (s *Service) Register(ctx context.Context, email, password string) (AuthRes
 		CreatedAt:    now,
 	})
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
+		if isSQLiteUniqueConstraint(err) {
 			return AuthResponse{}, ErrEmailTaken
 		}
 		return AuthResponse{}, fmt.Errorf("create author: %w", err)
@@ -124,4 +125,9 @@ func validatePassword(password string) error {
 		return ErrPasswordTooShort
 	}
 	return nil
+}
+
+func isSQLiteUniqueConstraint(err error) bool {
+	var sqliteErr sqlite3.Error
+	return errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique
 }

@@ -90,6 +90,25 @@ func TestHTTPSkillRoutesImportListGetAndSelectSessionSkills(t *testing.T) {
 	}
 }
 
+func TestImportLocalSkillRequiresAllowedRoot(t *testing.T) {
+	db := openMigratedTestDB(t)
+	handler := newTestSkillHTTP(NewService(db))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/project-1/skills/import-local", bytes.NewBufferString(`{
+		"directory": "/tmp/some-skill"
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "/tmp/some-skill") {
+		t.Fatalf("response leaked requested path: %s", rec.Body.String())
+	}
+}
+
 func newTestSkillHTTP(service *Service) http.Handler {
 	r := chi.NewRouter()
 	r.Route("/api", func(r chi.Router) {

@@ -6,10 +6,19 @@ import (
 	"strings"
 )
 
+type authorIDKey struct{}
+
 // AuthorIDKey is the context key used to store the authenticated author's ID.
-const AuthorIDKey = "author_id"
+var AuthorIDKey = authorIDKey{}
 
 func Required(s *Service) func(http.Handler) http.Handler {
+	if s == nil {
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				writeAuthError(w, "authentication service unavailable")
+			})
+		}
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -37,7 +46,5 @@ func AuthorIDFromContext(ctx context.Context) (string, bool) {
 }
 
 func writeAuthError(w http.ResponseWriter, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusUnauthorized)
-	w.Write([]byte(`{"error":"` + message + `"}` + "\n"))
+	writeJSON(w, http.StatusUnauthorized, map[string]string{"error": message})
 }

@@ -4,7 +4,7 @@ import type { ContentItem, ContentKind, StoryProject } from "./types";
 async function authFetch(path: string, init?: RequestInit): Promise<Response> {
   const token = getToken();
   const headers = new Headers(init?.headers);
-  if (!headers.has("Content-Type") && init?.method && init.method !== "GET") {
+  if (!headers.has("Content-Type") && init?.body) {
     headers.set("Content-Type", "application/json");
   }
   if (token) headers.set("Authorization", `Bearer ${token}`);

@@ -1166,6 +1166,22 @@ func TestRunChatTurnStoresMessagesToolActivityAndPromptRecord(t *testing.T) {
 	assertSnapshotSource(t, snapshots, "transcript")
 }
 
+func TestRedactSensitiveFieldsScrubsArrayObjects(t *testing.T) {
+	requestJSON, responseJSON := redactSensitiveFields(
+		`{"messages":[{"role":"user","api_key":"secret-key","nested":[{"Authorization":"Bearer secret"}]}]}`,
+		`{"choices":[{"message":{"apiKey":"secret-key"}}]}`,
+	)
+
+	for _, raw := range []string{requestJSON, responseJSON} {
+		if strings.Contains(raw, "secret-key") || strings.Contains(raw, "Authorization") || strings.Contains(raw, "apiKey") {
+			t.Fatalf("redacted JSON contains secret material: %s", raw)
+		}
+		if !json.Valid([]byte(raw)) {
+			t.Fatalf("redacted JSON is invalid: %s", raw)
+		}
+	}
+}
+
 func TestRunChatTurnUsesDBProviderConfigWhenProviderNotInjected(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()

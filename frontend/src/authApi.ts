@@ -22,6 +22,9 @@ export async function login(email: string, password: string): Promise<AuthRespon
     throw new Error(err.error ?? `login failed: ${resp.status}`);
   }
   const data: AuthResponse = await resp.json();
+  if (!data.token) {
+    throw new Error("login failed: missing token");
+  }
   localStorage.setItem("open_edda_token", data.token);
   return data;
 }
@@ -37,6 +40,9 @@ export async function register(email: string, password: string): Promise<AuthRes
     throw new Error(err.error ?? `register failed: ${resp.status}`);
   }
   const data: AuthResponse = await resp.json();
+  if (!data.token) {
+    throw new Error("register failed: missing token");
+  }
   localStorage.setItem("open_edda_token", data.token);
   return data;
 }

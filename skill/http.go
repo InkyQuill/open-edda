@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"git.inkyquill.net/inky/writer/project"
 	"github.com/go-chi/chi/v5"
@@ -84,19 +86,20 @@ func (h httpHandler) importLocalSkill(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "directory is required"})
 		return
 	}
-	if _, err := os.Stat(req.Directory); err != nil {
-		writeError(w, fmt.Errorf("directory not accessible: %w", err))
+	directory, err := resolveLocalSkillDirectory(req.Directory)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "directory not accessible"})
 		return
 	}
-	imported, err := ParseSkillDirectory(req.Directory)
+	imported, err := ParseSkillDirectory(directory)
 	if err != nil {
-		writeError(w, fmt.Errorf("parse skill directory: %w", err))
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid skill directory"})
 		return
 	}
 	skill, err := h.service.Install(r.Context(), InstallInput{
 		ProjectID:   projectID,
 		SourceType:  SourceTypeLocalDirectory,
-		SourceLabel: req.Directory,
+		SourceLabel: "local directory import",
 		Imported:    imported,
 	})
 	if err != nil {
@@ -104,6 +107,47 @@ func (h httpHandler) importLocalSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, skill)
+}
+
+func resolveLocalSkillDirectory(requested string) (string, error) {
+	base := os.Getenv("WRITER_SKILL_IMPORT_ROOT")
+	if base == "" {
+		return "", fmt.Errorf("local skill imports are disabled")
+	}
+	baseAbs, err := filepath.Abs(base)
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(requested) {
+		requested = filepath.Join(baseAbs, requested)
+	}
+	requestedAbs, err := filepath.Abs(requested)
+	if err != nil {
+		return "", err
+	}
+	baseResolved, err := filepath.EvalSymlinks(baseAbs)
+	if err != nil {
+		return "", err
+	}
+	requestedResolved, err := filepath.EvalSymlinks(requestedAbs)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(baseResolved, requestedResolved)
+	if err != nil {
+		return "", err
+	}
+	if rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." && !filepath.IsAbs(rel)) {
+		info, err := os.Stat(requestedResolved)
+		if err != nil {
+			return "", err
+		}
+		if !info.IsDir() {
+			return "", fmt.Errorf("path is not a directory")
+		}
+		return requestedResolved, nil
+	}
+	return "", fmt.Errorf("directory outside allowed root")
 }
 
 func (h httpHandler) getSkill(w http.ResponseWriter, r *http.Request) {

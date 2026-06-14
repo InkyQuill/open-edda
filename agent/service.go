@@ -1827,8 +1827,22 @@ func scrubMap(m map[string]any) {
 	delete(m, "authorization")
 	delete(m, "Authorization")
 	for _, v := range m {
-		if nested, ok := v.(map[string]any); ok {
+		switch nested := v.(type) {
+		case map[string]any:
 			scrubMap(nested)
+		case []any:
+			scrubSlice(nested)
+		}
+	}
+}
+
+func scrubSlice(s []any) {
+	for _, v := range s {
+		switch nested := v.(type) {
+		case map[string]any:
+			scrubMap(nested)
+		case []any:
+			scrubSlice(nested)
 		}
 	}
 }

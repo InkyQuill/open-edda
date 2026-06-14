@@ -16,12 +16,13 @@ type Claims struct {
 }
 
 func GenerateToken(authorID, email, secret string) (string, error) {
+	now := time.Now().UTC()
 	claims := Claims{
 		AuthorID: authorID,
 		Email:    email,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().UTC().Add(tokenLifetime)),
-			IssuedAt:  jwt.NewNumericDate(time.Now().UTC()),
+			ExpiresAt: jwt.NewNumericDate(now.Add(tokenLifetime)),
+			IssuedAt:  jwt.NewNumericDate(now),
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

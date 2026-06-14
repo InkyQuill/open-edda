@@ -15,6 +15,7 @@ import (
 func TestBuildDependenciesRequiresAuthForProjectRoutes(t *testing.T) {
 	t.Setenv("WRITER_DB_PATH", filepath.Join(t.TempDir(), "writer.db"))
 	t.Setenv("WRITER_MIGRATIONS_PATH", "migrations")
+	t.Setenv("WRITER_JWT_SECRET", "test-secret")
 	staticPath := t.TempDir()
 	if err := os.WriteFile(filepath.Join(staticPath, "index.html"), []byte("<!doctype html><html></html>"), 0o644); err != nil {
 		t.Fatalf("write static index: %v", err)
@@ -71,6 +72,7 @@ func TestBuildDependenciesRequiresAuthForProjectRoutes(t *testing.T) {
 func TestBuildDependenciesRejectsCrossAuthorProjectAccess(t *testing.T) {
 	t.Setenv("WRITER_DB_PATH", filepath.Join(t.TempDir(), "writer.db"))
 	t.Setenv("WRITER_MIGRATIONS_PATH", "migrations")
+	t.Setenv("WRITER_JWT_SECRET", "test-secret")
 	staticPath := t.TempDir()
 	if err := os.WriteFile(filepath.Join(staticPath, "index.html"), []byte("<!doctype html><html></html>"), 0o644); err != nil {
 		t.Fatalf("write static index: %v", err)
@@ -116,6 +118,7 @@ func TestBuildDependenciesRejectsCrossAuthorProjectAccess(t *testing.T) {
 func TestBuildDependenciesRejectsWrongPassword(t *testing.T) {
 	t.Setenv("WRITER_DB_PATH", filepath.Join(t.TempDir(), "writer.db"))
 	t.Setenv("WRITER_MIGRATIONS_PATH", "migrations")
+	t.Setenv("WRITER_JWT_SECRET", "test-secret")
 	staticPath := t.TempDir()
 	if err := os.WriteFile(filepath.Join(staticPath, "index.html"), []byte("<!doctype html><html></html>"), 0o644); err != nil {
 		t.Fatalf("write static index: %v", err)
@@ -172,7 +175,24 @@ func registerTestAuthor(t *testing.T, handler http.Handler, email string) string
 func TestBuildDependenciesRequiresFrontendBuild(t *testing.T) {
 	t.Setenv("WRITER_DB_PATH", filepath.Join(t.TempDir(), "writer.db"))
 	t.Setenv("WRITER_MIGRATIONS_PATH", "migrations")
+	t.Setenv("WRITER_JWT_SECRET", "test-secret")
 	t.Setenv("WRITER_STATIC_PATH", t.TempDir())
+
+	deps, cleanup, err := buildDependencies()
+	if err == nil {
+		cleanup()
+		t.Fatalf("buildDependencies() error = nil, deps = %#v", deps)
+	}
+}
+
+func TestBuildDependenciesRequiresJWTSecret(t *testing.T) {
+	t.Setenv("WRITER_DB_PATH", filepath.Join(t.TempDir(), "writer.db"))
+	t.Setenv("WRITER_MIGRATIONS_PATH", "migrations")
+	staticPath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(staticPath, "index.html"), []byte("<!doctype html><html></html>"), 0o644); err != nil {
+		t.Fatalf("write static index: %v", err)
+	}
+	t.Setenv("WRITER_STATIC_PATH", staticPath)
 
 	deps, cleanup, err := buildDependencies()
 	if err == nil {

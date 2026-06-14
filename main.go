@@ -46,7 +46,10 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 	dbPath := getenvDefault("WRITER_DB_PATH", "writer.db")
 	migrationsPath := getenvDefault("WRITER_MIGRATIONS_PATH", "migrations")
 	staticPath := getenvDefault("WRITER_STATIC_PATH", "frontend/dist")
-	jwtSecret := jwtSecret()
+	jwtSecret, err := jwtSecret()
+	if err != nil {
+		return nil, func() {}, err
+	}
 
 	db, err := store.Open(dbPath)
 	if err != nil {
@@ -78,14 +81,14 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 	}, cleanup, nil
 }
 
-func jwtSecret() string {
+func jwtSecret() (string, error) {
 	if secret := os.Getenv("WRITER_JWT_SECRET"); secret != "" {
-		return secret
+		return secret, nil
 	}
 	if secret := os.Getenv("WRITER_SECRET"); secret != "" {
-		return secret
+		return secret, nil
 	}
-	return "change-me-in-production"
+	return "", fmt.Errorf("JWT secret is not configured; set WRITER_JWT_SECRET or WRITER_SECRET")
 }
 
 func validateStaticPath(staticPath string) error {

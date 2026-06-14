@@ -447,7 +447,7 @@ func (s *Service) executeWriteTool(ctx context.Context, input ToolCallInput, ses
 			return nil, nil, fmt.Errorf("generatedMarkdown is required")
 		}
 		if args.ExpectedRevision <= 0 {
-			return nil, nil, fmt.Errorf("expectedRevision is required")
+			return nil, nil, fmt.Errorf("expectedRevision must be >= 1")
 		}
 		if strings.TrimSpace(args.Reason) == "" {
 			return nil, nil, fmt.Errorf("reason is required")

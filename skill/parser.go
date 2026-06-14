@@ -126,7 +126,7 @@ func ParseSkillArchive(reader io.ReaderAt, size int64, sourceLabel string) (Impo
 
 	return ImportedSkill{
 		Name:                 name,
-		DisplayName:          name,
+		DisplayName:          frontmatter.Name,
 		Description:          frontmatter.Description,
 		InstructionsMarkdown: instructions,
 		MetadataJSON:         frontmatterMetadataJSON(frontmatter),
@@ -510,6 +510,7 @@ func ParseSkillDirectory(dirPath string) (ImportedSkill, error) {
 		rel  string
 		body string
 	}
+	var totalBytes int64
 	err = filepath.WalkDir(dirPath, func(filePath string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -517,10 +518,14 @@ func ParseSkillDirectory(dirPath string) (ImportedSkill, error) {
 		if d.IsDir() {
 			return nil
 		}
+		if len(entries)+1 > maxSkillArchiveFiles {
+			return fmt.Errorf("skill directory contains more than %d files", maxSkillArchiveFiles)
+		}
 		rel, err := filepath.Rel(dirPath, filePath)
 		if err != nil {
 			return err
 		}
+		rel = filepath.ToSlash(rel)
 		if safe, safeErr := safeRelativePath(rel); safeErr != nil {
 			return safeErr
 		} else {
@@ -535,6 +540,10 @@ func ParseSkillDirectory(dirPath string) (ImportedSkill, error) {
 		}
 		if int64(len(raw)) > maxSkillFileBytes {
 			return fmt.Errorf("file %s exceeds max size", rel)
+		}
+		totalBytes += int64(len(raw))
+		if totalBytes > maxSkillArchiveBytes {
+			return fmt.Errorf("skill directory contents exceed %d bytes", maxSkillArchiveBytes)
 		}
 		entries = append(entries, struct {
 			rel  string
@@ -592,7 +601,7 @@ func ParseSkillDirectory(dirPath string) (ImportedSkill, error) {
 		Description:          frontmatter.Description,
 		InstructionsMarkdown: strings.TrimSpace(instructions),
 		MetadataJSON:         frontmatterMetadataJSON(frontmatter),
-		SourceLabel:          dirPath,
+		SourceLabel:          "local directory import",
 		ScriptsDisabled:      true,
 		RoutingHints:         frontmatter.routingHints(),
 	}

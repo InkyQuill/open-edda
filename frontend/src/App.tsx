@@ -1541,7 +1541,7 @@ function AgentPanel({
             applyMode,
             guidance,
             expectedRevision,
-            insertPosition: continuationInsert ? wholeSelectionEnd : wholeSelectionEnd,
+            insertPosition: wholeSelectionEnd,
             insert: continuationInsert,
             continuationUnits,
             continuationCount,
