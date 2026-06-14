@@ -33,6 +33,8 @@ type SkillProvider interface {
 	ListSessionSkills(ctx context.Context, projectID, sessionID string) ([]skill.Skill, error)
 	SelectSessionSkills(ctx context.Context, input skill.SelectSessionSkillsInput) ([]skill.Skill, error)
 	RenderForModel(ctx context.Context, input skill.RenderSkillInput) (string, skill.Skill, error)
+	ListScriptAudits(ctx context.Context, projectID, skillID string) ([]skill.ScriptAudit, error)
+	RunScript(ctx context.Context, input skill.RunScriptInput) (skill.ScriptRun, error)
 }
 
 func NewService(db *sql.DB, projectService *project.Service, provider Provider) *Service {

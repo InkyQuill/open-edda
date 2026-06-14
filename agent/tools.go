@@ -10,6 +10,7 @@ import (
 
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/skill"
+	scriptruntime "git.inkyquill.net/inky/writer/skill/runtime"
 	"git.inkyquill.net/inky/writer/store"
 )
 
@@ -45,6 +46,24 @@ func ContextToolDefinitions() []CompletionTool {
 		contextTool("skill", "Load one installed Edda skill by ID when the task matches the available skill guidance. Returns instructions and inert supporting files. Bundled scripts are never executed.", objectSchema(map[string]any{
 			"skillId": map[string]any{"type": "string"},
 		}, "skillId")),
+		contextTool("skill_script", "Run one admin-enabled Edda skill helper script with explicit JSON inputs. Returns a reviewable report, proposal, draft, or generated data. It cannot directly mutate project content.", objectSchema(map[string]any{
+			"skillId":    map[string]any{"type": "string"},
+			"scriptPath": map[string]any{"type": "string"},
+			"contentIds": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"entrySections": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"contentId": map[string]any{"type": "string"},
+						"heading":   map[string]any{"type": "string"},
+					},
+					"required": []string{"contentId", "heading"},
+				},
+			},
+			"assetPaths": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"arguments":  map[string]any{"type": "object", "additionalProperties": true},
+		}, "skillId", "scriptPath")),
 		contextTool("append_to_chapter", "Append generated Markdown to the end of a chapter.", structuredWriteSchema(nil)),
 		contextTool("insert_into_chapter", "Insert generated Markdown into a chapter at an absolute position.", structuredWriteSchema(map[string]any{
 			"insertPosition": map[string]any{"type": "integer", "minimum": 0},
@@ -292,6 +311,47 @@ func (s *Service) executeContextTool(ctx context.Context, input ToolCallInput, s
 				"name":            loaded.Name,
 				"scriptCount":     loaded.ScriptCount,
 				"scriptsDisabled": loaded.ScriptsDisabled,
+			}, nil
+	case "skill_script":
+		if s.skillService == nil {
+			return nil, false, nil, fmt.Errorf("skill service is not configured")
+		}
+		var args struct {
+			SkillID       string                          `json:"skillId"`
+			ScriptPath    string                          `json:"scriptPath"`
+			ContentIDs    []string                        `json:"contentIds"`
+			EntrySections []skill.ScriptEntrySectionInput `json:"entrySections"`
+			AssetPaths    []string                        `json:"assetPaths"`
+			Arguments     map[string]any                  `json:"arguments"`
+		}
+		if err := decodeToolArgs(input.ArgumentsJSON, &args); err != nil {
+			return nil, false, nil, err
+		}
+		run, err := s.skillService.RunScript(ctx, skill.RunScriptInput{
+			ProjectID:     input.ProjectID,
+			SessionID:     input.SessionID,
+			ToolCallID:    input.ToolCallID,
+			SkillID:       args.SkillID,
+			ScriptPath:    args.ScriptPath,
+			ContentIDs:    args.ContentIDs,
+			EntrySections: args.EntrySections,
+			AssetPaths:    args.AssetPaths,
+			Arguments:     args.Arguments,
+		})
+		if err != nil {
+			return nil, false, nil, err
+		}
+		return map[string]any{
+				"status":               run.Status,
+				"outputKind":           run.OutputKind,
+				"outputJson":           rawScriptOutputJSON(run.OutputJSON),
+				"errorMessage":         run.ErrorMessage,
+				"modelVisibleMarkdown": renderSkillScriptMarkdown(run.Status, run.OutputKind, run.OutputJSON, run.ErrorMessage),
+			}, false, map[string]any{
+				"skillId":     args.SkillID,
+				"scriptPath":  args.ScriptPath,
+				"scriptRunId": run.ID,
+				"status":      string(run.Status),
 			}, nil
 	case "append_to_chapter", "insert_into_chapter", "replace_selection", "update_story_bible_entry", "update_entry_section":
 		payload, metadata, err := s.executeWriteTool(ctx, input, session)
@@ -561,6 +621,87 @@ func modelVisibleMarkdownPayload(payload any) (string, bool) {
 	}
 	markdown, ok := values["modelVisibleMarkdown"].(string)
 	return markdown, ok
+}
+
+func rawScriptOutputJSON(value string) json.RawMessage {
+	if strings.TrimSpace(value) == "" {
+		return json.RawMessage("{}")
+	}
+	if !json.Valid([]byte(value)) {
+		return json.RawMessage("{}")
+	}
+	return json.RawMessage(value)
+}
+
+func renderSkillScriptMarkdown(status skill.ScriptRunStatus, outputKind string, outputJSON string, errorMessage string) string {
+	var output scriptruntime.ScriptOutput
+	if strings.TrimSpace(outputJSON) != "" && outputJSON != "{}" {
+		if err := json.Unmarshal([]byte(outputJSON), &output); err == nil && output.Kind != "" {
+			return renderScriptOutputMarkdown(output)
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString("# Skill Script Result\n\n")
+	fmt.Fprintf(&b, "Status: %s\n", status)
+	if outputKind != "" {
+		fmt.Fprintf(&b, "Output kind: %s\n", outputKind)
+	}
+	if strings.TrimSpace(errorMessage) != "" {
+		fmt.Fprintf(&b, "\nError: %s\n", errorMessage)
+	}
+	b.WriteString("\n_This result is reviewable and did not modify project content._")
+	return b.String()
+}
+
+func renderScriptOutputMarkdown(output scriptruntime.ScriptOutput) string {
+	var b strings.Builder
+	title := strings.TrimSpace(output.Title)
+	if title == "" {
+		title = "Result"
+	}
+	b.WriteString("# Skill Script: ")
+	b.WriteString(title)
+	b.WriteString("\n\n")
+
+	switch output.Kind {
+	case scriptruntime.OutputKindReport, scriptruntime.OutputKindProposal, scriptruntime.OutputKindDraft:
+		if strings.TrimSpace(output.Markdown) != "" {
+			b.WriteString(output.Markdown)
+			b.WriteString("\n\n")
+		}
+		for _, proposal := range output.Proposals {
+			if strings.TrimSpace(proposal.Title) != "" {
+				b.WriteString("## ")
+				b.WriteString(proposal.Title)
+				b.WriteString("\n\n")
+			}
+			if strings.TrimSpace(proposal.Markdown) != "" {
+				b.WriteString(proposal.Markdown)
+				b.WriteString("\n\n")
+			}
+		}
+	case scriptruntime.OutputKindGeneratedData:
+		if strings.TrimSpace(output.Markdown) != "" {
+			b.WriteString(output.Markdown)
+			b.WriteString("\n\n")
+		}
+		if len(output.GeneratedData) > 0 {
+			data, err := json.MarshalIndent(output.GeneratedData, "", "  ")
+			if err == nil {
+				b.WriteString("```json\n")
+				b.Write(data)
+				b.WriteString("\n```\n\n")
+			}
+		}
+	default:
+		if strings.TrimSpace(output.Markdown) != "" {
+			b.WriteString(output.Markdown)
+			b.WriteString("\n\n")
+		}
+	}
+	fmt.Fprintf(&b, "_Output kind: %s. This result is reviewable and did not modify project content._", output.Kind)
+	return b.String()
 }
 
 func renderToolMarkdown(toolName string, payload any) string {

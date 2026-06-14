@@ -111,7 +111,10 @@ func (s *Service) buildSkillContextSources(ctx context.Context, projectID, sessi
 	if len(selectedSkills) == 0 {
 		return sources, nil
 	}
-	selected := skillSummaries(selectedSkills)
+	selected, err := s.selectedSkillPromptSummaries(ctx, projectID, selectedSkills)
+	if err != nil {
+		return nil, err
+	}
 	selectedRendered := renderSelectedSkills(selected)
 	selectedValue, err := marshalJSON(map[string]any{
 		"skills": selected,
@@ -361,6 +364,38 @@ func skillSummary(item skill.Skill) SkillSummary {
 	}
 }
 
+type selectedSkillPromptSummary struct {
+	SkillSummary
+	EnabledScripts []selectedScriptPromptSummary `json:"enabledScripts,omitempty"`
+}
+
+type selectedScriptPromptSummary struct {
+	Path    string `json:"path"`
+	Runtime string `json:"runtime"`
+}
+
+func (s *Service) selectedSkillPromptSummaries(ctx context.Context, projectID string, skills []skill.Skill) ([]selectedSkillPromptSummary, error) {
+	summaries := make([]selectedSkillPromptSummary, 0, len(skills))
+	for _, item := range skills {
+		summary := selectedSkillPromptSummary{SkillSummary: skillSummary(item)}
+		audits, err := s.skillService.ListScriptAudits(ctx, projectID, item.ID)
+		if err != nil {
+			return nil, fmt.Errorf("list script audits: %w", err)
+		}
+		for _, audit := range audits {
+			if audit.Approval == nil || !audit.Approval.Enabled {
+				continue
+			}
+			summary.EnabledScripts = append(summary.EnabledScripts, selectedScriptPromptSummary{
+				Path:    audit.RelativePath,
+				Runtime: audit.Runtime,
+			})
+		}
+		summaries = append(summaries, summary)
+	}
+	return summaries, nil
+}
+
 func renderAvailableSkills(skills []SkillSummary, installedCount int) string {
 	var b strings.Builder
 	b.WriteString("## Available Skills\n\n")
@@ -386,16 +421,30 @@ func renderAvailableSkills(skills []SkillSummary, installedCount int) string {
 	return b.String()
 }
 
-func renderSelectedSkills(skills []SkillSummary) string {
+func renderSelectedSkills(skills []selectedSkillPromptSummary) string {
 	var b strings.Builder
 	b.WriteString("## Selected Skills\n\n")
 	b.WriteString("The author selected these skills for this session.\n")
+	b.WriteString("Enabled runtime helpers are available only through the `skill_script` tool. They return reports, proposals, generated data, or drafts and cannot directly apply project changes.\n")
+	b.WriteString("Disabled scripts remain unavailable.\n")
 	b.WriteString("<selected_skills>\n")
 	for _, item := range skills {
 		b.WriteString("  <skill>\n")
 		b.WriteString("    <id>" + escapePromptXML(item.ID) + "</id>\n")
 		b.WriteString("    <name>" + escapePromptXML(item.Name) + "</name>\n")
-		fmt.Fprintf(&b, "    <script_status disabled=\"%t\" count=\"%d\">Scripts are available only as inert reference files.</script_status>\n", item.ScriptsDisabled, item.ScriptCount)
+		if len(item.EnabledScripts) == 0 {
+			fmt.Fprintf(&b, "    <script_status disabled=\"%t\" count=\"%d\">Scripts are available only as inert reference files.</script_status>\n", item.ScriptsDisabled, item.ScriptCount)
+		} else {
+			fmt.Fprintf(&b, "    <script_status disabled=\"false\" count=\"%d\">Enabled runtime helpers must be invoked with skill_script.</script_status>\n", item.ScriptCount)
+			for _, script := range item.EnabledScripts {
+				b.WriteString("    <runtime_helper>\n")
+				b.WriteString("      <script_path>" + escapePromptXML(script.Path) + "</script_path>\n")
+				if script.Runtime != "" {
+					b.WriteString("      <runtime>" + escapePromptXML(script.Runtime) + "</runtime>\n")
+				}
+				b.WriteString("    </runtime_helper>\n")
+			}
+		}
 		b.WriteString("  </skill>\n")
 	}
 	b.WriteString("</selected_skills>\n")

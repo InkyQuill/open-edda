@@ -242,6 +242,9 @@ func TestPromptBuildActionPromptAddsSkillGuidanceSources(t *testing.T) {
 	assertContains(t, selected.RenderedMarkdown, "<selected_skills>")
 	assertContains(t, selected.RenderedMarkdown, "<id>"+describedSkill.ID+"</id>")
 	assertContains(t, selected.RenderedMarkdown, `<script_status disabled="true" count="1">Scripts are available only as inert reference files.</script_status>`)
+	assertContains(t, selected.RenderedMarkdown, "Disabled scripts remain unavailable.")
+	assertContains(t, selected.RenderedMarkdown, "Enabled runtime helpers are available only through the `skill_script` tool.")
+	assertContains(t, selected.RenderedMarkdown, "cannot directly apply project changes")
 }
 
 func TestPromptBuildActionPromptAddsStableAvailableSkillsSourceWhenNoDescribedSkills(t *testing.T) {

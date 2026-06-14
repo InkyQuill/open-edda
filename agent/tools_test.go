@@ -9,6 +9,7 @@ import (
 
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/skill"
+	scriptruntime "git.inkyquill.net/inky/writer/skill/runtime"
 	"git.inkyquill.net/inky/writer/store"
 )
 
@@ -28,6 +29,7 @@ func TestContextToolDefinitionsExposeExplicitSchemas(t *testing.T) {
 		"read_entry_section",
 		"list_revisions",
 		"skill",
+		"skill_script",
 		"append_to_chapter",
 		"insert_into_chapter",
 		"replace_selection",
@@ -67,6 +69,21 @@ func TestContextToolDefinitionsExposeExplicitSchemas(t *testing.T) {
 	skillProps := skillSchema["properties"].(map[string]any)
 	if _, ok := skillProps["skillId"]; !ok {
 		t.Fatal("skill schema missing skillId property")
+	}
+
+	scriptSchema := names["skill_script"].Function.Parameters
+	scriptRequired, ok := scriptSchema["required"].([]string)
+	if !ok {
+		t.Fatalf("skill_script schema required = %#v, want []string", scriptSchema["required"])
+	}
+	if len(scriptRequired) != 2 || scriptRequired[0] != "skillId" || scriptRequired[1] != "scriptPath" {
+		t.Fatalf("skill_script schema required = %#v, want [skillId scriptPath]", scriptRequired)
+	}
+	scriptProps := scriptSchema["properties"].(map[string]any)
+	for _, prop := range []string{"skillId", "scriptPath", "contentIds", "entrySections", "assetPaths", "arguments"} {
+		if _, ok := scriptProps[prop]; !ok {
+			t.Fatalf("skill_script schema missing %q", prop)
+		}
 	}
 }
 
@@ -548,6 +565,89 @@ func TestExecuteSkillToolScriptFilesAreDisabledAndNotExecuted(t *testing.T) {
 	if strings.Contains(result.ModelVisibleMarkdown, "echo should-not-execute") {
 		t.Fatalf("ModelVisibleMarkdown included shell execution output:\n%s", result.ModelVisibleMarkdown)
 	}
+}
+
+func TestSkillScriptToolRequiresEnabledScript(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	skillService := skill.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Skill Script Disabled Project")
+	service := NewService(db, projectService, nil)
+	service.SetSkillService(skillService)
+	session := createTestSession(t, ctx, service, storyProject.ID)
+	installed := installToolSkill(t, ctx, skillService, storyProject.ID)
+
+	_, err := service.ExecuteTool(ctx, ToolCallInput{
+		ProjectID:     storyProject.ID,
+		SessionID:     session.ID,
+		ToolCallID:    "tool-script-1",
+		ToolName:      "skill_script",
+		ArgumentsJSON: `{"skillId":"` + installed.ID + `","scriptPath":"scripts/analyze.sh"}`,
+	})
+	if err == nil {
+		t.Fatal("ExecuteTool() error = nil, want invalid script")
+	}
+
+	assertNoToolArtifactForCall(t, ctx, db, storyProject.ID, session.ID, "tool-script-1")
+}
+
+func TestSkillScriptToolStoresReportArtifact(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	skillService := skill.NewService(db)
+	skillService.SetScriptRunner(&agentFakeScriptRunner{result: scriptruntime.RunResult{
+		Status: scriptruntime.StatusSucceeded,
+		Output: scriptruntime.ScriptOutput{
+			Kind:     scriptruntime.OutputKindReport,
+			Title:    "Script report",
+			Markdown: "Looks good.",
+		},
+	}})
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Skill Script Report Project")
+	service := NewService(db, projectService, nil)
+	service.SetSkillService(skillService)
+	installed := installEnabledScriptSkill(t, ctx, skillService, storyProject.ID)
+	session, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:  storyProject.ID,
+		Title:      "Script session",
+		ActionKind: ActionKindContinuation,
+		ApplyMode:  ApplyModePreview,
+		SkillIDs:   []string{installed.ID},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	result, err := service.ExecuteTool(ctx, ToolCallInput{
+		ProjectID:  storyProject.ID,
+		SessionID:  session.ID,
+		ToolCallID: "tool-script-1",
+		ToolName:   "skill_script",
+		ArgumentsJSON: `{
+			"skillId": "` + installed.ID + `",
+			"scriptPath": "scripts/report.ts",
+			"arguments": {"mode": "check"}
+		}`,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool() error = %v", err)
+	}
+
+	assertMarkdownContains(t, result.ModelVisibleMarkdown,
+		"# Skill Script: Script report",
+		"Looks good.",
+		"Output kind: report",
+		"did not modify project content",
+	)
+	assertFullJSONContains(t, result.FullResultJSON,
+		`"status": "succeeded"`,
+		`"outputKind": "report"`,
+		`"kind": "report"`,
+		`"title": "Script report"`,
+	)
+	assertSkillScriptActivityAndArtifact(t, ctx, db, storyProject.ID, session.ID, result, installed.ID)
 }
 
 func TestExecuteToolRejectsSessionOutsideProject(t *testing.T) {
@@ -1053,6 +1153,68 @@ func installToolSkill(t *testing.T, ctx context.Context, service *skill.Service,
 	return installed
 }
 
+func installEnabledScriptSkill(t *testing.T, ctx context.Context, service *skill.Service, projectID string) skill.Skill {
+	t.Helper()
+
+	installed, err := service.Install(ctx, skill.InstallInput{
+		ProjectID:   projectID,
+		SourceType:  skill.SourceTypeUpload,
+		SourceLabel: "script-skill.zip",
+		Imported: skill.ImportedSkill{
+			Name:                 "script-skill",
+			DisplayName:          "Script Skill",
+			Description:          "Runs a report script",
+			InstructionsMarkdown: "Use the report helper when checking draft health.",
+			MetadataJSON:         "{}",
+			SourceLabel:          "script-skill.zip",
+			ScriptCount:          1,
+			ScriptsDisabled:      true,
+			Files: []skill.ImportedSkillFile{
+				{
+					RelativePath:   "scripts/report.ts",
+					Purpose:        skill.FilePurposeScript,
+					MediaType:      "text/typescript; charset=utf-8",
+					BodyText:       "console.log(JSON.stringify({kind:'report'}))",
+					Bytes:          int64(len("console.log(JSON.stringify({kind:'report'}))")),
+					ScriptDisabled: true,
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Install(skill) error = %v", err)
+	}
+	audits, err := service.ListScriptAudits(ctx, projectID, installed.ID)
+	if err != nil {
+		t.Fatalf("ListScriptAudits() error = %v", err)
+	}
+	if len(audits) != 1 {
+		t.Fatalf("script audits = %d, want 1", len(audits))
+	}
+	if _, err := service.UpdateScriptApproval(ctx, skill.UpdateScriptApprovalInput{
+		ProjectID:      projectID,
+		SkillID:        installed.ID,
+		SkillFileID:    audits[0].SkillFileID,
+		Enabled:        true,
+		RuntimeCommand: "node scripts/report.ts",
+		TimeoutMS:      5000,
+		MaxStdoutBytes: 65536,
+		MaxStderrBytes: 16384,
+		ApprovedBy:     "agent-test",
+	}); err != nil {
+		t.Fatalf("UpdateScriptApproval() error = %v", err)
+	}
+	return installed
+}
+
+type agentFakeScriptRunner struct {
+	result scriptruntime.RunResult
+}
+
+func (r *agentFakeScriptRunner) Run(context.Context, scriptruntime.RunRequest) (scriptruntime.RunResult, error) {
+	return r.result, nil
+}
+
 func assertToolActivityAndArtifact(t *testing.T, ctx context.Context, db *sql.DB, projectID, sessionID, toolName string, result ToolResult) {
 	t.Helper()
 
@@ -1116,6 +1278,73 @@ func assertToolActivityAndArtifact(t *testing.T, ctx context.Context, db *sql.DB
 	}
 	if artifact.FullResultBytes != int64(len([]byte(result.FullResultJSON))) {
 		t.Fatalf("artifact full bytes = %d, want %d", artifact.FullResultBytes, len([]byte(result.FullResultJSON)))
+	}
+}
+
+func assertSkillScriptActivityAndArtifact(t *testing.T, ctx context.Context, db *sql.DB, projectID, sessionID string, result ToolResult, skillID string) {
+	t.Helper()
+
+	queries := store.New(db)
+	events, err := queries.ListActivityEvents(ctx, store.ListActivityEventsParams{
+		ProjectID: projectID,
+		Limit:     10,
+	})
+	if err != nil {
+		t.Fatalf("ListActivityEvents() error = %v", err)
+	}
+	var event store.ActivityEvent
+	for _, candidate := range events {
+		var metadata map[string]any
+		if err := json.Unmarshal([]byte(candidate.MetadataJson), &metadata); err != nil {
+			t.Fatalf("unmarshal activity metadata: %v", err)
+		}
+		if metadata["toolName"] != "skill_script" || metadata["toolCallId"] != result.ToolCallID {
+			continue
+		}
+		event = candidate
+		if metadata["skillId"] != skillID {
+			t.Fatalf("metadata skillId = %#v, want %q", metadata["skillId"], skillID)
+		}
+		if metadata["scriptPath"] != "scripts/report.ts" {
+			t.Fatalf("metadata scriptPath = %#v, want scripts/report.ts", metadata["scriptPath"])
+		}
+		if metadata["scriptRunId"] == "" {
+			t.Fatalf("metadata scriptRunId = %#v, want non-empty", metadata["scriptRunId"])
+		}
+		if metadata["status"] != "succeeded" {
+			t.Fatalf("metadata status = %#v, want succeeded", metadata["status"])
+		}
+		break
+	}
+	if event.ID == "" {
+		t.Fatalf("skill_script activity not found in %#v", events)
+	}
+	if !event.SessionID.Valid || event.SessionID.String != sessionID {
+		t.Fatalf("activity session = %#v, want %q", event.SessionID, sessionID)
+	}
+
+	artifacts, err := queries.ListToolResultArtifacts(ctx, store.ListToolResultArtifactsParams{
+		ProjectID: projectID,
+		SessionID: sql.NullString{String: sessionID, Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("ListToolResultArtifacts() error = %v", err)
+	}
+	var artifact store.ToolResultArtifact
+	for _, candidate := range artifacts {
+		if candidate.ToolName == "skill_script" && candidate.ToolCallID == result.ToolCallID {
+			artifact = candidate
+			break
+		}
+	}
+	if artifact.ID == "" {
+		t.Fatalf("skill_script artifact not found in %#v", artifacts)
+	}
+	if artifact.FullResultJson != result.FullResultJSON {
+		t.Fatal("artifact full JSON differs from returned full JSON")
+	}
+	if artifact.ModelVisibleMarkdown != result.ModelVisibleMarkdown {
+		t.Fatal("artifact model-visible markdown differs from returned markdown")
 	}
 }
 
@@ -1295,6 +1524,23 @@ func assertNoToolActivityOrArtifact(t *testing.T, ctx context.Context, db *sql.D
 	}
 	if len(artifacts) != 0 {
 		t.Fatalf("artifact count = %d, want 0", len(artifacts))
+	}
+}
+
+func assertNoToolArtifactForCall(t *testing.T, ctx context.Context, db *sql.DB, projectID, sessionID, toolCallID string) {
+	t.Helper()
+
+	artifacts, err := store.New(db).ListToolResultArtifacts(ctx, store.ListToolResultArtifactsParams{
+		ProjectID: projectID,
+		SessionID: sql.NullString{String: sessionID, Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("ListToolResultArtifacts() error = %v", err)
+	}
+	for _, artifact := range artifacts {
+		if artifact.ToolCallID == toolCallID {
+			t.Fatalf("artifact for rejected tool call %q was stored: %#v", toolCallID, artifact)
+		}
 	}
 }
 
