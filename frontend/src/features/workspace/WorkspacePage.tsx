@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { shallowEqual, useDispatch, useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -79,7 +79,7 @@ export function WorkspacePage() {
     };
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!projectId) return;
     dispatch(assistantActions.resetForProject());
     dispatch(modelSettingsActions.resetForProject());
