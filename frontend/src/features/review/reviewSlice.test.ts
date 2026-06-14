@@ -9,6 +9,7 @@ describe("reviewSlice", () => {
         activityStatus: "succeeded",
         promptRecordsStatus: "failed",
         selectedPromptRecordId: "prompt-record-1",
+        error: "Could not load prompt records",
       },
       reviewActions.resetForProject(),
     );

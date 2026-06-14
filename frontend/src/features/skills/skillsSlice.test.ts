@@ -9,6 +9,7 @@ describe("skillsSlice", () => {
         skillsStatus: "succeeded",
         selectedSkillIds: ["skill-1", "skill-2"],
         importStatus: "failed",
+        error: "Could not import skills",
       },
       skillsActions.resetForProject(),
     );

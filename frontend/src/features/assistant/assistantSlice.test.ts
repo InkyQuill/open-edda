@@ -13,6 +13,8 @@ describe("assistantSlice", () => {
         activeSessionId: "session-1",
         draftMessage: "hello",
         sessionsStatus: "succeeded",
+        messagesStatus: "failed",
+        error: "Could not load messages",
       },
       assistantActions.resetForProject(),
     );

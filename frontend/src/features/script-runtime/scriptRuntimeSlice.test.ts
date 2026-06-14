@@ -13,6 +13,7 @@ describe("scriptRuntimeSlice", () => {
         auditsStatus: "succeeded",
         runsStatus: "pending",
         selectedAuditId: "audit-1",
+        error: "Could not load runs",
       },
       scriptRuntimeActions.resetForProject(),
     );

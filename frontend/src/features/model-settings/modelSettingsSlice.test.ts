@@ -13,6 +13,8 @@ describe("modelSettingsSlice", () => {
         selectedProviderId: "provider-1",
         activeModelVariantId: "model-1",
         providersStatus: "succeeded",
+        modelsStatus: "failed",
+        error: "Could not load models",
       },
       modelSettingsActions.resetForProject(),
     );
