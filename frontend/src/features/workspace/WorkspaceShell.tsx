@@ -98,7 +98,7 @@ export function WorkspaceShell({
     workspace.activeRightTab === "model" ? (
       <ModelSettingsPanel />
     ) : workspace.mode === "review" || workspace.activeRightTab === "tools" || workspace.activeRightTab === "revisions" ? (
-      <ReviewDrawer />
+      <ReviewDrawer projectId={projectId} />
     ) : (
       <AssistantDrawer projectId={projectId} />
     );
@@ -119,7 +119,7 @@ export function WorkspaceShell({
 
   function renderMobileSheet(sheet: NonNullable<MobileSheet>) {
     if (sheet === "assistant") return <AssistantDrawer projectId={projectId} />;
-    if (sheet === "review") return <ReviewDrawer />;
+    if (sheet === "review") return <ReviewDrawer projectId={projectId} />;
     if (sheet === "model") return <ModelSettingsPanel />;
     return (
       <ContextDrawer
