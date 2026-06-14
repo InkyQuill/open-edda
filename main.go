@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 
 	"git.inkyquill.net/inky/writer/agent"
 	"git.inkyquill.net/inky/writer/app"
+	"git.inkyquill.net/inky/writer/auth"
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/skill"
 	"git.inkyquill.net/inky/writer/store"
@@ -46,6 +46,7 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 	dbPath := getenvDefault("WRITER_DB_PATH", "writer.db")
 	migrationsPath := getenvDefault("WRITER_MIGRATIONS_PATH", "migrations")
 	staticPath := getenvDefault("WRITER_STATIC_PATH", "frontend/dist")
+	jwtSecret := jwtSecret()
 
 	db, err := store.Open(dbPath)
 	if err != nil {
@@ -57,26 +58,34 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 		cleanup()
 		return nil, func() {}, err
 	}
-	if err := ensurePlaceholderAuthor(db); err != nil {
-		cleanup()
-		return nil, func() {}, err
-	}
 	if err := validateStaticPath(staticPath); err != nil {
 		cleanup()
 		return nil, func() {}, err
 	}
 
+	authService := auth.NewService(db, jwtSecret)
 	projectService := project.NewService(db)
 	agentService := agent.NewService(db, projectService, nil)
 	skillService := skill.NewService(db)
 	agentService.SetSkillService(skillService)
 
 	return &app.Dependencies{
+		AuthService:    authService,
 		ProjectService: projectService,
 		AgentService:   agentService,
 		SkillService:   skillService,
 		StaticFS:       os.DirFS(staticPath),
 	}, cleanup, nil
+}
+
+func jwtSecret() string {
+	if secret := os.Getenv("WRITER_JWT_SECRET"); secret != "" {
+		return secret
+	}
+	if secret := os.Getenv("WRITER_SECRET"); secret != "" {
+		return secret
+	}
+	return "change-me-in-production"
 }
 
 func validateStaticPath(staticPath string) error {
@@ -95,14 +104,6 @@ func migrate(db *sql.DB, migrationsPath string) error {
 		return err
 	}
 	return goose.Up(db, migrationsPath)
-}
-
-func ensurePlaceholderAuthor(db *sql.DB) error {
-	_, err := db.Exec(`
-		INSERT OR IGNORE INTO authors (id, email, password_hash, created_at)
-		VALUES (?, ?, ?, ?)
-	`, "author-1", "author@example.invalid", "placeholder", time.Now().UTC().Format(time.RFC3339Nano))
-	return err
 }
 
 func getenvDefault(name string, fallback string) string {

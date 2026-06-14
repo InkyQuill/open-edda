@@ -26,8 +26,8 @@ func TestProviderConfigHTTPEndpoints(t *testing.T) {
 		"baseUrl": "https://api.deepseek.com",
 		"apiKey": "secret-key"
 	}`, http.StatusCreated)
-	if provider.AuthorID != placeholderAuthorID {
-		t.Fatalf("provider author ID = %q, want %q", provider.AuthorID, placeholderAuthorID)
+	if provider.AuthorID != "author-1" {
+		t.Fatalf("provider author ID = %q, want %q", provider.AuthorID, "author-1")
 	}
 	if provider.Name != "DeepSeek" || provider.BaseURL != "https://api.deepseek.com" {
 		t.Fatalf("provider = %#v", provider)

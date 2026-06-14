@@ -19,6 +19,7 @@ import {
   upsertPromptProfile,
 } from "./agentApi";
 import { getSkill, importSkill, listSessionSkills, listSkills, selectSessionSkills } from "./skillApi";
+import { login, register, clearToken, getToken } from "./authApi";
 import type {
   ActivityEvent,
   AgentMessage,
@@ -189,6 +190,12 @@ export function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isContentLoading, setIsContentLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => getToken() !== null);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [contentError, setContentError] = useState<string | null>(null);
 
   const [providers, setProviders] = useState<ProviderConfigSummary[]>([]);
@@ -434,12 +441,88 @@ export function App() {
     setSelectedContentId(content.id);
   }
 
+  async function handleAuth(): Promise<void> {
+    setAuthError(null);
+    setIsAuthLoading(true);
+    try {
+      const fn = isRegistering ? register : login;
+      await fn(authEmail, authPassword);
+      setIsAuthenticated(true);
+      setAuthPassword("");
+      setAuthError(null);
+    } catch (cause: unknown) {
+      setAuthError(cause instanceof Error ? cause.message : "Authentication failed");
+    } finally {
+      setIsAuthLoading(false);
+    }
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <main className="app-shell">
+        <section className="auth-form-section">
+          <header>
+            <h1>Writer</h1>
+            <p>Self-hosted AI writing studio</p>
+          </header>
+          <form
+            className="auth-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleAuth();
+            }}
+          >
+            <label>
+              Email
+              <input
+                type="email"
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                required
+                autoComplete="email"
+              />
+            </label>
+            <label>
+              Password (min 8 characters)
+              <input
+                type="password"
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                required
+                minLength={8}
+                autoComplete={isRegistering ? "new-password" : "current-password"}
+              />
+            </label>
+            {authError ? <p className="auth-error" role="alert">{authError}</p> : null}
+            <button type="submit" disabled={isAuthLoading}>
+              {isAuthLoading ? "Please wait..." : isRegistering ? "Register" : "Login"}
+            </button>
+            <button type="button" className="pill-button" onClick={() => { setAuthError(null); setIsRegistering((v) => !v); }}>
+              {isRegistering ? "Already have an account? Login" : "New author? Register"}
+            </button>
+          </form>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="app-shell">
       <section className="project-dashboard">
         <header>
           <h1>Writer</h1>
           <p>Private AI writing studio</p>
+          <button
+            className="pill-button"
+            type="button"
+            onClick={() => {
+              clearToken();
+              setIsAuthenticated(false);
+              setSelectedProjectId(null);
+            }}
+          >
+            Logout
+          </button>
         </header>
 
         <div className="project-list">

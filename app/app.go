@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"git.inkyquill.net/inky/writer/agent"
+	"git.inkyquill.net/inky/writer/auth"
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/skill"
 	"github.com/go-chi/chi/v5"
@@ -15,6 +16,7 @@ import (
 
 // Dependencies holds services used by the application router.
 type Dependencies struct {
+	AuthService    *auth.Service
 	ProjectService *project.Service
 	AgentService   *agent.Service
 	SkillService   *skill.Service
@@ -27,12 +29,25 @@ func New(deps *Dependencies) http.Handler {
 	r.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+
 	if deps != nil {
 		r.Route("/api", func(r chi.Router) {
-			project.RegisterRoutes(r, deps.ProjectService)
-			agent.RegisterRoutes(r, deps.AgentService)
-			skill.RegisterRoutes(r, deps.SkillService)
+			// Public routes — no auth required.
+			if deps.AuthService != nil {
+				auth.RegisterRoutes(r, deps.AuthService)
+			}
+
+			// Protected routes — require valid Bearer token.
+			r.Group(func(r chi.Router) {
+				if deps.AuthService != nil {
+					r.Use(auth.Required(deps.AuthService))
+				}
+				project.RegisterRoutes(r, deps.ProjectService)
+				agent.RegisterRoutes(r, deps.AgentService)
+				skill.RegisterRoutes(r, deps.SkillService)
+			})
 		})
+
 		if deps.StaticFS != nil {
 			r.NotFound(spaHandler(deps.StaticFS))
 		}
