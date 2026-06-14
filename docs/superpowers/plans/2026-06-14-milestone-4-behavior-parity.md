@@ -1,6 +1,6 @@
 # Milestone 4 Behavior Parity Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Restore the old monolithic frontend's working assistant, model settings, skills, activity, prompt-record, and script-runtime visibility inside the new routed Milestone 4 workspace architecture.
 
@@ -76,7 +76,7 @@ frontend/src/skillTypes.ts
 - Test: `frontend/src/features/script-runtime/scriptRuntimeSlice.test.ts`
 - Test: `frontend/src/features/skills/skillsSlice.test.ts`
 
-- [ ] **Step 1: Add slice tests for reset-on-project-change behavior**
+- [x] **Step 1: Add slice tests for reset-on-project-change behavior**
 
 Each feature slice must expose a `resetForProject` reducer. The assistant test should use this shape:
 
@@ -103,7 +103,7 @@ describe("assistantSlice", () => {
 
 Repeat the same pattern for model settings, review, script runtime, and skills using state fields owned by that slice.
 
-- [ ] **Step 2: Run the new tests and verify they fail**
+- [x] **Step 2: Run the new tests and verify they fail**
 
 Run:
 
@@ -114,7 +114,7 @@ bun run test -- assistantSlice modelSettingsSlice reviewSlice scriptRuntimeSlice
 
 Expected: tests fail because the slice files do not exist yet.
 
-- [ ] **Step 3: Create minimal slices**
+- [x] **Step 3: Create minimal slices**
 
 Use explicit async status unions:
 
@@ -197,7 +197,7 @@ resetForProject() {
 }
 ```
 
-- [ ] **Step 4: Register reducers in `store.ts`**
+- [x] **Step 4: Register reducers in `store.ts`**
 
 Update the reducer map:
 
@@ -213,7 +213,7 @@ reducer: {
 }
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run:
 
@@ -233,7 +233,7 @@ Expected: PASS.
 - Modify: `frontend/src/features/workspace/WorkspaceShell.tsx`
 - Test: `frontend/src/features/assistant/assistantSlice.test.ts`
 
-- [ ] **Step 1: Add reducer tests for sessions and draft message**
+- [x] **Step 1: Add reducer tests for sessions and draft message**
 
 Add tests that verify:
 
@@ -251,7 +251,7 @@ activeSessionId === "session-1"
 resetForProject() returns initialAssistantState
 ```
 
-- [ ] **Step 2: Create async thunks using existing API functions**
+- [x] **Step 2: Create async thunks using existing API functions**
 
 `assistantThunks.ts` should import:
 
@@ -285,7 +285,7 @@ export const sendAssistantMessage = createAsyncThunk(
 );
 ```
 
-- [ ] **Step 3: Wire extraReducers**
+- [x] **Step 3: Wire extraReducers**
 
 The slice must:
 
@@ -295,7 +295,7 @@ The slice must:
 - clear `draftMessage` after a successful send,
 - store readable errors from rejected thunks.
 
-- [ ] **Step 4: Render real assistant data**
+- [x] **Step 4: Render real assistant data**
 
 Update `AssistantDrawer` props:
 
@@ -315,7 +315,7 @@ The drawer should:
 - provide `New chat` and `Send` buttons,
 - disable `Send` when there is no active session or the draft is blank.
 
-- [ ] **Step 5: Pass route context from `WorkspaceShell`**
+- [x] **Step 5: Pass route context from `WorkspaceShell`**
 
 `WorkspaceShell` should accept:
 
@@ -330,7 +330,7 @@ Pass:
 <AssistantDrawer projectId={projectId} contentId={selectedContent?.id ?? null} />
 ```
 
-- [ ] **Step 6: Run focused tests and build**
+- [x] **Step 6: Run focused tests and build**
 
 Run:
 
@@ -352,7 +352,7 @@ Expected: both commands exit 0.
 - Modify: `frontend/src/features/workspace/WorkspaceShell.tsx`
 - Test: `frontend/src/features/model-settings/modelSettingsSlice.test.ts`
 
-- [ ] **Step 1: Add slice tests**
+- [x] **Step 1: Add slice tests**
 
 Cover:
 
@@ -361,7 +361,7 @@ Cover:
 - clearing selected model when provider changes,
 - resetting state for a new project.
 
-- [ ] **Step 2: Create thunks for providers and models**
+- [x] **Step 2: Create thunks for providers and models**
 
 Use existing API functions:
 
@@ -380,7 +380,7 @@ export const loadModelVariants = createAsyncThunk(
 );
 ```
 
-- [ ] **Step 3: Render model disclosure**
+- [x] **Step 3: Render model disclosure**
 
 `ModelStatus` should load providers on mount and show:
 
@@ -388,7 +388,7 @@ export const loadModelVariants = createAsyncThunk(
 - selected model name/model id or `No model selected`,
 - a disabled AI action warning when no model is selected.
 
-- [ ] **Step 4: Add `ModelSettingsPanel`**
+- [x] **Step 4: Add `ModelSettingsPanel`**
 
 Use shadcn `Tabs`, `Button`, and `Input` if editing fields are needed. This phase may expose read/select behavior without full create/update forms. The panel must provide:
 
@@ -397,7 +397,7 @@ Use shadcn `Tabs`, `Button`, and `Input` if editing fields are needed. This phas
 - selected model disclosure,
 - load/error states.
 
-- [ ] **Step 5: Run focused tests and build**
+- [x] **Step 5: Run focused tests and build**
 
 Run:
 
@@ -419,7 +419,7 @@ Expected: both commands exit 0.
 - Modify: `frontend/src/features/assistant/AssistantDrawer.tsx`
 - Test: `frontend/src/features/skills/skillsSlice.test.ts`
 
-- [ ] **Step 1: Add slice tests**
+- [x] **Step 1: Add slice tests**
 
 Cover:
 
@@ -428,7 +428,7 @@ Cover:
 - replacing selected session skills from server data,
 - clearing project-scoped data.
 
-- [ ] **Step 2: Create thunks**
+- [x] **Step 2: Create thunks**
 
 Use existing API functions:
 
@@ -454,7 +454,7 @@ export const saveSessionSkills = createAsyncThunk(
 );
 ```
 
-- [ ] **Step 3: Replace placeholder skill chips**
+- [x] **Step 3: Replace placeholder skill chips**
 
 `SkillChipsPanel` should render real skill display names from Redux state. It should show:
 
@@ -463,11 +463,11 @@ export const saveSessionSkills = createAsyncThunk(
 - selected skill chips,
 - script-disabled disclosure when `WriterSkill` indicates scripts are disabled.
 
-- [ ] **Step 4: Add `SkillsPanel`**
+- [x] **Step 4: Add `SkillsPanel`**
 
 This panel should list installed skills and let the author select skills for the active assistant session. Use checkboxes or shadcn buttons with `aria-pressed`.
 
-- [ ] **Step 5: Run focused tests and build**
+- [x] **Step 5: Run focused tests and build**
 
 Run:
 
@@ -487,7 +487,7 @@ Expected: both commands exit 0.
 - Modify: `frontend/src/features/review/ReviewDrawer.tsx`
 - Test: `frontend/src/features/review/reviewSlice.test.ts`
 
-- [ ] **Step 1: Add slice tests**
+- [x] **Step 1: Add slice tests**
 
 Cover:
 
@@ -496,7 +496,7 @@ Cover:
 - selecting a prompt record,
 - resetting on project change.
 
-- [ ] **Step 2: Create thunks**
+- [x] **Step 2: Create thunks**
 
 Use existing API functions:
 
@@ -515,11 +515,11 @@ export const loadPromptRecords = createAsyncThunk(
 );
 ```
 
-- [ ] **Step 3: Render review tabs from real data**
+- [x] **Step 3: Render review tabs from real data**
 
 `ReviewDrawer` should keep tabs for `Reports`, `Revisions`, and `Activity`, but `Activity` must show loaded activity events and prompt records instead of static placeholder text.
 
-- [ ] **Step 4: Run focused tests and build**
+- [x] **Step 4: Run focused tests and build**
 
 Run:
 
@@ -540,7 +540,7 @@ Expected: both commands exit 0.
 - Modify: `frontend/src/features/workspace/WorkspaceShell.tsx`
 - Test: `frontend/src/features/script-runtime/scriptRuntimeSlice.test.ts`
 
-- [ ] **Step 1: Add slice tests**
+- [x] **Step 1: Add slice tests**
 
 Cover:
 
@@ -550,7 +550,7 @@ Cover:
 - updating approval status,
 - resetting project-scoped script data.
 
-- [ ] **Step 2: Create thunks**
+- [x] **Step 2: Create thunks**
 
 Use existing API functions:
 
@@ -575,7 +575,7 @@ export const setScriptApproval = createAsyncThunk(
 );
 ```
 
-- [ ] **Step 3: Add `ScriptRuntimePanel` to the Model mobile sheet or right drawer tools area**
+- [x] **Step 3: Add `ScriptRuntimePanel` to the Model mobile sheet or right drawer tools area**
 
 The panel should show:
 
@@ -584,7 +584,7 @@ The panel should show:
 - approval controls,
 - clear disabled/deferred status for scripts that cannot run.
 
-- [ ] **Step 4: Run focused tests and build**
+- [x] **Step 4: Run focused tests and build**
 
 Run:
 
@@ -602,7 +602,7 @@ Expected: both commands exit 0.
 - Modify: `frontend/src/features/workspace/WorkspacePage.tsx`
 - Test: existing feature slice tests
 
-- [ ] **Step 1: Dispatch feature resets when `projectId` changes**
+- [x] **Step 1: Dispatch feature resets when `projectId` changes**
 
 In the same effect that hydrates workspace state for a project, dispatch:
 
@@ -620,7 +620,7 @@ Then hydrate workspace state:
 dispatch(workspaceActions.hydrateProjectState(loadProjectWorkspaceState(projectId)));
 ```
 
-- [ ] **Step 2: Run all frontend tests**
+- [x] **Step 2: Run all frontend tests**
 
 Run:
 
@@ -636,7 +636,7 @@ Expected: all tests pass.
 **Files:**
 - All files changed in this plan.
 
-- [ ] **Step 1: Run final frontend verification**
+- [x] **Step 1: Run final frontend verification**
 
 Run:
 
@@ -648,7 +648,7 @@ bun run build
 
 Expected: tests pass and production build completes.
 
-- [ ] **Step 2: Run backend regression tests**
+- [x] **Step 2: Run backend regression tests**
 
 Run:
 
@@ -658,7 +658,7 @@ go test -tags sqlite_fts5 ./...
 
 Expected: all Go packages pass.
 
-- [ ] **Step 3: Run diff hygiene check**
+- [x] **Step 3: Run diff hygiene check**
 
 Run:
 
@@ -668,11 +668,11 @@ git diff --check
 
 Expected: no output.
 
-- [ ] **Step 4: Request code review**
+- [x] **Step 4: Request code review**
 
 Use CodeRabbit or the available review workflow on the final diff. Address all correctness findings before committing.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
