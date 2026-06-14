@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"os"
 	"path"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -452,4 +455,121 @@ func mediaTypeForPath(relative string) string {
 		return mediaType
 	}
 	return "text/plain; charset=utf-8"
+}
+
+func ParseSkillDirectory(dirPath string) (ImportedSkill, error) {
+	info, err := os.Stat(dirPath)
+	if err != nil {
+		return ImportedSkill{}, fmt.Errorf("stat directory: %w", err)
+	}
+	if !info.IsDir() {
+		return ImportedSkill{}, fmt.Errorf("path is not a directory: %s", dirPath)
+	}
+
+	var entries []struct {
+		rel  string
+		body string
+	}
+	err = filepath.WalkDir(dirPath, func(filePath string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(dirPath, filePath)
+		if err != nil {
+			return err
+		}
+		if safe, safeErr := safeRelativePath(rel); safeErr != nil {
+			return safeErr
+		} else {
+			rel = safe
+		}
+		raw, readErr := os.ReadFile(filePath)
+		if readErr != nil {
+			return fmt.Errorf("read %s: %w", rel, readErr)
+		}
+		if !utf8.Valid(raw) {
+			return fmt.Errorf("file %s is not valid UTF-8", rel)
+		}
+		if int64(len(raw)) > maxSkillFileBytes {
+			return fmt.Errorf("file %s exceeds max size", rel)
+		}
+		entries = append(entries, struct {
+			rel  string
+			body string
+		}{rel: rel, body: string(raw)})
+		return nil
+	})
+	if err != nil {
+		return ImportedSkill{}, fmt.Errorf("walk directory: %w", err)
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].rel < entries[j].rel })
+
+	root := ""
+	for _, entry := range entries {
+		parts := strings.SplitN(entry.rel, "/", 2)
+		if root == "" {
+			root = parts[0]
+		} else if root != parts[0] {
+			root = ""
+			break
+		}
+	}
+	if root != "" && root != "SKILL.md" {
+		for i := range entries {
+			entries[i].rel = strings.TrimPrefix(entries[i].rel, root+"/")
+		}
+	}
+
+	var skillFile *struct {
+		rel  string
+		body string
+	}
+	for i := range entries {
+		if entries[i].rel == "SKILL.md" {
+			skillFile = &entries[i]
+			break
+		}
+	}
+	if skillFile == nil {
+		return ImportedSkill{}, fmt.Errorf("skill directory must contain SKILL.md")
+	}
+
+	frontmatter, instructions, err := parseSkillMarkdown(skillFile.body)
+	if err != nil {
+		return ImportedSkill{}, err
+	}
+	name, err := normalizeSkillName(frontmatter.Name)
+	if err != nil {
+		return ImportedSkill{}, fmt.Errorf("skill frontmatter name: %w", err)
+	}
+
+	imported := ImportedSkill{
+		Name:                 name,
+		DisplayName:          frontmatter.Name,
+		Description:          frontmatter.Description,
+		InstructionsMarkdown: strings.TrimSpace(instructions),
+		MetadataJSON:         frontmatterMetadataJSON(frontmatter),
+		SourceLabel:          dirPath,
+		ScriptsDisabled:      true,
+		RoutingHints:         frontmatter.routingHints(),
+	}
+	for _, entry := range entries {
+		purpose, disabled := classifySkillFile(entry.rel)
+		file := ImportedSkillFile{
+			RelativePath:   entry.rel,
+			Purpose:        purpose,
+			MediaType:      mediaTypeForPath(entry.rel),
+			BodyText:       entry.body,
+			Bytes:          int64(len([]byte(entry.body))),
+			ScriptDisabled: disabled,
+		}
+		if purpose == FilePurposeScript {
+			imported.ScriptCount++
+		}
+		imported.Files = append(imported.Files, file)
+	}
+	return imported, nil
 }

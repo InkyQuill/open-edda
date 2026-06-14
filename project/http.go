@@ -69,6 +69,7 @@ func RegisterRoutes(r chi.Router, service *Service) {
 	r.Get("/projects/{projectID}/content/{contentID}", h.getContent)
 	r.Put("/projects/{projectID}/content/{contentID}", h.updateContent)
 	r.Get("/projects/{projectID}/content/{contentID}/revisions", h.listRevisions)
+	r.Get("/projects/{projectID}/map", h.projectMap)
 }
 
 func (h httpHandler) listProjects(w http.ResponseWriter, r *http.Request) {
@@ -257,6 +258,15 @@ func (h httpHandler) listRevisions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, revisions)
+}
+
+func (h httpHandler) projectMap(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.ProjectMap(r.Context(), chi.URLParam(r, "projectID"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func importedItemFromContent(item ContentItem, sections []EntrySection, relations []EntryRelation) markdownio.ImportedItem {
