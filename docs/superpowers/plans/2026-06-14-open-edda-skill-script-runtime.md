@@ -1693,7 +1693,7 @@ git commit -m "docs: document skill script runtime policy"
 - No new files.
 - Verify all modified files from Tasks 1-7.
 
-- [ ] **Step 1: Run backend tests**
+- [x] **Step 1: Run backend tests**
 
 Run:
 
@@ -1703,7 +1703,7 @@ go test -tags sqlite_fts5 ./...
 
 Expected: PASS for all packages.
 
-- [ ] **Step 2: Run frontend checks**
+- [x] **Step 2: Run frontend checks**
 
 Run:
 
@@ -1715,7 +1715,7 @@ bun run build
 
 Expected: both PASS.
 
-- [ ] **Step 3: Run focused grep checks**
+- [x] **Step 3: Run focused grep checks**
 
 Run:
 
@@ -1730,7 +1730,7 @@ Expected:
 - `skill_script` appears in tool definition, execution, tests, and docs.
 - `Runtime helpers` appears in the Skill detail UI.
 
-- [ ] **Step 4: Manual browser smoke test**
+- [x] **Step 4: Manual browser smoke test**
 
 Run:
 
@@ -1749,7 +1749,7 @@ Expected:
 - Enabling a script with an empty command is blocked.
 - Enabling a script with `allowNetwork` or `allowProjectFiles` cannot be done through UI defaults.
 
-- [ ] **Step 5: Commit final fixes if any**
+- [x] **Step 5: Commit final fixes if any**
 
 If Step 1-4 required fixes:
 
