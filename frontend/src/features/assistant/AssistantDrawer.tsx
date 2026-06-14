@@ -7,6 +7,9 @@ import { Button } from "../../shared/ui/button";
 import { Textarea } from "../../shared/ui/textarea";
 import { ModelStatus } from "../model-settings/ModelStatus";
 import { SkillChipsPanel } from "../skills/SkillChipsPanel";
+import { SkillsPanel } from "../skills/SkillsPanel";
+import { skillsActions } from "../skills/skillsSlice";
+import { loadProjectSkills, loadSessionSkills } from "../skills/skillsThunks";
 import { assistantActions } from "./assistantSlice";
 import {
   loadAssistantMessages,
@@ -31,25 +34,32 @@ export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
     sessionsStatus,
   } = useSelector((state: RootState) => state.assistant);
   const activeModelVariantId = useSelector((state: RootState) => state.modelSettings.activeModelVariantId);
-  const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
-  const activeMessages = activeSessionId ? (messagesBySessionId[activeSessionId] ?? []) : [];
+  const activeSession = sessions.find((session) => session.id === activeSessionId && session.projectId === projectId) ?? null;
+  const activeSessionIdForProject = activeSession?.id ?? null;
+  const activeMessages = activeSessionIdForProject ? (messagesBySessionId[activeSessionIdForProject] ?? []) : [];
   const trimmedDraft = draftMessage.trim();
   const isSending = messagesStatus === "pending";
   const isStarting = sessionsStatus === "pending";
   const sessionModelVariantId = activeSession?.modelVariantId || null;
   const chatModelVariantId = activeModelVariantId ?? sessionModelVariantId;
   const canStartChat = Boolean(chatModelVariantId);
-  const canSend = Boolean(activeSessionId && sessionModelVariantId && trimmedDraft);
+  const canSend = Boolean(activeSessionIdForProject && sessionModelVariantId && trimmedDraft);
 
   useEffect(() => {
     dispatch(assistantActions.resetForProject());
+    dispatch(skillsActions.resetForProject());
     void dispatch(loadAssistantSessions({ projectId }));
+    void dispatch(loadProjectSkills({ projectId }));
   }, [dispatch, projectId]);
 
   useEffect(() => {
-    if (!activeSessionId) return;
-    void dispatch(loadAssistantMessages({ projectId, sessionId: activeSessionId }));
-  }, [activeSessionId, dispatch, projectId]);
+    if (!activeSessionIdForProject) {
+      dispatch(skillsActions.replaceSelectedSkillIds([]));
+      return;
+    }
+    void dispatch(loadAssistantMessages({ projectId, sessionId: activeSessionIdForProject }));
+    void dispatch(loadSessionSkills({ projectId, sessionId: activeSessionIdForProject }));
+  }, [activeSessionIdForProject, dispatch, projectId]);
 
   function handleNewChat(): void {
     if (!chatModelVariantId) return;
@@ -57,8 +67,8 @@ export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
   }
 
   function handleSend(): void {
-    if (!canSend || !activeSessionId) return;
-    void dispatch(sendAssistantMessage({ projectId, sessionId: activeSessionId, bodyMarkdown: trimmedDraft }));
+    if (!canSend || !activeSessionIdForProject) return;
+    void dispatch(sendAssistantMessage({ projectId, sessionId: activeSessionIdForProject, bodyMarkdown: trimmedDraft }));
   }
 
   return (
@@ -131,7 +141,7 @@ export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
             onChange={(event) => dispatch(assistantActions.setDraftMessage(event.target.value))}
             placeholder="Message the assistant..."
             aria-label="Assistant message"
-            disabled={!activeSessionId || !sessionModelVariantId || isSending}
+            disabled={!activeSessionIdForProject || !sessionModelVariantId || isSending}
           />
           <Button
             type="button"
@@ -160,6 +170,7 @@ export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
       </section>
 
       <SkillChipsPanel />
+      <SkillsPanel projectId={projectId} sessionId={activeSessionIdForProject} />
       <ModelStatus />
     </aside>
   );
