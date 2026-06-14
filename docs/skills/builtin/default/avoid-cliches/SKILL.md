@@ -43,7 +43,7 @@ Originality help that preserves what a story element needs to do while making it
 - The author wants random weirdness instead of purposeful specificity.
 - The task is mainly copyediting or proofing.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the target passage, note, or canon entry in context.
 2. Identify the function that the current element must preserve.
@@ -51,7 +51,7 @@ Originality help that preserves what a story element needs to do while making it
 4. Generate alternatives that keep the same story job while moving toward more specific, fertile choices.
 5. Prefer fit, pressure, and consequence over novelty for its own sake.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the originality diagnosis and option set in chat by default.
 - Create an Attached Note when the work belongs to one chapter or one local trope problem.
@@ -61,4 +61,4 @@ Originality help that preserves what a story element needs to do while making it
 
 ## Script Compatibility
 
-This rewrite adapts source originality frameworks into Writer-native questioning, comparison, and option generation. Source helpers are not runnable in Milestone 3.5.
+This rewrite adapts source originality frameworks into Edda-native questioning, comparison, and option generation. Source helpers are not runnable in Milestone 3.5.

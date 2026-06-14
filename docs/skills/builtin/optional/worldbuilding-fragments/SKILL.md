@@ -42,7 +42,7 @@ Indirect worldbuilding for authors who want fragments, documents, sayings, epigr
 - The fragment would confuse the reader more than enrich the scene.
 - The author wants major Story Text changes without explicitly asking for them.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the target Chapter, Story Text, or Story Bible context.
 2. Identify what system, conflict, or cultural blind spot the fragment should reveal.
@@ -50,7 +50,7 @@ Indirect worldbuilding for authors who want fragments, documents, sayings, epigr
 4. Draft a fragment that implies more than it explains.
 5. Keep canon claims reviewable until the author confirms them.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return fragments in chat by default.
 - Create an Attached Note when the fragment belongs to one Chapter or one local scene problem.
@@ -60,4 +60,4 @@ Indirect worldbuilding for authors who want fragments, documents, sayings, epigr
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Writer-native fragment drafting and note output.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Edda-native fragment drafting and note output.

@@ -41,7 +41,7 @@ Team-story planning for authors who want misfits, institutional rejects, or ligh
 - The team already has too many advantages or too little friction.
 - The request is mainly about national politics or world systems instead of the team.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the relevant Story Text, team notes, and any institutional context.
 2. Define the mandate, the constraints, and why this group ended up together.
@@ -49,7 +49,7 @@ Team-story planning for authors who want misfits, institutional rejects, or ligh
 4. Map how success creates new problems instead of easy validation.
 5. Draft or revise only when the author explicitly asks for applied story work.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the team design in chat by default.
 - Create an Attached Note when the work belongs to one Chapter cluster or one team problem.
@@ -59,4 +59,4 @@ Team-story planning for authors who want misfits, institutional rejects, or ligh
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Writer-native team design and revision guidance.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Edda-native team design and revision guidance.

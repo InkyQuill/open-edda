@@ -42,7 +42,7 @@ Settlement design for authors who want places to grow from geography, history, l
 - The work is really about broad government or economy rather than one place.
 - The author wants fixed canon without exploratory place design.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the relevant Story Bible material and any Chapters already set in the location.
 2. Identify why the settlement exists, how it grew, and what constraints shaped it.
@@ -50,7 +50,7 @@ Settlement design for authors who want places to grow from geography, history, l
 4. Link place design to story movement, access, pressure, and conflict.
 5. Keep exploratory geography separate from confirmed canon until the author approves it.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the place model in chat by default.
 - Create an Attached Note when the work supports one Chapter or one immediate location problem.
@@ -60,4 +60,4 @@ Settlement design for authors who want places to grow from geography, history, l
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Writer-native place design, analysis, and canon-safe proposals.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Edda-native place design, analysis, and canon-safe proposals.

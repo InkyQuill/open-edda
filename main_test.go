@@ -12,13 +12,13 @@ import (
 )
 
 func TestBuildDependenciesMountsProjectRoutes(t *testing.T) {
-	t.Setenv("WRITER_DB_PATH", filepath.Join(t.TempDir(), "writer.db"))
-	t.Setenv("WRITER_MIGRATIONS_PATH", "migrations")
+	t.Setenv("OPEN_EDDA_DB_PATH", filepath.Join(t.TempDir(), "edda.db"))
+	t.Setenv("OPEN_EDDA_MIGRATIONS_PATH", "migrations")
 	staticPath := t.TempDir()
 	if err := os.WriteFile(filepath.Join(staticPath, "index.html"), []byte("<!doctype html><html></html>"), 0o644); err != nil {
 		t.Fatalf("write static index: %v", err)
 	}
-	t.Setenv("WRITER_STATIC_PATH", staticPath)
+	t.Setenv("OPEN_EDDA_STATIC_PATH", staticPath)
 
 	deps, cleanup, err := buildDependencies()
 	if err != nil {
@@ -41,9 +41,9 @@ func TestBuildDependenciesMountsProjectRoutes(t *testing.T) {
 }
 
 func TestBuildDependenciesRequiresFrontendBuild(t *testing.T) {
-	t.Setenv("WRITER_DB_PATH", filepath.Join(t.TempDir(), "writer.db"))
-	t.Setenv("WRITER_MIGRATIONS_PATH", "migrations")
-	t.Setenv("WRITER_STATIC_PATH", t.TempDir())
+	t.Setenv("OPEN_EDDA_DB_PATH", filepath.Join(t.TempDir(), "edda.db"))
+	t.Setenv("OPEN_EDDA_MIGRATIONS_PATH", "migrations")
+	t.Setenv("OPEN_EDDA_STATIC_PATH", t.TempDir())
 
 	deps, cleanup, err := buildDependencies()
 	if err == nil {

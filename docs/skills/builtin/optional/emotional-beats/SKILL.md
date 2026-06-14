@@ -40,7 +40,7 @@ Emotional beat shaping for authors who want scenes, chapters, or outlines to lan
 - The author wants broad developmental diagnosis more than beat work.
 - The target text is not ready for emotional shaping yet.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the target Chapter, Story Text, or outline note in context.
 2. Identify the intended emotional promise and the current on-page effect.
@@ -48,7 +48,7 @@ Emotional beat shaping for authors who want scenes, chapters, or outlines to lan
 4. Suggest beat changes, bridge scenes, or sharper setup/payoff links.
 5. Rewrite only if the author explicitly asks for applied beat changes.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the beat map and recommendations in chat by default.
 - Create an Attached Note when the beat work belongs to one Chapter or one selection.
@@ -58,4 +58,4 @@ Emotional beat shaping for authors who want scenes, chapters, or outlines to lan
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Writer-native beat analysis and revision guidance.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Edda-native beat analysis and revision guidance.

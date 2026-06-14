@@ -43,7 +43,7 @@ Systems-first worldbuilding for authors who want second-order and third-order co
 - The world problem is narrowly about one institution such as religion or trade; a specialized optional skill may fit better.
 - The author wants canon locked immediately without exploration.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the relevant Story Bible material and the story pressures already on the page.
 2. Define the divergence point, environmental constraint, or closed-loop condition being tested.
@@ -51,7 +51,7 @@ Systems-first worldbuilding for authors who want second-order and third-order co
 4. Highlight contradictions that create story tension rather than smoothing them away.
 5. Separate exploratory world logic from confirmed canon until the author chooses what to keep.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the consequence map in chat by default.
 - Create an Attached Note when the system work supports one Chapter or one immediate plot pressure.
@@ -61,4 +61,4 @@ Systems-first worldbuilding for authors who want second-order and third-order co
 
 ## Script Compatibility
 
-These source skills are text-first and require no runnable helpers for the Milestone 3.5 rewrite. The skill works through Writer-native systems analysis, guidance, and canon-safe proposal output.
+These source skills are text-first and require no runnable helpers for the Milestone 3.5 rewrite. The skill works through Edda-native systems analysis, guidance, and canon-safe proposal output.

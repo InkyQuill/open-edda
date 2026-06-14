@@ -42,7 +42,7 @@ Economic worldbuilding for authors who want resource logic, labor structures, ma
 - The author only needs decorative trade terms.
 - The author wants final canon answers without exploratory modeling.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the relevant Story Bible material and any story scenes that rely on economic pressure.
 2. Identify the resource base, labor model, exchange system, and who controls access.
@@ -50,7 +50,7 @@ Economic worldbuilding for authors who want resource logic, labor structures, ma
 4. Check whether the current world logic supports the desired stakes.
 5. Keep exploratory models separate from confirmed canon until the author approves them.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the economic model in chat by default.
 - Create an Attached Note when the analysis serves one Chapter, one faction, or one local conflict.
@@ -60,4 +60,4 @@ Economic worldbuilding for authors who want resource logic, labor structures, ma
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Writer-native system design and reviewable canon proposals.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Edda-native system design and reviewable canon proposals.

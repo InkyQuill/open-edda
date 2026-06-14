@@ -40,7 +40,7 @@ Focused dialogue review for authors who need to know why a conversation feels fl
 - The main problem is scene structure or chapter pacing rather than dialogue.
 - The author is still in early brainstorming and has no text to inspect.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the target exchange in chapter context.
 2. Check voice distinction, subtext, dramatic function, and pacing.
@@ -48,7 +48,7 @@ Focused dialogue review for authors who need to know why a conversation feels fl
 4. Give revision directions and targeted questions instead of supplying replacement lines by default.
 5. If the author later asks for applied rewriting, hand off to a rewrite workflow or `$story-collaborator`.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the diagnosis in chat for quick review.
 - Create an Attached Note when the report belongs to a chapter or selected exchange.
@@ -58,4 +58,4 @@ Focused dialogue review for authors who need to know why a conversation feels fl
 
 ## Script Compatibility
 
-This rewrite adapts source dialogue audits into Writer-native checklists and reports. Source helpers are not runnable in Milestone 3.5.
+This rewrite adapts source dialogue audits into Edda-native checklists and reports. Source helpers are not runnable in Milestone 3.5.

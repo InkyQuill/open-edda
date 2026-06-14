@@ -40,7 +40,7 @@ Drafting support for authors who need momentum, forward motion, and workable rou
 - The draft is complete and the task is revision or polish.
 - The author only wants coaching and no text generation at all.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the chapter context, Writing Brief, and any immediate story constraints.
 2. Decide whether the author needs momentum coaching, a rough continuation, or a light rewrite to unstick the draft.
@@ -48,7 +48,7 @@ Drafting support for authors who need momentum, forward motion, and workable rou
 4. Label any generated text as draft material unless the author explicitly asks to apply it.
 5. Push toward completion of the current unit before fine polishing.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return short momentum prompts or rough draft options in chat when the author is still choosing direction.
 - Create an Attached Note when a chapter-specific rough pass should stay separate from Story Text for review.
@@ -58,4 +58,4 @@ Drafting support for authors who need momentum, forward motion, and workable rou
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Writer-native drafting support and explicit text actions.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Edda-native drafting support and explicit text actions.

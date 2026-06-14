@@ -40,7 +40,7 @@ Bedtime-story support for authors creating calm, low-stakes fiction meant to soo
 - The request is mainly about meditation instruction rather than fiction.
 - The author wants a conventional dramatic ending.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Identify the intended delivery mode, perspective, and calming setting.
 2. Build around gentle movement, sensory repetition, and low cognitive load.
@@ -48,7 +48,7 @@ Bedtime-story support for authors creating calm, low-stakes fiction meant to soo
 4. Keep the emotional palette safe, warm, and easy to drift away from.
 5. Draft or rewrite only within the explicit scope the author requests.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the sleep-story draft or guidance in chat by default.
 - Create an Attached Note when the draft belongs to one story attempt or one scene.
@@ -58,4 +58,4 @@ Bedtime-story support for authors creating calm, low-stakes fiction meant to soo
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Writer-native drafting and revision guidance.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Edda-native drafting and revision guidance.

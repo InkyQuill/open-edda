@@ -1,4 +1,4 @@
-# Writer Roadmap
+# Open Edda Roadmap
 
 This roadmap tracks product milestones separately from implementation plans. Detailed task plans live in `docs/superpowers/plans/`.
 
@@ -10,7 +10,7 @@ This roadmap tracks product milestones separately from implementation plans. Det
 | 2 | Agent Core | Implemented | `docs/superpowers/plans/2026-06-13-writer-agent-core.md` |
 | 3 | Skill Core | Planned | `docs/superpowers/plans/2026-06-13-writer-skill-core.md` |
 | 3.5 | Elysium Skill Library Rewrite | Planned | `docs/superpowers/plans/2026-06-14-writer-skill-library-rewrite.md` |
-| 3.6 | Skill Script Runtime | Planned | Needs dedicated plan after Milestone 3.5 script audit |
+| 3.6 | Skill Script Runtime | Planned | `docs/superpowers/plans/2026-06-14-open-edda-skill-script-runtime.md` |
 | 4 | Daily Writing Polish | Planned | Needs dedicated plan |
 | Later | Local Sync And Collaboration | Deferred | Needs specs after v1 is stable |
 
@@ -52,12 +52,12 @@ After Skill Core exists and before Daily Writing Polish, rewrite the current Ely
 
 `/home/inky/Документы/elysium/.agents/skills`
 
-The rewrite should make these skills first-class Writer skills instead of terminal-agent skills. The work is not just import cleanup: each skill needs an importance decision, routing metadata, updated tool names, and structure aligned with Writer's exposed agent tools.
+The rewrite should make these skills first-class Open Edda skills instead of terminal-agent skills. The work is not just import cleanup: each skill needs an importance decision, routing metadata, updated tool names, and structure aligned with Open Edda's exposed agent tools.
 
 ### Rewrite Goals
 
-- Convert each `SKILL.md` to Writer-compatible frontmatter: `name`, `description`, `route.actionKinds`, `route.contentKinds`, `route.tags`, and `route.priority`.
-- Replace terminal/file-operation instructions with Writer tools:
+- Convert each `SKILL.md` to Open Edda-compatible frontmatter: `name`, `description`, `route.actionKinds`, `route.contentKinds`, `route.tags`, and `route.priority`.
+- Replace terminal/file-operation instructions with Open Edda tools:
   - `project_map`
   - `search_content`
   - `read_content`
@@ -74,11 +74,11 @@ The rewrite should make these skills first-class Writer skills instead of termin
 - Remove or rewrite references to shell commands, local script execution, direct filesystem edits, and terminal-agent-only assumptions.
 - Move reusable examples/checklists into `templates/`, `references/`, or `data/` where useful.
 - Preserve script files only when they are useful as reference algorithms; mark them as disabled and rewrite instructions so the model does not ask to execute them.
-- Audit every bundled script for destructive behavior, filesystem assumptions, runtime requirements, and whether it remains useful in a database-backed Writer project.
+- Audit every bundled script for destructive behavior, filesystem assumptions, runtime requirements, and whether it remains useful in a database-backed Open Edda project.
 - Defer any skill whose core value depends on running scripts until the Skill Script Runtime exists.
-- Keep a script-bearing skill in Milestone 3.5 only when the script is an optional accelerator and the skill can provide clear value through Writer-native agent instructions, data, templates, or references without executing the script.
-- Keep scripts only when they are safe, useful, and can be made runnable through Writer's future script runtime.
-- Decide which skills should ship with Writer as default authoring aids, which should be optional, and which should be archived.
+- Keep a script-bearing skill in Milestone 3.5 only when the script is an optional accelerator and the skill can provide clear value through Edda-native agent instructions, data, templates, or references without executing the script.
+- Keep scripts only when they are safe, useful, and can be made runnable through Open Edda's future script runtime.
+- Decide which skills should ship with Open Edda as default authoring aids, which should be optional, and which should be archived.
 
 ### Skill Library Decisions
 
@@ -88,25 +88,25 @@ The high-level policy is:
 
 - Daily fiction-writing skills are enabled by default.
 - Specialized but useful writing skills are installed as optional skills and disabled by default.
-- Skills outside Writer's fiction-writing focus, or skills whose core value depends on scripts, are archived or deferred.
+- Skills outside Open Edda's fiction-writing focus, or skills whose core value depends on scripts, are archived or deferred.
 - `$` is the skill mention prefix, `/` remains a command prefix, and `@` is reserved for entity mentions.
 
 ### Required Output
 
-- A rewritten skill library under a Writer-compatible source folder.
+- A rewritten skill library under a Open Edda-compatible source folder.
 - A manifest documenting default, optional, and archived skills.
 - Tests or fixture imports proving every rewritten skill imports through Milestone 3 Skill Core.
 - A short compatibility note for each script-heavy skill explaining whether the script was removed, retained for the future script runtime, converted to data/template/reference material, or deferred until database-backed script adapters exist.
-- Skill browser disclosure for script-bearing skills, including whether script support is deferred and whether the skill still works through Writer-native agent guidance.
+- Skill browser disclosure for script-bearing skills, including whether script support is deferred and whether the skill still works through Edda-native agent guidance.
 
 ## Milestone 3.6: Skill Script Runtime
 
-Add a safe runtime for audited skill helper scripts after the built-in skill library has been reviewed. The runtime should let useful scripts run against Writer project data without assuming a local Markdown folder is the project source of truth.
+Add a safe runtime for audited skill helper scripts after the built-in skill library has been reviewed. The runtime should let useful scripts run against Open Edda project data without assuming a local Markdown folder is the project source of truth.
 
 Acceptance target:
 
 - Each runnable skill script has an audit record covering destructive operations, filesystem access, network access, runtime dependencies, expected inputs, and expected outputs.
-- Scripts run through Writer-provided scaffolding that can fetch chapters, Story Bible Entries, Entry Sections, Project Notes, Attached Notes, and skill assets from the database.
+- Scripts run through Open Edda-provided scaffolding that can fetch chapters, Story Bible Entries, Entry Sections, Project Notes, Attached Notes, and skill assets from the database.
 - Scripts cannot directly mutate Story Text or Story Bible content. They return structured proposals, reports, generated data, or draft outputs that the author can review before applying.
 - Admin controls can enable, disable, and inspect runnable scripts per built-in or imported skill.
 - Skills with missing or disabled script support degrade clearly in the agent session instead of asking the author to run terminal commands.
@@ -132,10 +132,10 @@ Acceptance target:
 
 ## Later: Story Consistency Dashboard
 
-Adapt the useful parts of the deferred `story-zoom` skill into a Writer-native consistency dashboard after the main writing workflow is stable. The dashboard should help authors see drift between the Writing Brief, Story Text, Story Bible Entries, Entry Sections, Project Notes, and recent revisions without relying on file watchers or script execution.
+Adapt the useful parts of the deferred `story-zoom` skill into an Edda-native consistency dashboard after the main writing workflow is stable. The dashboard should help authors see drift between the Writing Brief, Story Text, Story Bible Entries, Entry Sections, Project Notes, and recent revisions without relying on file watchers or script execution.
 
 Acceptance target:
 
-- Writer can surface likely inconsistencies across story levels using database-backed project state and agent-readable summaries.
+- Open Edda can surface likely inconsistencies across story levels using database-backed project state and agent-readable summaries.
 - Authors can review suggested consistency fixes before any Story Text or Story Bible changes are applied.
 - The workflow remains optional and does not block ordinary drafting or revision.

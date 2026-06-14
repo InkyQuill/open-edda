@@ -42,7 +42,7 @@ func TestHealth(t *testing.T) {
 func TestStaticFrontendServesIndexAndKeepsAPINotFound(t *testing.T) {
 	handler := New(&Dependencies{
 		StaticFS: fstest.MapFS{
-			"index.html": {Data: []byte("<!doctype html><html><body>Writer</body></html>")},
+			"index.html": {Data: []byte("<!doctype html><html><body>Edda</body></html>")},
 		},
 	})
 
@@ -450,7 +450,7 @@ func newTestApp(t *testing.T) http.Handler {
 func openMigratedTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 
-	db, err := store.Open(filepath.Join(t.TempDir(), "writer.db"))
+	db, err := store.Open(filepath.Join(t.TempDir(), "edda.db"))
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}

@@ -42,7 +42,7 @@ Political worldbuilding for authors who need power structures, legitimacy, facti
 - The world only needs a decorative title hierarchy.
 - The author wants to freeze canon before exploring alternatives.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the relevant Story Bible context and any Chapters already using the polity.
 2. Define how authority is claimed, distributed, resisted, and enforced.
@@ -50,7 +50,7 @@ Political worldbuilding for authors who need power structures, legitimacy, facti
 4. Check whether the current structure supports the story's conflicts and scale.
 5. Keep proposed institutional facts reviewable until the author confirms them.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the governance model in chat by default.
 - Create an Attached Note when the work serves one Chapter, one polity, or one conflict.
@@ -60,4 +60,4 @@ Political worldbuilding for authors who need power structures, legitimacy, facti
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Writer-native political analysis and canon-safe proposal output.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Edda-native political analysis and canon-safe proposal output.

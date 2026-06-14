@@ -41,7 +41,7 @@ Revision help for authors who have draft material and need an ordered way to imp
 - The main task is worldbuilding or outlining.
 - The author wants sentence-level polish before structure is stable.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the draft scope and identify whether the next pass is developmental, scene-level, dialogue-level, or line-level.
 2. Name the current revision problem clearly.
@@ -49,7 +49,7 @@ Revision help for authors who have draft material and need an ordered way to imp
 4. Apply rewrites only to the scope the author has chosen.
 5. Keep large structural recommendations separate from small wording fixes.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the revision diagnosis and pass order in chat by default.
 - Create an Attached Note when the report belongs to one chapter or one revision pass.
@@ -59,4 +59,4 @@ Revision help for authors who have draft material and need an ordered way to imp
 
 ## Script Compatibility
 
-This rewrite adapts source revision-audit logic into Writer-native pass planning and review checklists. Source helpers are not runnable in Milestone 3.5.
+This rewrite adapts source revision-audit logic into Edda-native pass planning and review checklists. Source helpers are not runnable in Milestone 3.5.

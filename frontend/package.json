@@ -1,5 +1,5 @@
 {
-  "name": "writer-frontend",
+  "name": "open-edda-frontend",
   "private": true,
   "type": "module",
   "scripts": {

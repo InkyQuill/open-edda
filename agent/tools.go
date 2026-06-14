@@ -42,7 +42,7 @@ func ContextToolDefinitions() []CompletionTool {
 			"heading":   map[string]any{"type": "string"},
 		}, "contentId", "heading")),
 		contextTool("list_revisions", "List revisions for one content item.", contentIDSchema()),
-		contextTool("skill", "Load one installed Writer skill by ID when the task matches the available skill guidance. Returns instructions and inert supporting files. Bundled scripts are never executed.", objectSchema(map[string]any{
+		contextTool("skill", "Load one installed Edda skill by ID when the task matches the available skill guidance. Returns instructions and inert supporting files. Bundled scripts are never executed.", objectSchema(map[string]any{
 			"skillId": map[string]any{"type": "string"},
 		}, "skillId")),
 		contextTool("append_to_chapter", "Append generated Markdown to the end of a chapter.", structuredWriteSchema(nil)),

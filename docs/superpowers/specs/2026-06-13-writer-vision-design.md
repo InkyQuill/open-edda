@@ -1,10 +1,10 @@
-# Writer Vision Design
+# Open Edda Vision Design
 
 ## Purpose
 
-Writer is a private, self-hosted AI Writing Studio for hobby novelists. Its core promise is that an author can work with an AI agent over the whole Story Project, not only the current text selection, while keeping ownership, privacy, Markdown portability, and revision safety. It also allows to not be tied to any human language, as models became good enough to produce good results in common ones. No more English-only like in Sudowrite/NovelAI.
+Open Edda is a private, self-hosted AI writing studio for hobby novelists. Its core promise is that an author can work with an AI agent over the whole Story Project, not only the current text selection, while keeping ownership, privacy, Markdown portability, and revision safety. It also allows to not be tied to any human language, as models became good enough to produce good results in common ones. No more English-only like in Sudowrite/NovelAI.
 
-This matters because the target workflow already proved itself in local terminal-agent editing: an AI assistant can navigate story text, story bible material, and project-specific skills, then perform large coherent revisions that current hosted writing products do not handle well. Writer preserves that breakthrough and makes it available through a browser-friendly writing environment.
+This matters because the target workflow already proved itself in local terminal-agent editing: an AI assistant can navigate story text, story bible material, and project-specific skills, then perform large coherent revisions that current hosted writing products do not handle well. Open Edda preserves that breakthrough and makes it available through a browser-friendly writing environment.
 
 ## Scope
 
@@ -71,7 +71,7 @@ Skills are project-installable agent procedures. A Skill can include instruction
 
 ## Architecture
 
-Writer is one self-hosted deployable. The Go backend serves the API and the built React frontend. During development, the frontend and backend can run separately with a dev proxy.
+Open Edda is one self-hosted deployable. The Go backend serves the API and the built React frontend. During development, the frontend and backend can run separately with a dev proxy.
 
 The React frontend is required because Galley Editor is the intended Markdown-native editing foundation. Galley Editor is used for Chapters and other Markdown-based content.
 
@@ -100,7 +100,7 @@ The backend owns:
 
 ## Agent Workflow
 
-Writer has one agent system with two entry styles:
+Open Edda has one agent system with two entry styles:
 
 - Conversational chat.
 - Editor quick actions.
@@ -190,7 +190,7 @@ A later Local Sync Tool will detect local Markdown changes and replay them into 
 
 ## Privacy And Trust
 
-Writer is private by default. Story Project content, revisions, Prompt Records, Activity Trails, provider keys, exports, skills, and settings are private to the authenticated Author.
+Open Edda is private by default. Story Project content, revisions, Prompt Records, Activity Trails, provider keys, exports, skills, and settings are private to the authenticated Author.
 
 V1 uses normal password auth with one admin author by default. There is no public registration, invitation flow, role system, or collaboration model in v1.
 
@@ -200,16 +200,16 @@ Activity Trails are compact by default, such as an `actions: 32` pill, and expan
 
 Prompt Records are separate advanced/debug records of raw assembled model inputs and outputs. They are subject to retention controls and must never include provider secrets.
 
-Provider usage accounting is part of Prompt Records and Activity Trails. Writer stores provider-neutral token buckets: uncached input, output, cache read, cache write, total tokens, and per-bucket estimated cost. This is required for OpenAI-compatible providers with prompt-cache reporting, including DeepSeek-style APIs where cache-hit tokens are billed differently from ordinary input tokens. Model variants therefore store per-million-token prices for input, output, cache read, and cache write, plus provider compatibility metadata such as the request token field and thinking/reasoning format.
+Provider usage accounting is part of Prompt Records and Activity Trails. Open Edda stores provider-neutral token buckets: uncached input, output, cache read, cache write, total tokens, and per-bucket estimated cost. This is required for OpenAI-compatible providers with prompt-cache reporting, including DeepSeek-style APIs where cache-hit tokens are billed differently from ordinary input tokens. Model variants therefore store per-million-token prices for input, output, cache read, and cache write, plus provider compatibility metadata such as the request token field and thinking/reasoning format.
 
 ## Research Notes
 
 Two existing agent systems informed the Agent Core design:
 
-- OpenCode separates durable session history from provider-turn System Context, using stable Context Sources and safe provider-turn boundaries. Writer adopts the useful part: named prompt context sources with stored snapshots and deterministic admission, but keeps the implementation smaller and project-specific.
-- OpenCode also bounds model-visible tool output and stores full output separately. Writer applies the same principle to retrieval/read tools so a large Story Bible or search result cannot dominate the next prompt.
-- Pi keeps provider usage in normalized buckets: input, output, cache read, cache write, total tokens, and cost for each bucket. Writer adopts this accounting shape because it maps cleanly to DeepSeek/OpenAI-compatible cache usage and makes spend visible without provider-specific UI.
-- Pi’s agent loop treats model calls, tool execution, and follow-up turns as explicit events. Writer does not need Pi’s full streaming loop in Milestone 2, but Activity Trails should use similarly explicit events for provider turn started/finished, tool called, tool result bounded, structured write applied, candidate accepted/rejected, and prompt record stored.
+- OpenCode separates durable session history from provider-turn System Context, using stable Context Sources and safe provider-turn boundaries. Open Edda adopts the useful part: named prompt context sources with stored snapshots and deterministic admission, but keeps the implementation smaller and project-specific.
+- OpenCode also bounds model-visible tool output and stores full output separately. Open Edda applies the same principle to retrieval/read tools so a large Story Bible or search result cannot dominate the next prompt.
+- Pi keeps provider usage in normalized buckets: input, output, cache read, cache write, total tokens, and cost for each bucket. Open Edda adopts this accounting shape because it maps cleanly to DeepSeek/OpenAI-compatible cache usage and makes spend visible without provider-specific UI.
+- Pi’s agent loop treats model calls, tool execution, and follow-up turns as explicit events. Open Edda does not need Pi’s full streaming loop in Milestone 2, but Activity Trails should use similarly explicit events for provider turn started/finished, tool called, tool result bounded, structured write applied, candidate accepted/rejected, and prompt record stored.
 
 ## Roadmap
 

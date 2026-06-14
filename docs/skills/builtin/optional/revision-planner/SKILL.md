@@ -40,7 +40,7 @@ Revision planning for authors who need to sequence big changes, track ripple eff
 - The work is still in early discovery drafting.
 - The request is mainly sentence polish.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the relevant Chapter, Story Text, and any linked notes or canon context.
 2. Identify the change level: concept, structure, scene, or line.
@@ -48,7 +48,7 @@ Revision planning for authors who need to sequence big changes, track ripple eff
 4. Turn that map into a practical pass order with warning signs to watch for.
 5. Keep canon implications separate until the author confirms them.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the pass plan in chat for quick discussion.
 - Create an Attached Note when the plan belongs to one Chapter or one local change.
@@ -58,4 +58,4 @@ Revision planning for authors who need to sequence big changes, track ripple eff
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Writer-native revision planning and note output.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Edda-native revision planning and note output.

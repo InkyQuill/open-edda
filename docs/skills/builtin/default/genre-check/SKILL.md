@@ -39,7 +39,7 @@ Genre diagnosis for authors who need to confirm what emotional promise the story
 - The request is mainly about setting details rather than reader expectation.
 - The author wants the skill to choose a genre identity by force.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the relevant chapter, note, or Writing Brief.
 2. Identify the likely primary emotional promise and any meaningful secondary genres.
@@ -47,7 +47,7 @@ Genre diagnosis for authors who need to confirm what emotional promise the story
 4. Call out missing conventions, misplaced emphasis, or stale defaults.
 5. Recommend next steps or hand off to a more specific skill when needed.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the genre diagnosis in chat by default.
 - Create an Attached Note when the report belongs to one chapter or one local promise problem.
@@ -57,4 +57,4 @@ Genre diagnosis for authors who need to confirm what emotional promise the story
 
 ## Script Compatibility
 
-This rewrite adapts source genre checks and reference tables into Writer-native diagnosis and built-in genre guidance. Source helpers are not runnable in Milestone 3.5.
+This rewrite adapts source genre checks and reference tables into Edda-native diagnosis and built-in genre guidance. Source helpers are not runnable in Milestone 3.5.

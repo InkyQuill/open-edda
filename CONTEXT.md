@@ -1,10 +1,22 @@
-# Writer
+# Open Edda
 
-Writer is a private writing workspace for hobby novelists who want AI assistance over an entire story project, not only the currently selected text.
+Open Edda is a self-hosted AI writing studio for hobby novelists who want AI assistance over an entire story project, not only the currently selected text. The short in-app name is Edda.
 
 ## Language
 
-**AI Writing Studio**:
+**Open Edda**:
+The project name and formal product name.
+_Avoid_: Writer, generic writing app
+
+**Edda**:
+The short in-app name used in the interface and agent-facing product text.
+_Avoid_: Writer, Open Edda when space is tight
+
+**Subsystem Names**:
+Major subsystems and internal product surfaces should use names drawn from Scandinavian myth, literature, and history when a distinctive name helps authors and developers understand the boundary. Use the name only after the subsystem has a clear responsibility; avoid decorative renames for ordinary packages, database tables, or simple implementation details.
+_Avoid_: Generic subsystem names, premature mythology theming, unclear aliases
+
+**Self-Hosted AI Writing Studio**:
 A private workspace where an author develops story text, story-world material, and AI-assisted revisions as one connected project.
 _Avoid_: Generic writing app, AI text editor
 
@@ -85,15 +97,15 @@ Story project content stored in the database as Markdown-compatible text so it c
 _Avoid_: Rich text document, proprietary document model
 
 **Galley Editor**:
-The Markdown-native editor foundation intended for editing chapters and other Markdown-based content in Writer.
+The Markdown-native editor foundation intended for editing chapters and other Markdown-based content in Open Edda.
 _Avoid_: Custom editor, generic textarea
 
 **React Frontend**:
-The browser application layer used for Writer because Galley Editor is React-based.
+The browser application layer used for Open Edda because Galley Editor is React-based.
 _Avoid_: Framework-neutral frontend, Svelte frontend
 
 **Go Backend**:
-The service layer used for Writer's API, persistence, agent tooling, provider calls, import/export, and self-hosted deployment.
+The service layer used for Open Edda's API, persistence, agent tooling, provider calls, import/export, and self-hosted deployment.
 _Avoid_: Python backend, Next.js backend
 
 **SQLite Store**:
@@ -137,7 +149,7 @@ A `/`-prefixed explicit command for application actions, distinct from skill men
 _Avoid_: Skill picker, prompt shortcut
 
 **Built-In Skill Library**:
-The curated set of Writer-shipped skills available on first run, with daily writing skills enabled by default and specialized skills available for authors to enable when relevant.
+The curated set of Open Edda-shipped skills available on first run, with daily writing skills enabled by default and specialized skills available for authors to enable when relevant.
 _Avoid_: Inbuilt skills, bundled prompts, skill dump
 
 **Default Skill**:
@@ -149,7 +161,7 @@ A built-in skill installed but disabled by default because it supports specializ
 _Avoid_: Secondary skill, hidden skill
 
 **Archived Skill**:
-A reviewed skill that is intentionally not shipped with the built-in skill library because it is outside Writer's fiction-writing focus, depends on unsupported integrations or script execution, or would create more routing noise than author value.
+A reviewed skill that is intentionally not shipped with the built-in skill library because it is outside Open Edda's fiction-writing focus, depends on unsupported integrations or script execution, or would create more routing noise than author value.
 _Avoid_: Bad skill, deleted skill
 
 **Admin-Approved Script**:
@@ -157,7 +169,7 @@ A skill helper script that a server administrator has explicitly allowed to run 
 _Avoid_: Bundled script, trusted script
 
 **OpenAI-Compatible Provider**:
-Any model service or gateway that exposes an OpenAI-style API surface usable by Writer for agent sessions and generation actions.
+Any model service or gateway that exposes an OpenAI-style API surface usable by Open Edda for agent sessions and generation actions.
 _Avoid_: Vendor integration, model backend
 
 **Provider Disclosure**:

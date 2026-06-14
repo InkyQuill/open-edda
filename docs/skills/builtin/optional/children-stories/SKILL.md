@@ -41,7 +41,7 @@ Children's-story support for authors who want age-aware language, gentle emotion
 - The author wants high-intensity fear, violence, or ambiguity beyond the intended age band.
 - The request is mainly for marketing copy rather than the story itself.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Identify the target age band before drafting: roughly 3-5, 6-8, 9-12, or cross-age read-aloud.
 2. Match vocabulary, sentence length, implied knowledge, and emotional intensity to that band.
@@ -49,7 +49,7 @@ Children's-story support for authors who want age-aware language, gentle emotion
 4. Favor concrete imagery, rhythmic phrasing, and read-aloud clarity.
 5. Let the theme emerge through action, care, and consequence rather than explicit preaching.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return age-band guidance or story text in chat by default.
 - Create an Attached Note when the work belongs to one story draft, one chapter, or one read-aloud test.
@@ -59,4 +59,4 @@ Children's-story support for authors who want age-aware language, gentle emotion
 
 ## Script Compatibility
 
-This is a Writer-native Milestone 3.5 skill. It works entirely through Writer-native guidance, drafting, and revision support.
+This is a Edda-native Milestone 3.5 skill. It works entirely through Edda-native guidance, drafting, and revision support.

@@ -41,7 +41,7 @@ Coaching mode for authors who want help thinking, diagnosing, and deciding what 
 - The author wants direct rewriting or continuation of Story Text.
 - The task is mainly canon building; use `$worldbuilding-brainstorm` or `$worldbuilding-check` instead.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the author request and any linked `@` chapters, notes, or Story Bible material.
 2. Diagnose the current problem in plain language.
@@ -49,7 +49,7 @@ Coaching mode for authors who want help thinking, diagnosing, and deciding what 
 4. Offer frameworks, options, and next-step prompts without supplying story prose, dialogue, or canon text.
 5. End by returning the author to a concrete writing or revision move.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return coaching, diagnosis, and next-step prompts in chat by default.
 - Create an Attached Note when the guidance belongs to one chapter or text selection.
@@ -59,4 +59,4 @@ Coaching mode for authors who want help thinking, diagnosing, and deciding what 
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Writer-native guidance and reports.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Edda-native guidance and reports.

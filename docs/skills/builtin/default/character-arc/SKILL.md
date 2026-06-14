@@ -41,7 +41,7 @@ Character-journey analysis for authors who need to clarify a lie, want, need, tr
 - The author wants the skill to invent a character biography without context.
 - The task is only worldbuilding and not a character journey problem.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the relevant Story Text, Story Bible material, and notes for the character.
 2. Identify the likely arc type and the core internal tension.
@@ -49,7 +49,7 @@ Character-journey analysis for authors who need to clarify a lie, want, need, tr
 4. Point out missing beats, weak resistance, or hollow payoffs.
 5. Suggest revision targets that the author can use in later drafting or revision passes.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return arc diagnosis and key questions in chat by default.
 - Create an Attached Note when the arc review belongs to one chapter or one local turning point.
@@ -59,4 +59,4 @@ Character-journey analysis for authors who need to clarify a lie, want, need, tr
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Writer-native diagnosis and planning.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Edda-native diagnosis and planning.

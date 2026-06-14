@@ -40,7 +40,7 @@ Paradox-fable support for authors who want compact, memorable story forms that e
 - The request is mainly for prose polish rather than concept and form.
 - The story needs heavy realism instead of stylized compression.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Identify the paradox or tension that should be embodied.
 2. Find a simple narrative form that naturally expresses that tension.
@@ -48,7 +48,7 @@ Paradox-fable support for authors who want compact, memorable story forms that e
 4. Check that the ending preserves pressure instead of explaining it away.
 5. Draft or rewrite only within the explicit scope the author chooses.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the fable draft or concept in chat by default.
 - Create an Attached Note when the work belongs to one chapter insert or one small story experiment.
@@ -58,4 +58,4 @@ Paradox-fable support for authors who want compact, memorable story forms that e
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Writer-native drafting and thematic guidance.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Edda-native drafting and thematic guidance.

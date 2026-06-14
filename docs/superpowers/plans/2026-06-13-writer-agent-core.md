@@ -1,4 +1,4 @@
-# Writer Agent Core Implementation Plan
+# Open Edda Agent Core Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -674,7 +674,7 @@ Each rendered context source must have a stable key, optional source version, re
 The system prompt must include:
 
 ```text
-You are a fiction writing assistant working inside Writer. Preserve the author's intent, respect established project facts, and use available tools to inspect project context before making claims. Do not invent durable worldbuilding facts unless the author asks you to brainstorm.
+You are a fiction writing assistant working inside Open Edda. Preserve the author's intent, respect established project facts, and use available tools to inspect project context before making claims. Do not invent durable worldbuilding facts unless the author asks you to brainstorm.
 ```
 
 - [ ] **Step 5: Verify**
@@ -1119,7 +1119,7 @@ Rewrite and Read and Check controls can use the whole previewed content until Ga
 
 Preview results must show generated text and Accept/Reject buttons. Accept calls the candidate accept endpoint; Reject calls the candidate reject endpoint. Direct Apply results must refresh the selected content item after success.
 
-The activity expansion must show provider/model, tokens, and estimated cost when available. Cost should display as an estimate because OpenAI-compatible providers can change pricing outside Writer's local model variant configuration.
+The activity expansion must show provider/model, tokens, and estimated cost when available. Cost should display as an estimate because OpenAI-compatible providers can change pricing outside Open Edda's local model variant configuration.
 
 - [ ] **Step 6: Verify frontend**
 

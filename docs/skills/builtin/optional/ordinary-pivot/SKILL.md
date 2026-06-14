@@ -41,7 +41,7 @@ Story design for authors who want protagonists pulled into larger conflict throu
 - The request is mainly about team dynamics; `$underdog-team` may fit better.
 - The character has no meaningful system around them to pivot through.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the target Chapter, Story Text, and any world notes shaping the system.
 2. Identify the protagonist's ordinary role and the access it naturally grants.
@@ -49,7 +49,7 @@ Story design for authors who want protagonists pulled into larger conflict throu
 4. Check that the involvement feels structurally inevitable in this world.
 5. Draft or revise only when the author explicitly asks for applied story work.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the position map and conflict design in chat by default.
 - Create an Attached Note when the work belongs to one Chapter or one character problem.
@@ -59,4 +59,4 @@ Story design for authors who want protagonists pulled into larger conflict throu
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Writer-native concept design and revision guidance.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Edda-native concept design and revision guidance.

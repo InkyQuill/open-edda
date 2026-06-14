@@ -1,4 +1,4 @@
-# Writer Skill Core Implementation Plan
+# Open Edda Skill Core Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -37,7 +37,7 @@ This plan does not implement:
 
 ## Source Decisions
 
-The product spec and ADRs require importing skill instructions, routing metadata, templates, and data files while disabling scripts. Writer follows the useful OpenCode pattern: baseline prompt context lists available/selected skill summaries, and a model-facing `skill` tool loads full skill content only when needed. This preserves Writer's "whole-project context is tool-accessible" rule and avoids putting every installed skill file into every provider request.
+The product spec and ADRs require importing skill instructions, routing metadata, templates, and data files while disabling scripts. Open Edda follows the useful OpenCode pattern: baseline prompt context lists available/selected skill summaries, and a model-facing `skill` tool loads full skill content only when needed. This preserves Open Edda's "whole-project context is tool-accessible" rule and avoids putting every installed skill file into every provider request.
 
 ## File Structure
 
@@ -460,7 +460,7 @@ func TestParseSkillArchiveRejectsUnsafePaths(t *testing.T) {
 	}
 }
 
-func writeZipFile(t *testing.T, zw *zip.Writer, name string, body string) {
+func writeZipFile(t *testing.T, zw *zip.Open Edda, name string, body string) {
 	t.Helper()
 	w, err := zw.Create(name)
 	if err != nil {
@@ -923,7 +923,7 @@ Add methods:
 ...instructions...
 </instructions>
 
-<script_status disabled="true" count="1">Script files are imported for reference only. Writer does not execute bundled skill scripts in v1.</script_status>
+<script_status disabled="true" count="1">Script files are imported for reference only. Open Edda does not execute bundled skill scripts in v1.</script_status>
 
 <skill_files>
 <file path="templates/rewrite.md" purpose="template">Rewrite template</file>
@@ -935,7 +935,7 @@ Add methods:
 Bound the rendered file bodies to 40 KiB total. If truncated, append:
 
 ```text
-<truncated>Additional skill file content is stored in Writer but omitted from model-visible output.</truncated>
+<truncated>Additional skill file content is stored in Open Edda but omitted from model-visible output.</truncated>
 ```
 
 - [ ] **Step 4: Verify service**
@@ -1308,7 +1308,7 @@ Modify `ContextToolDefinitions()`:
 ```go
 toolDefinition(
 	"skill",
-	"Load one installed Writer skill by ID when the task matches the available skill guidance. Returns instructions and inert supporting files. Bundled scripts are never executed.",
+	"Load one installed Open Edda skill by ID when the task matches the available skill guidance. Returns instructions and inert supporting files. Bundled scripts are never executed.",
 	objectSchema(map[string]any{
 		"skillId": map[string]any{"type": "string"},
 	}, "skillId"),

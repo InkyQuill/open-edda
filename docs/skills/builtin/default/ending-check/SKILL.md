@@ -40,7 +40,7 @@ Ending and payoff diagnosis for authors whose story builds energy but loses forc
 - The problem is mainly earlier pacing or drafting momentum.
 - The author wants the skill to write the ending for them by default.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the ending in the context of the setup that feeds it.
 2. Diagnose the likely failure mode: arbitrary, predictable, unearned, expanding, overexplained, or pacing mismatch.
@@ -48,7 +48,7 @@ Ending and payoff diagnosis for authors whose story builds energy but loses forc
 4. Explain what must be planted, tightened, shortened, or left implicit.
 5. Keep the result diagnostic unless the author explicitly switches to revision work.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the ending diagnosis in chat by default.
 - Create an Attached Note when the report belongs to one chapter or ending sequence.
@@ -58,4 +58,4 @@ Ending and payoff diagnosis for authors whose story builds energy but loses forc
 
 ## Script Compatibility
 
-This rewrite adapts source payoff and ending checks into Writer-native reports and revision guidance. Source helpers are not runnable in Milestone 3.5.
+This rewrite adapts source payoff and ending checks into Edda-native reports and revision guidance. Source helpers are not runnable in Milestone 3.5.

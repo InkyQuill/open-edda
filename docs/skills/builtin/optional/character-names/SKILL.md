@@ -42,7 +42,7 @@ Name generation for authors who want names that fit setting, culture, tone, and 
 - The request is really about language design; use `$conlang`.
 - The author wants final canon changes without reviewing options.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the relevant Story Bible material, cast notes, and any names already on the page.
 2. Determine the naming context: real-world culture, mixed setting, or invented naming logic.
@@ -50,7 +50,7 @@ Name generation for authors who want names that fit setting, culture, tone, and 
 4. Flag lookalike names, repeated initials, or mismatched cultural cues.
 5. Treat the chosen name as canon only after the author confirms it.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return shortlists and collision notes in chat by default.
 - Create an Attached Note when name work belongs to one Chapter, scene, or local cast problem.
@@ -60,4 +60,4 @@ Name generation for authors who want names that fit setting, culture, tone, and 
 
 ## Script Compatibility
 
-This rewrite preserves built-in naming datasets and the cast-tracker template as Writer-native references. Source helper scripts are not runnable in Milestone 3.5, so the skill works through guidance, built-in data, and reviewable name proposals only.
+This rewrite preserves built-in naming datasets and the cast-tracker template as Edda-native references. Source helper scripts are not runnable in Milestone 3.5, so the skill works through guidance, built-in data, and reviewable name proposals only.

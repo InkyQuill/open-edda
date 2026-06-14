@@ -41,7 +41,7 @@ Character-arc support for authors exploring self-deception, moral slippage, and 
 - The request is mainly about plot logistics or lore.
 - The author wants only general feedback instead of a denial-focused lens.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the relevant Story Text, Chapter scope, and any character notes.
 2. Identify the denied identity, what accepting it would cost, and how the character justifies avoidance.
@@ -49,7 +49,7 @@ Character-arc support for authors exploring self-deception, moral slippage, and 
 4. Recommend scene-level or chapter-level changes that sharpen denial on the page.
 5. Apply rewrites only if the author explicitly asks for them.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the denial arc analysis in chat by default.
 - Create an Attached Note when the work belongs to one Chapter, one beat, or one scene cluster.
@@ -59,4 +59,4 @@ Character-arc support for authors exploring self-deception, moral slippage, and 
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Writer-native arc analysis and revision guidance.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Edda-native arc analysis and revision guidance.
