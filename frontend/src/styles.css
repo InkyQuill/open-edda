@@ -350,6 +350,102 @@ body {
   font-size: 12px;
 }
 
+.script-runtime-panel {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
+}
+
+.script-runtime-panel h4 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.script-runtime-row {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.script-runtime-row-header,
+.script-runtime-meta,
+.script-runtime-actions,
+.script-run-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.script-runtime-row-header strong {
+  min-width: min(220px, 100%);
+  overflow-wrap: anywhere;
+}
+
+.script-runtime-meta,
+.script-runtime-row p,
+.script-run-row {
+  margin: 0;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.script-runtime-row label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.script-runtime-row input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #d7dde5;
+  border-radius: 6px;
+  background: #fbfcfe;
+  color: #111827;
+  font: inherit;
+  font-weight: 400;
+  padding: 8px 10px;
+}
+
+.script-runtime-actions button {
+  appearance: none;
+  border: 1px solid #c7d2e0;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #1f2933;
+  padding: 6px 9px;
+  cursor: pointer;
+}
+
+.script-runtime-actions button:hover {
+  border-color: #93a4b8;
+}
+
+.script-runtime-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.script-run-history {
+  display: grid;
+  gap: 6px;
+}
+
+.script-run-row {
+  justify-content: space-between;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 8px;
+}
+
 .prompt-card textarea {
   min-height: 92px;
 }
