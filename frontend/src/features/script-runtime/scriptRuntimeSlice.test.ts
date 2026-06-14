@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ScriptApproval, ScriptAudit, ScriptRun } from "../../scriptRuntimeTypes";
 import { updateScriptApproval } from "../../scriptRuntimeApi";
 import { loadScriptAudits, loadScriptRuns, setScriptApproval } from "./scriptRuntimeThunks";
@@ -13,6 +13,10 @@ vi.mock("../../scriptRuntimeApi", () => ({
   listScriptAudits: vi.fn(),
   updateScriptApproval: vi.fn(),
 }));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 function approval(overrides: Partial<ScriptApproval> = {}): ScriptApproval {
   return {
@@ -272,7 +276,8 @@ describe("scriptRuntimeSlice", () => {
     expect(switchedProject.updatingAuditId).toBeNull();
   });
 
-  it("rejects approval updates when the audit has no configured runtime command", async () => {
+  it("creates first-time approval with a provided runtime command and conservative limits", async () => {
+    vi.mocked(updateScriptApproval).mockResolvedValue(approval({ runtimeCommand: "bun run audit" }));
     const dispatch = vi.fn();
     const getState = vi.fn();
 
@@ -280,6 +285,30 @@ describe("scriptRuntimeSlice", () => {
       projectId: "project-1",
       audit: audit(),
       enabled: true,
+      runtimeCommand: "  bun run audit  ",
+    })(dispatch, getState, undefined);
+
+    expect(setScriptApproval.fulfilled.match(action)).toBe(true);
+    expect(updateScriptApproval).toHaveBeenCalledWith("project-1", "skill-1", "file-1", {
+      enabled: true,
+      runtimeCommand: "bun run audit",
+      timeoutMs: 5000,
+      maxStdoutBytes: 65536,
+      maxStderrBytes: 16384,
+      allowNetwork: false,
+      allowProjectFiles: false,
+    });
+  });
+
+  it("rejects approval updates when the audit has no configured or provided runtime command", async () => {
+    const dispatch = vi.fn();
+    const getState = vi.fn();
+
+    const action = await setScriptApproval({
+      projectId: "project-1",
+      audit: audit(),
+      enabled: true,
+      runtimeCommand: "  ",
     })(dispatch, getState, undefined);
 
     expect(setScriptApproval.rejected.match(action)).toBe(true);

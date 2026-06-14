@@ -3,9 +3,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 
 import type { AppDispatch, RootState } from "../../app/store/store";
-import type { ScriptAudit, ScriptRecommendation, ScriptRunStatus } from "../../scriptRuntimeTypes";
+import type { ScriptAudit, ScriptRecommendation, ScriptRun, ScriptRunStatus } from "../../scriptRuntimeTypes";
 import { cn } from "../../shared/lib/utils";
 import { Button } from "../../shared/ui/button";
+import { Input } from "../../shared/ui/input";
 import { loadProjectSkills } from "../skills/skillsThunks";
 import { scriptRuntimeActions } from "./scriptRuntimeSlice";
 import { loadScriptAudits, loadScriptRuns, setScriptApproval } from "./scriptRuntimeThunks";
@@ -13,6 +14,9 @@ import { loadScriptAudits, loadScriptRuns, setScriptApproval } from "./scriptRun
 type ScriptRuntimePanelProps = {
   projectId: string;
 };
+
+const EMPTY_AUDITS_BY_SKILL_ID: Record<string, ScriptAudit[]> = {};
+const EMPTY_RUNS: ScriptRun[] = [];
 
 const recommendationLabels: Record<ScriptRecommendation, string> = {
   disabled: "Disabled",
@@ -70,17 +74,22 @@ export function ScriptRuntimePanel({ projectId }: ScriptRuntimePanelProps) {
   const skillsState = useSelector((state: RootState) => state.skills);
   const runtime = useSelector((state: RootState) => state.scriptRuntime);
   const currentSkills = skillsState.projectId === projectId ? skillsState.skills : [];
+  const runtimeIsCurrentProject = runtime.projectId === projectId;
+  const visibleAuditsBySkillId = runtimeIsCurrentProject ? runtime.auditsBySkillId : EMPTY_AUDITS_BY_SKILL_ID;
+  const visibleRuns = runtimeIsCurrentProject ? runtime.runs : EMPTY_RUNS;
+  const visibleRuntimeError = runtimeIsCurrentProject ? runtime.error : null;
   const scriptedSkills = useMemo(
     () => currentSkills.filter((skill) => skill.scriptCount > 0 || skill.scriptsDisabled),
     [currentSkills],
   );
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
+  const [approvalCommandByAuditId, setApprovalCommandByAuditId] = useState<Record<string, string>>({});
   const selectedSkill = scriptedSkills.find((skill) => skill.id === selectedSkillId) ?? scriptedSkills[0] ?? null;
-  const audits = selectedSkill ? (runtime.auditsBySkillId[selectedSkill.id] ?? []) : [];
+  const audits = selectedSkill ? (visibleAuditsBySkillId[selectedSkill.id] ?? []) : [];
   const selectedAudit = findSelectedAudit(audits, runtime.selectedAuditId);
   const selectedRuns = selectedAudit
-    ? runtime.runs.filter((run) => run.skillId === selectedAudit.skillId && run.skillFileId === selectedAudit.skillFileId)
-    : runtime.runs;
+    ? visibleRuns.filter((run) => run.skillId === selectedAudit.skillId && run.skillFileId === selectedAudit.skillFileId)
+    : visibleRuns;
 
   useEffect(() => {
     if (skillsState.skillsStatus === "idle" || skillsState.projectId !== projectId) {
@@ -108,9 +117,9 @@ export function ScriptRuntimePanel({ projectId }: ScriptRuntimePanelProps) {
 
   useEffect(() => {
     if (!selectedSkill) return;
-    if (runtime.auditsBySkillId[selectedSkill.id] || runtime.loadingAuditSkillId === selectedSkill.id) return;
+    if (visibleAuditsBySkillId[selectedSkill.id] || (runtimeIsCurrentProject && runtime.loadingAuditSkillId === selectedSkill.id)) return;
     void dispatch(loadScriptAudits({ projectId, skillId: selectedSkill.id }));
-  }, [dispatch, projectId, runtime.auditsBySkillId, runtime.loadingAuditSkillId, selectedSkill]);
+  }, [dispatch, projectId, runtime.loadingAuditSkillId, runtimeIsCurrentProject, selectedSkill, visibleAuditsBySkillId]);
 
   useEffect(() => {
     if (selectedAudit && runtime.selectedAuditId !== selectedAudit.id) {
@@ -131,12 +140,14 @@ export function ScriptRuntimePanel({ projectId }: ScriptRuntimePanelProps) {
   }
 
   function handleApproval(audit: ScriptAudit, enabled: boolean): void {
-    void dispatch(setScriptApproval({ projectId, audit, enabled }));
+    void dispatch(setScriptApproval({ projectId, audit, enabled, runtimeCommand: approvalCommandByAuditId[audit.id] }));
   }
 
-  const loadingAudits = runtime.auditsStatus === "pending" && runtime.loadingAuditSkillId === selectedSkill?.id;
+  const loadingAudits = runtimeIsCurrentProject && runtime.auditsStatus === "pending" && runtime.loadingAuditSkillId === selectedSkill?.id;
   const approvalUpdating = runtime.approvalStatus === "pending";
+  const selectedAuditCommandDraft = selectedAudit ? (approvalCommandByAuditId[selectedAudit.id] ?? "") : "";
   const selectedAuditHasRuntimeCommand = Boolean(selectedAudit?.approval?.runtimeCommand);
+  const selectedAuditCanSubmitRuntimeCommand = selectedAuditHasRuntimeCommand || selectedAuditCommandDraft.trim().length > 0;
 
   return (
     <section className="flex min-h-0 flex-col gap-4" aria-labelledby="script-runtime-title">
@@ -154,10 +165,10 @@ export function ScriptRuntimePanel({ projectId }: ScriptRuntimePanelProps) {
         </Button>
       </header>
 
-      {runtime.error ? (
+      {visibleRuntimeError ? (
         <p role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           <AlertCircle className="mt-0.5 size-4" aria-hidden="true" />
-          {runtime.error}
+          {visibleRuntimeError}
         </p>
       ) : null}
 
@@ -275,10 +286,23 @@ export function ScriptRuntimePanel({ projectId }: ScriptRuntimePanelProps) {
           ) : null}
 
           {selectedAudit.recommendation === "approve_with_limits" && !selectedAuditHasRuntimeCommand ? (
-            <p className="flex items-start gap-2 rounded-md border border-border bg-background p-2 text-xs text-muted-foreground">
-              <Slash className="mt-0.5 size-3.5" aria-hidden="true" />
-              Runtime command not configured.
-            </p>
+            <div className="grid gap-1.5">
+              <label className="text-xs font-medium text-foreground" htmlFor={`runtime-command-${selectedAudit.id}`}>
+                Runtime command
+              </label>
+              <Input
+                id={`runtime-command-${selectedAudit.id}`}
+                value={selectedAuditCommandDraft}
+                placeholder={selectedAudit.runtime}
+                autoComplete="off"
+                onChange={(event) =>
+                  setApprovalCommandByAuditId((commands) => ({
+                    ...commands,
+                    [selectedAudit.id]: event.target.value,
+                  }))
+                }
+              />
+            </div>
           ) : null}
 
           <div className="flex gap-2">
@@ -287,7 +311,7 @@ export function ScriptRuntimePanel({ projectId }: ScriptRuntimePanelProps) {
               size="sm"
               disabled={
                 !auditCanBeEnabled(selectedAudit) ||
-                !selectedAuditHasRuntimeCommand ||
+                !selectedAuditCanSubmitRuntimeCommand ||
                 approvalUpdating ||
                 selectedAudit.approval?.enabled === true
               }
