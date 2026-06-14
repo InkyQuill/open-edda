@@ -47,6 +47,9 @@ const reviewSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(loadReviewActivity.pending, (state, action) => {
+        if (state.projectId !== action.meta.arg.projectId) {
+          state.activityEvents = [];
+        }
         state.projectId = action.meta.arg.projectId;
         state.activityStatus = "pending";
         state.activityRequestId = action.meta.requestId;
@@ -69,6 +72,10 @@ const reviewSlice = createSlice({
         state.error = readableError(action);
       })
       .addCase(loadPromptRecords.pending, (state, action) => {
+        if (state.projectId !== action.meta.arg.projectId) {
+          state.promptRecords = [];
+          state.selectedPromptRecordId = null;
+        }
         state.projectId = action.meta.arg.projectId;
         state.promptRecordsStatus = "pending";
         state.promptRecordsRequestId = action.meta.requestId;

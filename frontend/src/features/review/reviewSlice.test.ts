@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ActivityEvent, PromptRecord } from "../../agentTypes";
 import { loadPromptRecords, loadReviewActivity } from "./reviewThunks";
-import { initialReviewState, reviewActions, reviewReducer } from "./reviewSlice";
+import { initialReviewState, reviewActions, reviewReducer, type ReviewState } from "./reviewSlice";
 
 const activityEvent: ActivityEvent = {
   id: "activity-1",
@@ -99,6 +99,36 @@ describe("reviewSlice", () => {
     expect(staleLoadedFirst.activityStatus).toBe("succeeded");
   });
 
+  it("ignores stale activity loads from a previous project", () => {
+    const loadingFirst = reviewReducer(
+      initialReviewState,
+      loadReviewActivity.pending("request-1", { projectId: "project-1" }),
+    );
+    const loadingSecond = reviewReducer(
+      loadingFirst,
+      loadReviewActivity.pending("request-2", { projectId: "project-2" }),
+    );
+    const loadedSecond = reviewReducer(
+      loadingSecond,
+      loadReviewActivity.fulfilled([{ ...activityEvent, id: "activity-2", projectId: "project-2" }], "request-2", {
+        projectId: "project-2",
+      }),
+    );
+
+    const staleLoadedFirst = reviewReducer(
+      loadedSecond,
+      loadReviewActivity.fulfilled([activityEvent], "request-1", {
+        projectId: "project-1",
+      }),
+    );
+
+    expect(staleLoadedFirst.activityEvents).toEqual([
+      { ...activityEvent, id: "activity-2", projectId: "project-2" },
+    ]);
+    expect(staleLoadedFirst.projectId).toBe("project-2");
+    expect(staleLoadedFirst.activityStatus).toBe("succeeded");
+  });
+
   it("ignores stale prompt record loads", () => {
     const loadingFirst = reviewReducer(
       initialReviewState,
@@ -122,6 +152,100 @@ describe("reviewSlice", () => {
 
     expect(staleLoadedFirst.promptRecords).toEqual([promptRecord]);
     expect(staleLoadedFirst.promptRecordsStatus).toBe("succeeded");
+  });
+
+  it("ignores stale prompt record loads from a previous project", () => {
+    const loadingFirst = reviewReducer(
+      initialReviewState,
+      loadPromptRecords.pending("request-1", { projectId: "project-1" }),
+    );
+    const loadingSecond = reviewReducer(
+      loadingFirst,
+      loadPromptRecords.pending("request-2", { projectId: "project-2" }),
+    );
+    const projectTwoPromptRecord = { ...promptRecord, id: "prompt-record-2", projectId: "project-2" };
+    const loadedSecond = reviewReducer(
+      loadingSecond,
+      loadPromptRecords.fulfilled([projectTwoPromptRecord], "request-2", {
+        projectId: "project-2",
+      }),
+    );
+
+    const staleLoadedFirst = reviewReducer(
+      loadedSecond,
+      loadPromptRecords.fulfilled([promptRecord], "request-1", {
+        projectId: "project-1",
+      }),
+    );
+
+    expect(staleLoadedFirst.promptRecords).toEqual([projectTwoPromptRecord]);
+    expect(staleLoadedFirst.projectId).toBe("project-2");
+    expect(staleLoadedFirst.promptRecordsStatus).toBe("succeeded");
+  });
+
+  it("clears activity events when activity is requested for a new project", () => {
+    const previousState: ReviewState = {
+      ...initialReviewState,
+      projectId: "project-1",
+      activityEvents: [activityEvent],
+      promptRecords: [promptRecord],
+      selectedPromptRecordId: promptRecord.id,
+    };
+
+    const loading = reviewReducer(
+      previousState,
+      loadReviewActivity.pending("request-2", { projectId: "project-2" }),
+    );
+
+    expect(loading.activityEvents).toEqual([]);
+    expect(loading.promptRecords).toEqual([promptRecord]);
+    expect(loading.selectedPromptRecordId).toBe(promptRecord.id);
+    expect(loading.projectId).toBe("project-2");
+    expect(loading.activityStatus).toBe("pending");
+  });
+
+  it("clears prompt records and selection when prompts are requested for a new project", () => {
+    const previousState: ReviewState = {
+      ...initialReviewState,
+      projectId: "project-1",
+      activityEvents: [activityEvent],
+      promptRecords: [promptRecord],
+      selectedPromptRecordId: promptRecord.id,
+    };
+
+    const loading = reviewReducer(
+      previousState,
+      loadPromptRecords.pending("request-2", { projectId: "project-2" }),
+    );
+
+    expect(loading.promptRecords).toEqual([]);
+    expect(loading.selectedPromptRecordId).toBeNull();
+    expect(loading.activityEvents).toEqual([activityEvent]);
+    expect(loading.projectId).toBe("project-2");
+    expect(loading.promptRecordsStatus).toBe("pending");
+  });
+
+  it("keeps existing data when refetching the same project", () => {
+    const previousState: ReviewState = {
+      ...initialReviewState,
+      projectId: "project-1",
+      activityEvents: [activityEvent],
+      promptRecords: [promptRecord],
+      selectedPromptRecordId: promptRecord.id,
+    };
+
+    const loadingActivity = reviewReducer(
+      previousState,
+      loadReviewActivity.pending("activity-request-2", { projectId: "project-1" }),
+    );
+    const loadingPrompts = reviewReducer(
+      previousState,
+      loadPromptRecords.pending("prompt-request-2", { projectId: "project-1" }),
+    );
+
+    expect(loadingActivity.activityEvents).toEqual([activityEvent]);
+    expect(loadingPrompts.promptRecords).toEqual([promptRecord]);
+    expect(loadingPrompts.selectedPromptRecordId).toBe(promptRecord.id);
   });
 
   it("selects a prompt record", () => {

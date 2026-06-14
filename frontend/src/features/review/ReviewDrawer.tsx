@@ -14,10 +14,15 @@ type ReviewDrawerProps = {
 };
 
 function formatDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value || "Unknown time";
+  }
+
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(value));
+  }).format(date);
 }
 
 function formatActionKind(value: string): string {
@@ -81,14 +86,18 @@ export function ReviewDrawer({ projectId }: ReviewDrawerProps) {
     activityEvents,
     activityStatus,
     error,
+    projectId: reviewProjectId,
     promptRecords,
     promptRecordsStatus,
     selectedPromptRecordId,
   } = useSelector((state: RootState) => state.review);
+  const isCurrentProject = reviewProjectId === projectId;
+  const visibleActivityEvents = isCurrentProject ? activityEvents : [];
+  const visiblePromptRecords = isCurrentProject ? promptRecords : [];
   const loading = activityStatus === "pending" || promptRecordsStatus === "pending";
-  const hasActivity = activityEvents.length > 0;
-  const hasPromptRecords = promptRecords.length > 0;
-  const isEmpty = !loading && !hasActivity && !hasPromptRecords;
+  const hasActivity = visibleActivityEvents.length > 0;
+  const hasPromptRecords = visiblePromptRecords.length > 0;
+  const isEmpty = !error && !loading && !hasActivity && !hasPromptRecords;
 
   useEffect(() => {
     dispatch(reviewActions.resetForProject());
@@ -164,7 +173,7 @@ export function ReviewDrawer({ projectId }: ReviewDrawerProps) {
                   Activity
                 </h3>
                 <div className="flex flex-col gap-2">
-                  {activityEvents.map((event) => (
+                  {visibleActivityEvents.map((event) => (
                     <ActivityEventItem key={event.id} event={event} />
                   ))}
                 </div>
@@ -178,7 +187,7 @@ export function ReviewDrawer({ projectId }: ReviewDrawerProps) {
                   Prompt records
                 </h3>
                 <div className="flex flex-col gap-2">
-                  {promptRecords.map((promptRecord) => (
+                  {visiblePromptRecords.map((promptRecord) => (
                     <PromptRecordItem
                       key={promptRecord.id}
                       promptRecord={promptRecord}
