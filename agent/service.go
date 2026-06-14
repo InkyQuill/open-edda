@@ -566,7 +566,14 @@ func (s *Service) RunChatTurn(ctx context.Context, input ChatTurnInput) (ChatTur
 	if err != nil {
 		return ChatTurnResult{}, err
 	}
-	messages := chatPromptMessages(profile, transcript)
+	if s.skillService != nil {
+		skillSources, err := s.buildSkillContextSources(ctx, input.ProjectID, input.SessionID)
+		if err != nil {
+			return ChatTurnResult{}, err
+		}
+		contextSources = append(contextSources, skillSources...)
+	}
+	messages := chatPromptMessages(profile, transcript, contextSources)
 	tools := ContextToolDefinitions()
 	requests := make([]CompletionRequest, 0, 2)
 	responses := make([]CompletionResponse, 0, 2)
@@ -1435,10 +1442,19 @@ func quickActionCursorSummary(input quickActionCompletionInput) string {
 	}
 }
 
-func chatPromptMessages(profile PromptProfile, transcript []Message) []CompletionMessage {
+func chatPromptMessages(profile PromptProfile, transcript []Message, contextSources []ContextSourceSnapshot) []CompletionMessage {
 	messages := []CompletionMessage{
 		{Role: MessageRoleSystem, Content: fictionAssistantSystemPrompt},
 		{Role: MessageRoleSystem, Content: renderPromptProfile(profile)},
+	}
+	for _, source := range contextSources {
+		switch source.SourceKey {
+		case "available_skills", "selected_skills":
+			messages = append(messages, CompletionMessage{
+				Role:    MessageRoleSystem,
+				Content: source.RenderedMarkdown,
+			})
+		}
 	}
 	for _, message := range transcript {
 		if message.Role == MessageRoleSystem || message.Role == MessageRoleTool {

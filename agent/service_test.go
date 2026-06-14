@@ -1166,6 +1166,66 @@ func TestRunChatTurnStoresMessagesToolActivityAndPromptRecord(t *testing.T) {
 	assertSnapshotSource(t, snapshots, "transcript")
 }
 
+func TestRunChatTurnIncludesSelectedSkillScriptGuidance(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Chat Skill Script Project")
+	provider := &fakeChatProvider{responses: []CompletionResponse{{
+		ID: "completion-final",
+		Message: CompletionMessage{
+			Role:    MessageRoleAssistant,
+			Content: "I can use the selected script helper if needed.",
+		},
+		FinishReason:   "stop",
+		UsageAvailable: true,
+	}}}
+	service := NewService(db, projectService, provider)
+	skillService := skill.NewService(db)
+	service.SetSkillService(skillService)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	installed := installEnabledScriptSkill(t, ctx, skillService, storyProject.ID)
+	session, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:      storyProject.ID,
+		Title:          "Skill chat",
+		ActionKind:     ActionKindChat,
+		ModelVariantID: model.ID,
+		ApplyMode:      ApplyModePreview,
+		SkillIDs:       []string{installed.ID},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 30)
+
+	result, err := service.RunChatTurn(ctx, ChatTurnInput{
+		ProjectID:    storyProject.ID,
+		SessionID:    session.ID,
+		BodyMarkdown: "What helper scripts are available?",
+	})
+	if err != nil {
+		t.Fatalf("RunChatTurn() error = %v", err)
+	}
+	if len(provider.requests) != 1 {
+		t.Fatalf("provider request count = %d, want 1", len(provider.requests))
+	}
+	var promptText strings.Builder
+	for _, message := range provider.requests[0].Messages {
+		promptText.WriteString(message.Content)
+		promptText.WriteString("\n")
+	}
+	assertContains(t, promptText.String(), "Enabled runtime helpers are available only through the `skill_script` tool.")
+	assertContains(t, promptText.String(), "scripts/report.ts")
+	if strings.Contains(promptText.String(), "Use the report helper when checking draft health.") {
+		t.Fatalf("chat prompt preloaded full skill instructions:\n%s", promptText.String())
+	}
+
+	snapshots := promptSnapshotsForRecord(t, ctx, db, result.PromptRecordID)
+	selected := promptSnapshotSource(t, snapshots, "selected_skills")
+	assertContains(t, selected.RenderedMarkdown, "scripts/report.ts")
+	assertContains(t, selected.RenderedMarkdown, "skill_script")
+}
+
 func TestRunChatTurnUsesDBProviderConfigWhenProviderNotInjected(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()
@@ -2167,6 +2227,29 @@ func assertSnapshotSource(t *testing.T, snapshots []store.PromptContextSnapshot,
 		}
 	}
 	t.Fatalf("snapshots missing source %q: %#v", sourceKey, snapshots)
+}
+
+func promptSnapshotsForRecord(t *testing.T, ctx context.Context, db *sql.DB, promptRecordID string) []store.PromptContextSnapshot {
+	t.Helper()
+	if promptRecordID == "" {
+		t.Fatal("promptRecordID is empty")
+	}
+	snapshots, err := store.New(db).ListPromptContextSnapshots(ctx, promptRecordID)
+	if err != nil {
+		t.Fatalf("ListPromptContextSnapshots() error = %v", err)
+	}
+	return snapshots
+}
+
+func promptSnapshotSource(t *testing.T, snapshots []store.PromptContextSnapshot, sourceKey string) store.PromptContextSnapshot {
+	t.Helper()
+	for _, snapshot := range snapshots {
+		if snapshot.SourceKey == sourceKey {
+			return snapshot
+		}
+	}
+	t.Fatalf("snapshots missing source %q: %#v", sourceKey, snapshots)
+	return store.PromptContextSnapshot{}
 }
 
 func hasEventType(events []store.ActivityEvent, eventType string) bool {

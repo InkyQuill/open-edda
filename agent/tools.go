@@ -327,6 +327,12 @@ func (s *Service) executeContextTool(ctx context.Context, input ToolCallInput, s
 		if err := decodeToolArgs(input.ArgumentsJSON, &args); err != nil {
 			return nil, false, nil, err
 		}
+		if strings.TrimSpace(input.SessionID) == "" {
+			return nil, false, nil, fmt.Errorf("session ID is required for skill_script")
+		}
+		if err := s.requireSessionSkill(ctx, input.ProjectID, input.SessionID, args.SkillID); err != nil {
+			return nil, false, nil, err
+		}
 		run, err := s.skillService.RunScript(ctx, skill.RunScriptInput{
 			ProjectID:     input.ProjectID,
 			SessionID:     input.SessionID,
@@ -338,15 +344,19 @@ func (s *Service) executeContextTool(ctx context.Context, input ToolCallInput, s
 			AssetPaths:    args.AssetPaths,
 			Arguments:     args.Arguments,
 		})
-		if err != nil {
+		if err != nil && run.ID == "" {
 			return nil, false, nil, err
+		}
+		errorMessage := run.ErrorMessage
+		if err != nil && strings.TrimSpace(errorMessage) == "" {
+			errorMessage = err.Error()
 		}
 		return map[string]any{
 				"status":               run.Status,
 				"outputKind":           run.OutputKind,
 				"outputJson":           rawScriptOutputJSON(run.OutputJSON),
-				"errorMessage":         run.ErrorMessage,
-				"modelVisibleMarkdown": renderSkillScriptMarkdown(run.Status, run.OutputKind, run.OutputJSON, run.ErrorMessage),
+				"errorMessage":         errorMessage,
+				"modelVisibleMarkdown": renderSkillScriptMarkdown(run.Status, run.OutputKind, run.OutputJSON, errorMessage),
 			}, false, map[string]any{
 				"skillId":     args.SkillID,
 				"scriptPath":  args.ScriptPath,
@@ -379,6 +389,22 @@ func (s *Service) readContentTool(ctx context.Context, projectID, argsJSON strin
 		return project.ContentItem{}, fmt.Errorf("content %q kind = %q, want %q", args.ContentID, item.Kind, wantKind)
 	}
 	return item, nil
+}
+
+func (s *Service) requireSessionSkill(ctx context.Context, projectID, sessionID, skillID string) error {
+	if strings.TrimSpace(skillID) == "" {
+		return fmt.Errorf("skillId is required")
+	}
+	selected, err := s.skillService.ListSessionSkills(ctx, projectID, sessionID)
+	if err != nil {
+		return fmt.Errorf("list session skills: %w", err)
+	}
+	for _, item := range selected {
+		if item.ID == skillID {
+			return nil
+		}
+	}
+	return fmt.Errorf("skill %q is not selected for this session", skillID)
 }
 
 func (s *Service) executeWriteTool(ctx context.Context, input ToolCallInput, session Session) (any, map[string]any, error) {

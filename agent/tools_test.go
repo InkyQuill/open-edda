@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -592,6 +593,33 @@ func TestSkillScriptToolRequiresEnabledScript(t *testing.T) {
 	assertNoToolArtifactForCall(t, ctx, db, storyProject.ID, session.ID, "tool-script-1")
 }
 
+func TestSkillScriptToolRequiresSelectedSkill(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	skillService := skill.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Skill Script Selection Project")
+	service := NewService(db, projectService, nil)
+	service.SetSkillService(skillService)
+	installed := installEnabledScriptSkill(t, ctx, skillService, storyProject.ID)
+	session := createTestSession(t, ctx, service, storyProject.ID)
+
+	_, err := service.ExecuteTool(ctx, ToolCallInput{
+		ProjectID:  storyProject.ID,
+		SessionID:  session.ID,
+		ToolCallID: "tool-script-unselected",
+		ToolName:   "skill_script",
+		ArgumentsJSON: `{
+			"skillId": "` + installed.ID + `",
+			"scriptPath": "scripts/report.ts"
+		}`,
+	})
+	if err == nil {
+		t.Fatal("ExecuteTool() error = nil, want unselected skill error")
+	}
+	assertNoToolArtifactForCall(t, ctx, db, storyProject.ID, session.ID, "tool-script-unselected")
+}
+
 func TestSkillScriptToolStoresReportArtifact(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()
@@ -646,6 +674,62 @@ func TestSkillScriptToolStoresReportArtifact(t *testing.T) {
 		`"outputKind": "report"`,
 		`"kind": "report"`,
 		`"title": "Script report"`,
+	)
+	assertSkillScriptActivityAndArtifact(t, ctx, db, storyProject.ID, session.ID, result, installed.ID)
+}
+
+func TestSkillScriptToolStoresPersistedRunnerFailure(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	skillService := skill.NewService(db)
+	skillService.SetScriptRunner(&agentFakeScriptRunner{
+		result: scriptruntime.RunResult{
+			Status:       scriptruntime.StatusFailed,
+			ErrorMessage: "script exited with status 1",
+			StderrText:   "boom",
+			ExitCode:     1,
+		},
+		err: errors.New("script exited with status 1"),
+	})
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Skill Script Failed Project")
+	service := NewService(db, projectService, nil)
+	service.SetSkillService(skillService)
+	installed := installEnabledScriptSkill(t, ctx, skillService, storyProject.ID)
+	session, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:  storyProject.ID,
+		Title:      "Script session",
+		ActionKind: ActionKindContinuation,
+		ApplyMode:  ApplyModePreview,
+		SkillIDs:   []string{installed.ID},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	result, err := service.ExecuteTool(ctx, ToolCallInput{
+		ProjectID:  storyProject.ID,
+		SessionID:  session.ID,
+		ToolCallID: "tool-script-failed",
+		ToolName:   "skill_script",
+		ArgumentsJSON: `{
+			"skillId": "` + installed.ID + `",
+			"scriptPath": "scripts/report.ts"
+		}`,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool() error = %v, want persisted failed result", err)
+	}
+
+	assertMarkdownContains(t, result.ModelVisibleMarkdown,
+		"# Skill Script Result",
+		"Status: failed",
+		"script exited with status 1",
+		"did not modify project content",
+	)
+	assertFullJSONContains(t, result.FullResultJSON,
+		`"status": "failed"`,
+		`"errorMessage": "script exited with status 1"`,
 	)
 	assertSkillScriptActivityAndArtifact(t, ctx, db, storyProject.ID, session.ID, result, installed.ID)
 }
@@ -1209,10 +1293,11 @@ func installEnabledScriptSkill(t *testing.T, ctx context.Context, service *skill
 
 type agentFakeScriptRunner struct {
 	result scriptruntime.RunResult
+	err    error
 }
 
 func (r *agentFakeScriptRunner) Run(context.Context, scriptruntime.RunRequest) (scriptruntime.RunResult, error) {
-	return r.result, nil
+	return r.result, r.err
 }
 
 func assertToolActivityAndArtifact(t *testing.T, ctx context.Context, db *sql.DB, projectID, sessionID, toolName string, result ToolResult) {
@@ -1311,8 +1396,8 @@ func assertSkillScriptActivityAndArtifact(t *testing.T, ctx context.Context, db 
 		if metadata["scriptRunId"] == "" {
 			t.Fatalf("metadata scriptRunId = %#v, want non-empty", metadata["scriptRunId"])
 		}
-		if metadata["status"] != "succeeded" {
-			t.Fatalf("metadata status = %#v, want succeeded", metadata["status"])
+		if metadata["status"] == "" {
+			t.Fatalf("metadata status = %#v, want non-empty", metadata["status"])
 		}
 		break
 	}
