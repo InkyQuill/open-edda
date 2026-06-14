@@ -39,7 +39,7 @@ Pacing and sequencing review for scenes that feel slow, exhausting, flat, or mec
 - The issue is mainly line style, dialogue polish, or canon building.
 - The text is still too early and vague for scene-level diagnosis.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the target scene or chapter in sequence.
 2. Identify the scene goal, conflict escalation, outcome, and aftermath.
@@ -47,7 +47,7 @@ Pacing and sequencing review for scenes that feel slow, exhausting, flat, or mec
 4. Explain what should tighten, expand, or move.
 5. Suggest next revision targets without rewriting Story Text by default.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the pacing diagnosis in chat for immediate use.
 - Create an Attached Note when the report belongs to a specific chapter or scene selection.
@@ -57,4 +57,4 @@ Pacing and sequencing review for scenes that feel slow, exhausting, flat, or mec
 
 ## Script Compatibility
 
-This rewrite adapts source scene-analysis logic into Writer-native pacing rubrics and reports. Source helpers are not runnable in Milestone 3.5.
+This rewrite adapts source scene-analysis logic into Edda-native pacing rubrics and reports. Source helpers are not runnable in Milestone 3.5.

@@ -438,8 +438,8 @@ export function App() {
     <main className="app-shell">
       <section className="project-dashboard">
         <header>
-          <h1>Writer</h1>
-          <p>Private AI writing studio</p>
+          <h1>Edda</h1>
+          <p>self-hosted AI writing studio</p>
         </header>
 
         <div className="project-list">

@@ -1,10 +1,10 @@
-# Writer Skill Library Rewrite Plan
+# Open Edda Skill Library Rewrite Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Do not start implementation until the skill library decisions in this plan are accepted.
 
-**Goal:** Build Milestone 3.5: curate and rewrite Writer's Built-In Skill Library from the copied fiction skill collection plus the important project skills, so first-run Writer has useful daily writing skills, optional specialized skills, clear `$` mention names, script-status disclosure, and no unrelated terminal-agent or GM workflow clutter.
+**Goal:** Build Milestone 3.5: curate and rewrite Open Edda's Built-In Skill Library from the copied fiction skill collection plus the important project skills, so first-run Open Edda has useful daily writing skills, optional specialized skills, clear `$` mention names, script-status disclosure, and no unrelated terminal-agent or GM workflow clutter.
 
-**Product Principle:** The `$` picker should feel like a writing assistant's skill shelf, not a dump of every copied prompt. Daily fiction-writing help is enabled by default. Specialized but useful fiction skills are installed as Optional Skills. Skills outside Writer's focus, or skills whose core value depends on script execution, are Archived Skills or deferred until the Skill Script Runtime.
+**Product Principle:** The `$` picker should feel like a writing assistant's skill shelf, not a dump of every copied prompt. Daily fiction-writing help is enabled by default. Specialized but useful fiction skills are installed as Optional Skills. Skills outside Open Edda's focus, or skills whose core value depends on script execution, are Archived Skills or deferred until the Skill Script Runtime.
 
 **Inputs:**
 
@@ -23,8 +23,8 @@ This plan covers:
 
 - Curating every skill in `docs/skills/important` and `docs/skills/suggested/fiction`.
 - Renaming skills when the source name is vague or misleading.
-- Rewriting `SKILL.md` files into Writer-native instructions, routing metadata, and author-facing descriptions.
-- Creating one new optional Writer-native skill: `$children-stories`.
+- Rewriting `SKILL.md` files into Edda-native instructions, routing metadata, and author-facing descriptions.
+- Creating one new optional Edda-native skill: `$children-stories`.
 - Creating a manifest that records each skill's source, final name, default/optional/archive status, script status, and rewrite notes.
 - Auditing scripts and deferring script-dependent skills until Milestone 3.6.
 - Preserving useful `data/`, `templates/`, and `references/` assets when they improve the skill without forcing script execution.
@@ -33,7 +33,7 @@ This plan covers:
 This plan does not cover:
 
 - Implementing the Skill Script Runtime.
-- Running bundled skill scripts inside Writer.
+- Running bundled skill scripts inside Open Edda.
 - Building a remote skill marketplace.
 - Building genre packs beyond `$children-stories`.
 - Building the deferred Story Consistency Dashboard from `story-zoom`.
@@ -46,14 +46,14 @@ This plan does not cover:
 - Archived Skills are reviewed and intentionally not shipped in the Built-In Skill Library.
 - Script-bearing skills must disclose script status in the skill browser.
 - A skill whose core value depends on running scripts is deferred until Milestone 3.6.
-- A skill can ship in Milestone 3.5 with scripts present only when the script is an optional accelerator and the skill has a clear Writer-native path without script execution.
+- A skill can ship in Milestone 3.5 with scripts present only when the script is an optional accelerator and the skill has a clear Edda-native path without script execution.
 - Skill names should describe author intent in the `$` picker. Preserve source names only when they are already clear.
 
 ## Built-In Skill Library Decisions
 
 ### Default Daily Writing Skills
 
-| Writer Skill | Source | Decision |
+| Open Edda Skill | Source | Decision |
 | --- | --- | --- |
 | `$story-coach` | `story-coach` | Default. Coaching mode that asks questions and does not write prose for the author. |
 | `$story-collaborator` | `story-collaborator` | Default. Active co-writing mode that can generate prose, alternatives, continuations, and examples. |
@@ -76,7 +76,7 @@ This plan does not cover:
 
 ### Optional Specialized Skills
 
-| Writer Skill | Source | Decision |
+| Open Edda Skill | Source | Decision |
 | --- | --- | --- |
 | `$revision-planner` | `novel-revision` | Optional, renamed. Major novel-scale revision planning and cascade control. |
 | `$emotional-beats` | `key-moments` | Optional, renamed. Builds story structure around essential emotional moments. |
@@ -99,7 +99,7 @@ This plan does not cover:
 | `$sleep-story` | `sleep-story` | Optional. Supports calm bedtime or meditation-style stories. |
 | `$paradox-fables` | `paradox-fables` | Optional. Supports fables that preserve paradox instead of reducing to simple morals. |
 | `$societal-evolution` | `multi-order-evolution` | Optional, renamed. Supports multi-generational civilization changes. |
-| `$children-stories` | New Writer-native skill | Optional. Supports age-appropriate children's fiction, read-aloud rhythm, gentle tension, and age bands. |
+| `$children-stories` | New Edda-native skill | Optional. Supports age-appropriate children's fiction, read-aloud rhythm, gentle tension, and age bands. |
 | `$story-dna` | `dna-extraction` | Optional, renamed. Extracts functional story mechanics from existing works for study. |
 | `$adapt-story` | `adaptation-synthesis` + `media-adaptation` | Optional, renamed and merged. Adapts functional story DNA into new contexts. |
 | `$book-marketing` | `book-marketing` | Optional. Publishing-adjacent blurbs, taglines, query copy, and descriptions. |
@@ -111,11 +111,11 @@ This plan does not cover:
 | --- | --- |
 | `story-zoom` | Defer as future Story Consistency Dashboard, not a Milestone 3.5 skill. |
 | `shared-world` | Archive for now. Its useful parts overlap Story Bible and future collaboration/shared-universe work. |
-| `list-builder` | Archive for now. Revisit only if Writer gets random-table or entropy tools. |
-| `game-facilitator` | Archive. GM session-running is outside Writer's core. |
+| `list-builder` | Archive for now. Revisit only if Open Edda gets random-table or entropy tools. |
+| `game-facilitator` | Archive. GM session-running is outside Open Edda's core. |
 | `table-tone` | Archive. Useful for GMs, not core fiction-writing workflow. |
 | `world-fates` | Archive/defer. Campaign mechanics and fate rolls depend on runtime/data workflows outside v1. |
-| `reverse-outliner` | Defer after script audit. Current value depends on a file/script analysis pipeline that needs a Writer-native runtime and structured intermediate storage. |
+| `reverse-outliner` | Defer after script audit. Current value depends on a file/script analysis pipeline that needs an Edda-native runtime and structured intermediate storage. |
 | Any script-dependent skill | Defer until Skill Script Runtime if it cannot provide clear value without running scripts. |
 
 ## Naming And Description Rules
@@ -127,7 +127,7 @@ Every shipped skill must have:
 - A longer description that explains when to use it and when not to use it.
 - Clear distinction between coaching and collaboration modes.
 - Clear distinction between brainstorming/building and checking/diagnosis.
-- Route metadata aligned to Writer actions and content kinds.
+- Route metadata aligned to Open Edda actions and content kinds.
 
 Example:
 
@@ -141,11 +141,11 @@ route:
   priority: 80
 ```
 
-## Writer-Native Rewrite Rules
+## Open Edda-Native Rewrite Rules
 
 Rewrite source skills away from terminal-agent assumptions:
 
-- Replace files/folders with Writer concepts:
+- Replace files/folders with Open Edda concepts:
   - `story/`, `manuscript/`, scene files -> Story Text and Chapters.
   - `characters/`, `worldbuilding/`, wiki files -> Story Bible Entries and Entry Sections.
   - scratch folders and exploration files -> Project Notes.
@@ -185,7 +185,7 @@ Audit each retained script for:
 - runtime dependency such as Deno, Node, Graphviz, or external CLIs;
 - expected inputs;
 - expected outputs;
-- whether it can use database-backed Writer inputs later;
+- whether it can use database-backed Open Edda inputs later;
 - whether output can be a proposal/report instead of a direct mutation.
 
 Milestone 3.5 does not implement script execution. Milestone 3.6 provides the runtime and database-backed script adapters.
@@ -243,11 +243,11 @@ Milestone 3.5 does not implement script execution. Milestone 3.6 provides the ru
 
 For each rewritten skill:
 
-- [ ] Add Writer-compatible frontmatter.
+- [ ] Add Open Edda-compatible frontmatter.
 - [ ] Add clear author-facing description.
 - [ ] Add "Use when" and "Do not use when" sections.
 - [ ] Remove unsupported terminal/file instructions.
-- [ ] Add Writer-native output handling.
+- [ ] Add Edda-native output handling.
 - [ ] Add routing metadata.
 - [ ] Add script compatibility note if any source script existed.
 
@@ -296,7 +296,7 @@ For each rewritten skill:
 - [ ] Archive `game-facilitator`.
 - [ ] Archive `table-tone`.
 - [ ] Archive `world-fates`.
-- [ ] Defer `reverse-outliner` with a pointer to a future Writer-native analysis pipeline.
+- [ ] Defer `reverse-outliner` with a pointer to a future Edda-native analysis pipeline.
 - [ ] Archive `story-idea-generator` with a pointer to future genre/idea expansion.
 - [ ] Archive `chapter-drafter` with a pointer to future orchestration support.
 - [ ] Archive any skill that fails script-dependence review.
@@ -312,7 +312,7 @@ Each archive note should explain why the skill is not included and what would ne
 - [ ] Inventory every `scripts/` directory in the source collection.
 - [ ] Inventory useful `data/`, `templates/`, and `references/` assets.
 - [ ] Decide which data assets are copied into built-in skills.
-- [ ] Decide which templates become skill response formats or Writer note templates.
+- [ ] Decide which templates become skill response formats or Open Edda note templates.
 - [ ] Classify every script using the Milestone 3.5 script policy.
 - [ ] Add disclosure text to every shipped script-bearing skill.
 - [ ] Mark script-dependent skills as deferred.
@@ -350,7 +350,7 @@ Each archive note should explain why the skill is not included and what would ne
 ## Acceptance Criteria
 
 - Every source skill under `docs/skills/important` and `docs/skills/suggested/fiction` is accounted for in the manifest.
-- Every shipped skill has a clear Writer-facing `$` name and human description.
+- Every shipped skill has a clear Open Edda-facing `$` name and human description.
 - Default Skills are useful for daily fiction writing and do not depend on scripts.
 - Optional Skills are useful but specialized, and disabled by default.
 - Archived Skills are documented with reasons.

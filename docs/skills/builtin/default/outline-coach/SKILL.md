@@ -40,7 +40,7 @@ Coaching mode for authors who want help discovering structure without having the
 - The main task is prose generation or chapter continuation.
 - The request is mainly about canon brainstorming rather than story structure.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the request and the relevant outline notes, chapters, or Story Bible context.
 2. Diagnose the structural problem in plain language.
@@ -48,7 +48,7 @@ Coaching mode for authors who want help discovering structure without having the
 4. Offer frameworks and options without generating copy-ready outline content.
 5. End by returning the author to a concrete outlining move.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return coaching and diagnosis in chat by default.
 - Create an Attached Note when the guidance belongs to one chapter or one act problem.
@@ -58,4 +58,4 @@ Coaching mode for authors who want help discovering structure without having the
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Writer-native coaching and notes.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Edda-native coaching and notes.

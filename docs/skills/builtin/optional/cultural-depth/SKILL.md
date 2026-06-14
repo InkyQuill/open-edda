@@ -42,7 +42,7 @@ Cultural texture work for authors who want characters and societies to feel shap
 - The author wants only a fast naming pass.
 - The work would be better served by direct lore creation instead of implied depth.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the relevant Story Bible context and how the culture currently appears in Story Text.
 2. Identify the missing layer: custom, artifact, taboo, mixed influence, or inherited assumption.
@@ -50,7 +50,7 @@ Cultural texture work for authors who want characters and societies to feel shap
 4. Tie those signals to characters, place, and conflict rather than trivia.
 5. Keep durable culture claims reviewable until the author confirms them.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the cultural layer suggestions in chat by default.
 - Create an Attached Note when the work supports one Chapter, one community, or one scene cluster.
@@ -60,4 +60,4 @@ Cultural texture work for authors who want characters and societies to feel shap
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Writer-native cultural analysis and canon-safe proposals.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Edda-native cultural analysis and canon-safe proposals.

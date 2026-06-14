@@ -40,7 +40,7 @@ Line-level prose help for chapters that already work structurally and now need c
 - The author wants broad story diagnosis instead of line work.
 - The author wants lore building or continuity planning.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Confirm that the passage is ready for line work, not developmental repair.
 2. Read the target passage with the Writing Brief and local chapter context.
@@ -48,7 +48,7 @@ Line-level prose help for chapters that already work structurally and now need c
 4. Offer concise guidance first, then rewrite only if the author asks for applied line edits.
 5. Keep any edits tightly scoped to the selected passage.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return short diagnosis and examples in chat by default.
 - Create an Attached Note when the polish report belongs to one chapter or selection.
@@ -58,4 +58,4 @@ Line-level prose help for chapters that already work structurally and now need c
 
 ## Script Compatibility
 
-This rewrite adapts source prose-check logic into Writer-native line-edit guidance and revision reports. Source helpers are not runnable in Milestone 3.5.
+This rewrite adapts source prose-check logic into Edda-native line-edit guidance and revision reports. Source helpers are not runnable in Milestone 3.5.

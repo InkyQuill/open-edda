@@ -28,7 +28,7 @@ metadata:
 
 # $worldbuilding-brainstorm
 
-The default lore-building skill for Writer: it pressure-tests setting ideas, asks one question at a time, and keeps canon under explicit author control.
+The default lore-building skill for Edda: it pressure-tests setting ideas, asks one question at a time, and keeps canon under explicit author control.
 
 ## Use When
 
@@ -42,7 +42,7 @@ The default lore-building skill for Writer: it pressure-tests setting ideas, ask
 - The task is only diagnostic and should not expand lore.
 - The author wants canon changed without review.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the relevant Story Bible entries, notes, and any on-page chapter evidence.
 2. Ask one targeted question at a time, with a clear recommendation when helpful.
@@ -50,7 +50,7 @@ The default lore-building skill for Writer: it pressure-tests setting ideas, ask
 4. Distinguish existing canon, recommendations, and open questions.
 5. Record canon only after the author confirms it.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Keep active brainstorming in chat by default.
 - Create an Attached Note when a lore discussion is tied to one chapter or one selection.
@@ -60,4 +60,4 @@ The default lore-building skill for Writer: it pressure-tests setting ideas, ask
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Writer-native questioning, Story Bible proposals, and reviewable notes.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Edda-native questioning, Story Bible proposals, and reviewable notes.

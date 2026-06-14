@@ -43,7 +43,7 @@ Constructed language support for authors who need coherent naming languages, voc
 - The request is mainly about prose style or dialogue polish.
 - The author wants final canon inserted into Story Text without review.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read existing names, Story Bible language notes, and any relevant world constraints.
 2. Define the language scope: quick naming palette, deeper lexicon rules, or historical divergence.
@@ -51,7 +51,7 @@ Constructed language support for authors who need coherent naming languages, voc
 4. Generate example words or registers and test them against what is already canon.
 5. Keep all new vocabulary and language history reviewable until the author confirms them.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return phonology notes, sample lexicon, and naming guidance in chat by default.
 - Create an Attached Note when the work serves one Chapter, one location, or one naming problem.
@@ -61,4 +61,4 @@ Constructed language support for authors who need coherent naming languages, voc
 
 ## Script Compatibility
 
-This rewrite preserves built-in phoneme and syllable data as Writer-native references. Source helper scripts are not runnable in Milestone 3.5, so the skill works through guidance, data, and reviewable language notes only.
+This rewrite preserves built-in phoneme and syllable data as Edda-native references. Source helper scripts are not runnable in Milestone 3.5, so the skill works through guidance, data, and reviewable language notes only.

@@ -41,7 +41,7 @@ An active structural partner that proposes beats, sequences, and outline alterna
 - The author wants finished prose drafting instead of planning.
 - The author wants canon changes recorded without review.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the current outline material, relevant Story Bible context, and any chapter evidence.
 2. Confirm the target scope: act, sequence, chapter plan, or revision of an existing outline.
@@ -49,14 +49,14 @@ An active structural partner that proposes beats, sequences, and outline alterna
 4. Keep sample text brief and illustrative if used at all; the main output is structure.
 5. Apply outline changes only through explicit continuation or rewrite actions requested by the author.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return short structural options in chat while the author is choosing direction.
 - Create an Attached Note when the proposal belongs to one chapter or one sequence.
 - Create or update a Project Note when the author wants a working outline, act map, or beat bank preserved.
-- Use Structured Writes only when the author explicitly asks to update the outline material stored in Writer.
+- Use Structured Writes only when the author explicitly asks to update the outline material stored in Edda.
 - Propose Story Bible updates separately if structural choices imply new canon.
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Writer-native structure proposals and explicit note updates.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Edda-native structure proposals and explicit note updates.

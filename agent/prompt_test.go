@@ -128,7 +128,7 @@ func TestPromptBuildActionPromptAssemblesContinuationContext(t *testing.T) {
 		t.Fatalf("BuildActionPrompt() error = %v", err)
 	}
 
-	assertContains(t, bundle.SystemMessage, "You are a fiction writing assistant working inside Writer. Preserve the author's intent, respect established project facts, and use available tools to inspect project context before making claims. Do not invent durable worldbuilding facts unless the author asks you to brainstorm.")
+	assertContains(t, bundle.SystemMessage, "You are a fiction writing assistant working inside Edda. Preserve the author's intent, respect established project facts, and use available tools to inspect project context before making claims. Do not invent durable worldbuilding facts unless the author asks you to brainstorm.")
 	assertContains(t, bundle.UserMessage, "Continue the target chapter")
 	assertContains(t, bundle.UserMessage, "Continue with Mira noticing one impossible flower.")
 

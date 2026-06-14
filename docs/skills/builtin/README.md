@@ -1,6 +1,6 @@
 # Built-In Skill Library
 
-This directory is the Milestone 3.5 staging area for Writer-native rewrites of the built-in skill library. The folders here are source buckets for rewrite/import work, not proof that the final built-in library has already been imported or installed.
+This directory is the Milestone 3.5 staging area for Edda-native rewrites of the built-in skill library. The folders here are source buckets for rewrite/import work, not proof that the final built-in library has already been imported or installed.
 
 ## Invocation Syntax
 
@@ -35,4 +35,4 @@ Milestone 3.5 rewrites the library shape and manifest, not the script runtime.
 
 ## Rewrite Status
 
-Milestone 3.5 populates `default/` and `optional/` with Writer-native rewrites. Follow-up integration work can connect these staged rewrites to Skill Core import/runtime behavior. Archived material should stay as documentation rather than installed skills.
+Milestone 3.5 populates `default/` and `optional/` with Edda-native rewrites. Follow-up integration work can connect these staged rewrites to Skill Core import/runtime behavior. Archived material should stay as documentation rather than installed skills.

@@ -41,7 +41,7 @@ Advisory representation review for authors who want to catch stereotype risks, a
 - The request is purely about grammar or pacing.
 - The author wants this skill to overrule intent instead of informing decisions.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the target Story Text, Chapter, Story Bible material, or note set in context.
 2. Identify the represented identities, power dynamics, and likely concern areas.
@@ -49,7 +49,7 @@ Advisory representation review for authors who want to catch stereotype risks, a
 4. Offer revision directions that preserve the author's goals where possible.
 5. Leave final canon and wording decisions to the author.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the advisory review in chat by default.
 - Create an Attached Note when the feedback belongs to one Chapter, one passage, or one selection.
@@ -59,4 +59,4 @@ Advisory representation review for authors who want to catch stereotype risks, a
 
 ## Script Compatibility
 
-This rewrite adapts source audit logic into Writer-native review guidance. Source helper scripts are not runnable in Milestone 3.5, so the skill works through analysis, references, and reviewable notes only.
+This rewrite adapts source audit logic into Edda-native review guidance. Source helper scripts are not runnable in Milestone 3.5, so the skill works through analysis, references, and reviewable notes only.

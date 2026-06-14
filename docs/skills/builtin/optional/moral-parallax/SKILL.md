@@ -42,7 +42,7 @@ Speculative story design for authors who want to expose how comfort, privilege, 
 - The request is mainly about ordinary character denial without systemic distance.
 - The author wants a neat, consequence-free resolution.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the relevant Story Text, Chapter notes, and any world rules involved.
 2. Identify which moral distance the story is maintaining and who benefits from it.
@@ -50,7 +50,7 @@ Speculative story design for authors who want to expose how comfort, privilege, 
 4. Check that the mechanism fits the world and the emotional promise.
 5. Draft or revise only when the author explicitly asks for applied story work.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the distance-collapse design in chat by default.
 - Create an Attached Note when the work belongs to one Chapter or one focused concept problem.
@@ -60,4 +60,4 @@ Speculative story design for authors who want to expose how comfort, privilege, 
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Writer-native thematic analysis, concept design, and optional drafting support.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Edda-native thematic analysis, concept design, and optional drafting support.

@@ -42,7 +42,7 @@ Generational worldbuilding for authors who want a civilization's present-day val
 - The request is mainly about one religion, economy, or city without long time depth.
 - The author wants quick lore instead of generational causation.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the relevant Story Bible material and identify the foundational pressures.
 2. Map first-order, second-order, and later-order changes across bodies, institutions, values, and identity.
@@ -50,7 +50,7 @@ Generational worldbuilding for authors who want a civilization's present-day val
 4. Use those shifts to generate present-day tensions and cross-society misunderstandings.
 5. Keep durable canon changes reviewable until the author confirms them.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the generational model in chat by default.
 - Create an Attached Note when the work serves one Chapter, one era, or one society in focus.
@@ -60,4 +60,4 @@ Generational worldbuilding for authors who want a civilization's present-day val
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Writer-native worldbuilding guidance and canon-safe proposals.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Edda-native worldbuilding guidance and canon-safe proposals.

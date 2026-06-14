@@ -19,13 +19,13 @@ import (
 
 func main() {
 	addr := ":8080"
-	if value := os.Getenv("WRITER_ADDR"); value != "" {
+	if value := firstEnv("OPEN_EDDA_ADDR", "WRITER_ADDR"); value != "" {
 		addr = value
 	}
 
 	deps, cleanup, err := buildDependencies()
 	if err != nil {
-		slog.Error("initialize writer", "error", err)
+		slog.Error("initialize open edda", "error", err)
 		os.Exit(1)
 	}
 	defer cleanup()
@@ -35,7 +35,7 @@ func main() {
 		Handler: app.New(deps),
 	}
 
-	slog.Info("starting writer", "addr", addr)
+	slog.Info("starting open edda", "addr", addr)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
@@ -43,9 +43,9 @@ func main() {
 }
 
 func buildDependencies() (*app.Dependencies, func(), error) {
-	dbPath := getenvDefault("WRITER_DB_PATH", "writer.db")
-	migrationsPath := getenvDefault("WRITER_MIGRATIONS_PATH", "migrations")
-	staticPath := getenvDefault("WRITER_STATIC_PATH", "frontend/dist")
+	dbPath := getenvDefault("OPEN_EDDA_DB_PATH", "edda.db", "WRITER_DB_PATH")
+	migrationsPath := getenvDefault("OPEN_EDDA_MIGRATIONS_PATH", "migrations", "WRITER_MIGRATIONS_PATH")
+	staticPath := getenvDefault("OPEN_EDDA_STATIC_PATH", "frontend/dist", "WRITER_STATIC_PATH")
 
 	db, err := store.Open(dbPath)
 	if err != nil {
@@ -105,9 +105,18 @@ func ensurePlaceholderAuthor(db *sql.DB) error {
 	return err
 }
 
-func getenvDefault(name string, fallback string) string {
-	if value := os.Getenv(name); value != "" {
+func getenvDefault(name string, fallback string, legacyNames ...string) string {
+	if value := firstEnv(append([]string{name}, legacyNames...)...); value != "" {
 		return value
 	}
 	return fallback
+}
+
+func firstEnv(names ...string) string {
+	for _, name := range names {
+		if value := os.Getenv(name); value != "" {
+			return value
+		}
+	}
+	return ""
 }

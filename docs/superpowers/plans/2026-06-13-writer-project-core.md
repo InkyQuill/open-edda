@@ -1,4 +1,4 @@
-# Writer Project Core Implementation Plan
+# Open Edda Project Core Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -206,7 +206,7 @@ import (
 
 func main() {
 	addr := ":8080"
-	if value := os.Getenv("WRITER_ADDR"); value != "" {
+	if value := firstEnv("OPEN_EDDA_ADDR", "WRITER_ADDR"); value != "" {
 		addr = value
 	}
 
@@ -215,7 +215,7 @@ func main() {
 		Handler: app.New(&app.Dependencies{}),
 	}
 
-	slog.Info("starting writer", "addr", addr)
+	slog.Info("starting open edda", "addr", addr)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
@@ -1227,7 +1227,7 @@ Create `frontend/package.json`:
 
 ```json
 {
-  "name": "writer-frontend",
+  "name": "open-edda-frontend",
   "private": true,
   "type": "module",
   "scripts": {
@@ -1267,8 +1267,8 @@ export function App() {
     <main className="app-shell">
       <section className="project-dashboard">
         <header>
-          <h1>Writer</h1>
-          <p>Private AI writing studio</p>
+          <h1>Open Edda</h1>
+          <p>self-hosted AI writing studio</p>
         </header>
 
         <div className="project-list">

@@ -44,7 +44,7 @@ Adaptation support for authors moving a story into a new setting, medium logic, 
 - The request is only for direct plot summary.
 - The author wants a beat-for-beat copy with cosmetic changes.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the source description, story DNA notes, and target context the author wants.
 2. Identify the non-negotiable functions and the forms that can safely change.
@@ -52,7 +52,7 @@ Adaptation support for authors moving a story into a new setting, medium logic, 
 4. Check for context mismatch, missing functions, and genre drift.
 5. Draft or rewrite adapted material only when the author explicitly asks for it.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the adaptation mapping in chat by default.
 - Create an Attached Note when the work belongs to one Chapter, one scene cluster, or one adaptation problem.
@@ -62,4 +62,4 @@ Adaptation support for authors moving a story into a new setting, medium logic, 
 
 ## Script Compatibility
 
-This rewrite preserves built-in adaptation data as Writer-native reference material. Source helper scripts are not runnable in Milestone 3.5, so the skill works through guidance, data, templates, and reviewable adaptation plans only.
+This rewrite preserves built-in adaptation data as Edda-native reference material. Source helper scripts are not runnable in Milestone 3.5, so the skill works through guidance, data, templates, and reviewable adaptation plans only.

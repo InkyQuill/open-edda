@@ -41,7 +41,7 @@ Branching-fiction support for authors who need meaningful choices, manageable st
 - The request is only about prose polish inside one branch.
 - The author wants a full implementation plan for external game tooling rather than story design.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the target branch, choice map, or outline note.
 2. Identify whether the problem is weak choices, branch sprawl, state chaos, or unsatisfying endings.
@@ -49,7 +49,7 @@ Branching-fiction support for authors who need meaningful choices, manageable st
 4. Make each choice express values, tradeoffs, or character, not just menu navigation.
 5. Draft or revise branch text only when the author explicitly asks for it.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the branching diagnosis or proposed structure in chat by default.
 - Create an Attached Note when the work belongs to one branch or one scene cluster.
@@ -59,4 +59,4 @@ Branching-fiction support for authors who need meaningful choices, manageable st
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Writer-native analysis, structure guidance, and optional branch drafting.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Edda-native analysis, structure guidance, and optional branch drafting.

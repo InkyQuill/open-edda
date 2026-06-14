@@ -27,7 +27,7 @@ metadata:
 
 # $story-sense
 
-The broad diagnostic skill for figuring out what is wrong, what stage the work is in, and which Writer-native move should happen next.
+The broad diagnostic skill for figuring out what is wrong, what stage the work is in, and which Edda-native move should happen next.
 
 ## Use When
 
@@ -41,15 +41,15 @@ The broad diagnostic skill for figuring out what is wrong, what stage the work i
 - The task is a focused line edit, dialogue audit, or ending check with a clear scope.
 - The author wants canon brainstorming more than diagnosis.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the request and the most relevant `@` chapters, notes, or Story Bible material.
 2. Identify the current story state and name the likely failure mode.
 3. Explain the diagnosis in plain language.
-4. Recommend the next Writer-native skill or action, with one or two concrete next steps.
+4. Recommend the next Edda-native skill or action, with one or two concrete next steps.
 5. Stay diagnostic unless the author explicitly switches to a writing or revision workflow.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the diagnosis and routing advice in chat by default.
 - Create an Attached Note when the diagnosis belongs to a specific chapter or selection.
@@ -59,4 +59,4 @@ The broad diagnostic skill for figuring out what is wrong, what stage the work i
 
 ## Script Compatibility
 
-This rewrite adapts source helper logic into Writer-native diagnosis, genre tables, and function references. Source helpers are not runnable in Milestone 3.5.
+This rewrite adapts source helper logic into Edda-native diagnosis, genre tables, and function references. Source helpers are not runnable in Milestone 3.5.

@@ -41,7 +41,7 @@ Short-form fiction support for authors working in drabble, micro, flash, or sudd
 - The author mainly needs worldbuilding support rather than short-form execution.
 - The request is for publishing copy instead of fiction.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the full short piece or the intended prompt and target length.
 2. Identify the dominant problem: hook, compression, subtext, ending, image pattern, or logic.
@@ -49,7 +49,7 @@ Short-form fiction support for authors working in drabble, micro, flash, or sudd
 4. Preserve what is already sharp instead of over-expanding the piece.
 5. Draft or rewrite only within the scope the author explicitly chooses.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return diagnostic notes or draft text in chat by default.
 - Create an Attached Note when the work belongs to one short piece or one selection.
@@ -59,4 +59,4 @@ Short-form fiction support for authors working in drabble, micro, flash, or sudd
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Writer-native drafting, diagnosis, and revision guidance.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Edda-native drafting, diagnosis, and revision guidance.

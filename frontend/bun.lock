@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "writer-frontend",
+      "name": "open-edda-frontend",
       "dependencies": {
         "react": "latest",
         "react-dom": "latest",

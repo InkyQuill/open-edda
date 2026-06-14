@@ -39,7 +39,7 @@ Structured post-draft analysis for authors who want a thorough read on what a ch
 - The request is narrowly about dialogue, prose polish, or pacing.
 - The author wants direct rewriting instead of analysis.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the full target chapter or story in context.
 2. Evaluate narrative role, character work, pacing, clarity, and payoff.
@@ -47,7 +47,7 @@ Structured post-draft analysis for authors who want a thorough read on what a ch
 4. Summarize what is already working so revision does not damage strengths.
 5. End with a prioritized set of revision targets.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the core analysis in chat for quick discussion.
 - Create an Attached Note when the report belongs to one chapter.
@@ -57,4 +57,4 @@ Structured post-draft analysis for authors who want a thorough read on what a ch
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Writer-native analysis and note output.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Edda-native analysis and note output.

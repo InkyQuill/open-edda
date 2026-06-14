@@ -21,7 +21,7 @@ type Dependencies struct {
 	StaticFS       fs.FS
 }
 
-// New builds the HTTP handler for the Writer service.
+// New builds the HTTP handler for the Open Edda service.
 func New(deps *Dependencies) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {

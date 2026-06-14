@@ -40,7 +40,7 @@ Multi-POV planning for authors who want several perspectives to feel necessary, 
 - Additional POVs would only repeat information.
 - The request is mainly for line edits inside a single scene.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the relevant Chapters, notes, or outline material.
 2. Identify the catalyst environment or shared pressure linking the perspectives.
@@ -48,7 +48,7 @@ Multi-POV planning for authors who want several perspectives to feel necessary, 
 4. Map where the viewpoints intersect, contradict, or reframe each other.
 5. Draft or revise POV text only when the author explicitly asks for it.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the POV structure in chat by default.
 - Create an Attached Note when the plan belongs to one Chapter cluster.
@@ -58,4 +58,4 @@ Multi-POV planning for authors who want several perspectives to feel necessary, 
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Writer-native planning, analysis, and optional drafting support.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works through Edda-native planning, analysis, and optional drafting support.

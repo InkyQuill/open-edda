@@ -40,7 +40,7 @@ Functional analysis for authors who want to understand what a story is doing ben
 - The request is only for marketing positioning.
 - The goal is to copy surface features instead of underlying function.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the target Story Text, Chapter, or outside description the author provides.
 2. Separate surface form from structural, emotional, thematic, and relational function.
@@ -48,7 +48,7 @@ Functional analysis for authors who want to understand what a story is doing ben
 4. Organize the results so the author can reuse function without cloning the original shell.
 5. Keep the analysis advisory unless the author asks for a next-step adaptation plan.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return the DNA analysis in chat by default.
 - Create an Attached Note when the analysis belongs to one Chapter or one focused excerpt.
@@ -58,4 +58,4 @@ Functional analysis for authors who want to understand what a story is doing ben
 
 ## Script Compatibility
 
-This rewrite preserves built-in extraction schemas and function taxonomies as Writer-native references. Source helper scripts are not runnable in Milestone 3.5, so the skill works through analysis, data, and reviewable notes only.
+This rewrite preserves built-in extraction schemas and function taxonomies as Edda-native references. Source helper scripts are not runnable in Milestone 3.5, so the skill works through analysis, data, and reviewable notes only.

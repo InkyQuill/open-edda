@@ -39,7 +39,7 @@ Publishing-adjacent copy support for authors who need blurbs, descriptions, tagl
 - The request is for fiction drafting rather than marketing copy.
 - The author wants guaranteed market comps or sales predictions.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read enough Story Text, notes, or summary material to understand genre promise and stakes.
 2. Identify the core reader promise, not just the plot events.
@@ -47,7 +47,7 @@ Publishing-adjacent copy support for authors who need blurbs, descriptions, tagl
 4. Match the copy to the actual emotional experience of the book.
 5. Keep marketing language separate from canon and Story Text unless the author wants it stored as notes.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return marketing copy in chat by default.
 - Create an Attached Note when the copy belongs to one excerpt, one launch conversation, or one focused deliverable.
@@ -57,4 +57,4 @@ Publishing-adjacent copy support for authors who need blurbs, descriptions, tagl
 
 ## Script Compatibility
 
-This rewrite preserves built-in blurb, store, tagline, and query templates as Writer-native references. Script execution is unavailable in Milestone 3.5, and this skill works through guidance, templates, and reviewable marketing drafts only.
+This rewrite preserves built-in blurb, store, tagline, and query templates as Edda-native references. Script execution is unavailable in Milestone 3.5, and this skill works through guidance, templates, and reviewable marketing drafts only.

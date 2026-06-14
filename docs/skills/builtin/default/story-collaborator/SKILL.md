@@ -40,7 +40,7 @@ An active writing partner that can draft, continue, and rewrite story material, 
 - The author wants canon decisions recorded without confirmation.
 - The task is primarily structural outlining; use `$outline-collaborator` instead.
 
-## Writer Workflow
+## Edda Workflow
 
 1. Read the request, the current Story Text, and any relevant Writing Brief or Story Bible context.
 2. Confirm the target: new draft, continuation, or rewrite.
@@ -48,7 +48,7 @@ An active writing partner that can draft, continue, and rewrite story material, 
 4. Explain the main craft choices briefly when useful.
 5. Apply text only through explicit continuation or rewrite actions requested by the author.
 
-## Writer Output Handling
+## Edda Output Handling
 
 - Return short options in chat when the author is still choosing direction.
 - Create an Attached Note when chapter-specific proposals should stay separate from Story Text for review.
@@ -58,4 +58,4 @@ An active writing partner that can draft, continue, and rewrite story material, 
 
 ## Script Compatibility
 
-This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Writer-native drafting and revision actions.
+This source skill has no required helper scripts. The Milestone 3.5 rewrite works entirely through Edda-native drafting and revision actions.
