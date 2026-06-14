@@ -11,6 +11,7 @@ import { useDispatch, useSelector } from "react-redux";
 
 import { AssistantDrawer } from "../assistant/AssistantDrawer";
 import { EditorFrame } from "../editor/EditorFrame";
+import { ModelSettingsPanel } from "../model-settings/ModelSettingsPanel";
 import { ModelStatus } from "../model-settings/ModelStatus";
 import { ContextDrawer } from "../notes/ContextDrawer";
 import { ReviewDrawer } from "../review/ReviewDrawer";
@@ -94,7 +95,9 @@ export function WorkspaceShell({
   const workspace = useSelector((state: WorkspaceRootState) => state.workspace);
   const activeLeftTab = toContextTab(workspace.activeLeftTab);
   const rightDrawer =
-    workspace.mode === "review" || workspace.activeRightTab === "tools" || workspace.activeRightTab === "revisions" ? (
+    workspace.activeRightTab === "model" ? (
+      <ModelSettingsPanel />
+    ) : workspace.mode === "review" || workspace.activeRightTab === "tools" || workspace.activeRightTab === "revisions" ? (
       <ReviewDrawer />
     ) : (
       <AssistantDrawer projectId={projectId} />
@@ -117,7 +120,7 @@ export function WorkspaceShell({
   function renderMobileSheet(sheet: NonNullable<MobileSheet>) {
     if (sheet === "assistant") return <AssistantDrawer projectId={projectId} />;
     if (sheet === "review") return <ReviewDrawer />;
-    if (sheet === "model") return <ModelStatus />;
+    if (sheet === "model") return <ModelSettingsPanel />;
     return (
       <ContextDrawer
         activeTab={sheet === "world-notes" ? "world" : "contents"}
