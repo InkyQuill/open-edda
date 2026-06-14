@@ -11,7 +11,7 @@ This roadmap tracks product milestones separately from implementation plans. Det
 | 3 | Skill Core | Implemented | `docs/superpowers/plans/2026-06-13-writer-skill-core.md` |
 | 3.5 | Elysium Skill Library Rewrite | Implemented | `docs/superpowers/plans/2026-06-14-writer-skill-library-rewrite.md` |
 | 3.6 | Skill Script Runtime | Implemented | `docs/superpowers/plans/2026-06-14-open-edda-skill-script-runtime.md` |
-| 4 | Daily Writing Polish | Planned | Needs dedicated plan |
+| 4 | Daily Writing Polish | In progress | See phase tracker below |
 | Later | Local Sync And Collaboration | Deferred | Needs specs after v1 is stable |
 
 ## Milestone 1: Project Core
@@ -120,6 +120,19 @@ Acceptance target:
 - The Writing Workspace feels usable for daily chapter work, not just API validation.
 - Selection/cursor workflows are comfortable on desktop and tablet, with phone support for reading, chat, small edits, and triggering actions.
 - Revision review, attached notes, model switching, and provider disclosure are visible without dominating the writing surface.
+
+### Milestone 4 Phase Tracker
+
+Detailed design context lives in `docs/superpowers/specs/2026-06-14-milestone-4-daily-writing-polish-design.md`.
+
+| Phase | Scope | Status | Plan |
+| --- | --- | --- | --- |
+| 1 | Routed workspace foundation: React Router, Redux, Tailwind v4, shadcn/ui, responsive shell, editor-local action shells | Implemented | `docs/superpowers/plans/2026-06-14-milestone-4-workspace-foundation.md` |
+| 2 | Behavior parity and data slices: move old monolithic assistant/settings/skills/activity behavior into routed vertical slices | Planned | `docs/superpowers/plans/2026-06-14-milestone-4-behavior-parity.md` |
+| 3 | Editor adapter: replace read-only textarea assumptions with an editor boundary prepared for Galley integration and mutation-safe cursor/selection APIs | Planned | Create after Phase 2 is implemented |
+| 4 | Assistant actions: wire Generate, Rewrite, Check, preview, accept/reject, and revision-safe conflict handling from the editor-local controls | Planned | Create after Phase 3 is implemented |
+| 5 | Review surfaces: revisions, diff/restore, attached notes, activity, prompt records, and review-oriented drawer workflows | Planned | Create after Phase 4 is implemented |
+| 6 | Mobile and browser smoke hardening: sheet behavior, persistence, responsive ergonomics, and Playwright/browser coverage | Planned | Create after Phase 5 is implemented |
 
 ## Later: Local Sync And Collaboration
 

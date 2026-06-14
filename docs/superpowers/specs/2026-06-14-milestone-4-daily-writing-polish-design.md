@@ -25,10 +25,10 @@ Routes:
 /login
 /projects
 /projects/:projectId
-/projects/:projectId/content/:contentId
+/projects/:projectId/content/:contentKind/:contentId
 ```
 
-Routes identify durable navigation state: authenticated area, selected project, and selected content item. Deep links to project content are required.
+Routes identify durable navigation state: authenticated area, selected project, selected content kind, and selected content item. Deep links to project content are required. The route includes `contentKind` so direct links to story bible entries, writing briefs, and project notes do not depend on local Redux or localStorage state.
 
 Workspace mode, panel state, drawer widths, active tabs, selected action modal, and mobile sheets are not URL search params. They live in Redux and persisted local storage. Search params for `mode` or `panel` are intentionally out of scope because they would duplicate workspace state in the URL and create unclear ownership.
 
@@ -225,12 +225,11 @@ Backend integration tests remain in Go. Milestone 4 may add backend endpoints on
 
 Milestone 4 should be implemented in stages:
 
-1. Add routing, Redux store, Tailwind v4, shadcn/ui setup, and vertical-slice structure.
-2. Move existing auth/project/workspace behavior into routes and slices without changing product behavior.
-3. Build the workspace shell with mode presets and responsive drawers/sheets.
-4. Build the editor frame, Generate composer, selection action bubble, mobile toolbar, and Rewrite/Check modal shell.
-5. Integrate Galley Editor or a staged editor adapter behind `EditorFrame`.
-6. Add Review mode drawer surfaces for chat/tools-first analysis, with revisions/diffs/notes nearby.
-7. Add focused tests and browser smoke coverage.
+1. Routed workspace foundation: add routing, Redux store, Tailwind v4, shadcn/ui setup, vertical-slice structure, workspace shell, editor frame, Generate composer, selection action bubble, mobile toolbar, and Rewrite/Check modal shell.
+2. Behavior parity and data slices: move existing assistant, model settings, skill, activity, prompt-record, and script-runtime visibility from the old monolithic frontend into routed vertical slices.
+3. Editor adapter: integrate Galley Editor or a staged editor adapter behind `EditorFrame`, with mutation-safe cursor and UTF-8 byte selection APIs.
+4. Assistant actions: wire Generate, Rewrite, Check, preview, accept/reject, and revision-safe conflict handling from the editor-local controls.
+5. Review surfaces: add review-mode drawer surfaces for chat/tools-first analysis, revisions, diffs, restore, attached notes, activity, and prompt records.
+6. Mobile and browser smoke hardening: add focused component tests and browser smoke coverage for desktop Assistant/Draft/Review and mobile sheet workflows.
 
 Avoid unrelated redesign work. Visual polish beyond clear layout, spacing, accessibility, and shadcn/Tailwind consistency should wait until the structural workspace is stable.
