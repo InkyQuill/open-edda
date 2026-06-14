@@ -1,11 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ScriptApproval, ScriptAudit, ScriptRun } from "../../scriptRuntimeTypes";
+import { updateScriptApproval } from "../../scriptRuntimeApi";
 import { loadScriptAudits, loadScriptRuns, setScriptApproval } from "./scriptRuntimeThunks";
 import {
   initialScriptRuntimeState,
   scriptRuntimeActions,
   scriptRuntimeReducer,
 } from "./scriptRuntimeSlice";
+
+vi.mock("../../scriptRuntimeApi", () => ({
+  listProjectScriptRuns: vi.fn(),
+  listScriptAudits: vi.fn(),
+  updateScriptApproval: vi.fn(),
+}));
 
 function approval(overrides: Partial<ScriptApproval> = {}): ScriptApproval {
   return {
@@ -156,6 +163,101 @@ describe("scriptRuntimeSlice", () => {
     expect(updated.auditsBySkillId["skill-2"]?.[0]?.approval).toBeUndefined();
     expect(updated.approvalRequestId).toBeNull();
     expect(updated.updatingAuditId).toBeNull();
+  });
+
+  it("ignores stale script audit responses", () => {
+    const pending = scriptRuntimeReducer(
+      initialScriptRuntimeState,
+      loadScriptAudits.pending("request-2", { projectId: "project-1", skillId: "skill-1" }),
+    );
+
+    const staleSameSkill = scriptRuntimeReducer(
+      pending,
+      loadScriptAudits.fulfilled([audit({ id: "stale-audit" })], "request-1", {
+        projectId: "project-1",
+        skillId: "skill-1",
+      }),
+    );
+
+    expect(staleSameSkill).toEqual(pending);
+
+    const staleOtherProject = scriptRuntimeReducer(
+      pending,
+      loadScriptAudits.fulfilled([audit({ id: "other-project-audit", projectId: "project-2" })], "request-2", {
+        projectId: "project-2",
+        skillId: "skill-1",
+      }),
+    );
+
+    expect(staleOtherProject).toEqual(pending);
+  });
+
+  it("ignores stale script run responses", () => {
+    const pending = scriptRuntimeReducer(
+      initialScriptRuntimeState,
+      loadScriptRuns.pending("request-2", { projectId: "project-1" }),
+    );
+
+    const staleSameProject = scriptRuntimeReducer(
+      pending,
+      loadScriptRuns.fulfilled([run({ id: "stale-run" })], "request-1", { projectId: "project-1" }),
+    );
+
+    expect(staleSameProject).toEqual(pending);
+
+    const staleOtherProject = scriptRuntimeReducer(
+      pending,
+      loadScriptRuns.fulfilled([run({ id: "other-project-run", projectId: "project-2" })], "request-2", {
+        projectId: "project-2",
+      }),
+    );
+
+    expect(staleOtherProject).toEqual(pending);
+  });
+
+  it("ignores stale approval update responses", () => {
+    const state = {
+      ...initialScriptRuntimeState,
+      projectId: "project-1",
+      auditsBySkillId: { "skill-1": [audit({ approval: approval({ enabled: false }) })] },
+    };
+    const pending = scriptRuntimeReducer(
+      state,
+      setScriptApproval.pending("request-2", {
+        projectId: "project-1",
+        audit: audit({ approval: approval({ enabled: false }) }),
+        enabled: true,
+      }),
+    );
+
+    const stale = scriptRuntimeReducer(
+      pending,
+      setScriptApproval.fulfilled(approval({ enabled: true }), "request-1", {
+        projectId: "project-1",
+        audit: audit({ approval: approval({ enabled: false }) }),
+        enabled: true,
+      }),
+    );
+
+    expect(stale).toEqual(pending);
+  });
+
+  it("rejects approval updates when the audit has no configured runtime command", async () => {
+    const dispatch = vi.fn();
+    const getState = vi.fn();
+
+    const action = await setScriptApproval({
+      projectId: "project-1",
+      audit: audit(),
+      enabled: true,
+    })(dispatch, getState, undefined);
+
+    expect(setScriptApproval.rejected.match(action)).toBe(true);
+    if (!setScriptApproval.rejected.match(action)) {
+      throw new Error("Expected setScriptApproval to reject");
+    }
+    expect(action.error.message).toBe("Runtime command is not configured for this script");
+    expect(updateScriptApproval).not.toHaveBeenCalled();
   });
 
   it("resets project-scoped script runtime state", () => {

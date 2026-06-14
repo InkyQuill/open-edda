@@ -16,14 +16,20 @@ export const loadScriptRuns = createAsyncThunk(
 
 export const setScriptApproval = createAsyncThunk(
   "scriptRuntime/setScriptApproval",
-  async ({ projectId, audit, enabled }: { projectId: string; audit: ScriptAudit; enabled: boolean }) =>
-    updateScriptApproval(projectId, audit.skillId, audit.skillFileId, {
+  async ({ projectId, audit, enabled }: { projectId: string; audit: ScriptAudit; enabled: boolean }) => {
+    const approval = audit.approval;
+    if (!approval?.runtimeCommand) {
+      throw new Error("Runtime command is not configured for this script");
+    }
+
+    return updateScriptApproval(projectId, audit.skillId, audit.skillFileId, {
       enabled,
-      runtimeCommand: audit.approval?.runtimeCommand ?? audit.runtime,
-      timeoutMs: audit.approval?.timeoutMs ?? 5000,
-      maxStdoutBytes: audit.approval?.maxStdoutBytes ?? 65536,
-      maxStderrBytes: audit.approval?.maxStderrBytes ?? 16384,
-      allowNetwork: audit.approval?.allowNetwork ?? false,
-      allowProjectFiles: audit.approval?.allowProjectFiles ?? false,
-    }),
+      runtimeCommand: approval.runtimeCommand,
+      timeoutMs: approval.timeoutMs,
+      maxStdoutBytes: approval.maxStdoutBytes,
+      maxStderrBytes: approval.maxStderrBytes,
+      allowNetwork: approval.allowNetwork,
+      allowProjectFiles: approval.allowProjectFiles,
+    });
+  },
 );
