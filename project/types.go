@@ -160,13 +160,14 @@ type StructuredWriteInput struct {
 }
 
 type UpdateEntrySectionInput struct {
-	ProjectID      string
-	ContentID      string
-	Heading        string
-	BodyMarkdown   string
-	Reason         string
-	AgentSessionID string
-	ActionKind     string
-	ModelVariantID string
-	SkillID        string
+	ProjectID        string
+	ContentID        string
+	Heading          string
+	BodyMarkdown     string
+	ExpectedRevision int64
+	Reason           string
+	AgentSessionID   string
+	ActionKind       string
+	ModelVariantID   string
+	SkillID          string
 }

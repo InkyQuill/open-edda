@@ -412,14 +412,15 @@ func TestUpdateEntrySectionBodyUpdatesSectionAndRecordsActivity(t *testing.T) {
 	}
 
 	section, err := service.UpdateEntrySectionBody(ctx, UpdateEntrySectionInput{
-		ProjectID:      "project-1",
-		ContentID:      entry.ID,
-		Heading:        "Motivation",
-		BodyMarkdown:   "Protect the glass city.",
-		Reason:         "preserve section update reason",
-		AgentSessionID: "session-1",
-		ActionKind:     "rewrite",
-		ModelVariantID: "model-1",
+		ProjectID:        "project-1",
+		ContentID:        entry.ID,
+		Heading:          "Motivation",
+		BodyMarkdown:     "Protect the glass city.",
+		ExpectedRevision: 1,
+		Reason:           "preserve section update reason",
+		AgentSessionID:   "session-1",
+		ActionKind:       "rewrite",
+		ModelVariantID:   "model-1",
 	})
 	if err != nil {
 		t.Fatalf("UpdateEntrySectionBody() error = %v", err)
@@ -436,6 +437,50 @@ func TestUpdateEntrySectionBodyUpdatesSectionAndRecordsActivity(t *testing.T) {
 		t.Fatalf("sections = %#v", sections)
 	}
 	assertSectionActivity(t, ctx, db, entry.ID, "Motivation")
+}
+
+func TestUpdateEntrySectionBodyRejectsStaleRevision(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	entry := createStructuredWriteContent(t, ctx, service, KindStoryBibleEntry, "Mira", "An alchemist.", `{"type":"character"}`)
+	if err := service.CreateEntrySection(ctx, CreateEntrySectionInput{
+		ProjectID:     "project-1",
+		ContentItemID: entry.ID,
+		Heading:       "Motivation",
+		BodyMarkdown:  "Find the ash compass.",
+		SortOrder:     1,
+	}); err != nil {
+		t.Fatalf("CreateEntrySection() error = %v", err)
+	}
+
+	_, err := service.UpdateEntrySectionBody(ctx, UpdateEntrySectionInput{
+		ProjectID:        "project-1",
+		ContentID:        entry.ID,
+		Heading:          "Motivation",
+		BodyMarkdown:     "Protect the glass city.",
+		ExpectedRevision: 1,
+		Reason:           "first update",
+	})
+	if err != nil {
+		t.Fatalf("first UpdateEntrySectionBody() error = %v", err)
+	}
+
+	_, err = service.UpdateEntrySectionBody(ctx, UpdateEntrySectionInput{
+		ProjectID:        "project-1",
+		ContentID:        entry.ID,
+		Heading:          "Motivation",
+		BodyMarkdown:     "Stale overwrite.",
+		ExpectedRevision: 1,
+		Reason:           "stale attempt",
+	})
+	if err == nil {
+		t.Fatal("stale UpdateEntrySectionBody() error = nil, want conflict")
+	}
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("stale error = %v, want ErrConflict", err)
+	}
 }
 
 func TestProjectMapReturnsContentSectionsAndRelations(t *testing.T) {

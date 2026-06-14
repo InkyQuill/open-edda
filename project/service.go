@@ -604,17 +604,30 @@ func (s *Service) UpdateEntrySectionBody(ctx context.Context, input UpdateEntryS
 			return fmt.Errorf("content %q kind = %q, want %q", input.ContentID, item.Kind, KindStoryBibleEntry)
 		}
 
-		affected, err := queries.UpdateEntrySectionBody(ctx, store.UpdateEntrySectionBodyParams{
-			BodyMarkdown:  input.BodyMarkdown,
+		current, err := queries.GetEntrySection(ctx, store.GetEntrySectionParams{
 			ContentItemID: input.ContentID,
 			Heading:       input.Heading,
 			ProjectID:     input.ProjectID,
 		})
 		if err != nil {
+			return fmt.Errorf("get entry section: %w", err)
+		}
+		if current.CurrentRevision != input.ExpectedRevision {
+			return ErrConflict
+		}
+
+		affected, err := queries.UpdateEntrySectionBody(ctx, store.UpdateEntrySectionBodyParams{
+			BodyMarkdown:      input.BodyMarkdown,
+			ContentItemID:     input.ContentID,
+			Heading:           input.Heading,
+			ProjectID:         input.ProjectID,
+			ExpectedRevision:  input.ExpectedRevision,
+		})
+		if err != nil {
 			return fmt.Errorf("update entry section: %w", err)
 		}
 		if affected == 0 {
-			return fmt.Errorf("entry section %q not found", input.Heading)
+			return ErrConflict
 		}
 
 		metadataJSON, err := json.Marshal(map[string]any{

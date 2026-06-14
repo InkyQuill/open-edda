@@ -37,6 +37,7 @@ type Querier interface {
 	DeleteSkillRoutingHints(ctx context.Context, skillID string) error
 	GetAgentSession(ctx context.Context, arg GetAgentSessionParams) (AgentSession, error)
 	GetContentItem(ctx context.Context, arg GetContentItemParams) (ContentItem, error)
+	GetEntrySection(ctx context.Context, arg GetEntrySectionParams) (EntrySection, error)
 	GetGenerationCandidate(ctx context.Context, arg GetGenerationCandidateParams) (GenerationCandidate, error)
 	GetModelVariant(ctx context.Context, arg GetModelVariantParams) (ModelVariant, error)
 	GetModelVariantForProject(ctx context.Context, arg GetModelVariantForProjectParams) (ModelVariant, error)
