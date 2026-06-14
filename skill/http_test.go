@@ -3,13 +3,17 @@ package skill
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
+	"git.inkyquill.net/inky/writer/skill/runtime"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -109,12 +113,162 @@ func TestImportLocalSkillRequiresAllowedRoot(t *testing.T) {
 	}
 }
 
+func TestHTTPScriptAuditRoutesListDisabledScripts(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	handler := newTestSkillHTTP(service)
+
+	imported := postZip[Skill](t, handler, "/api/projects/project-1/skills/import", testSkillArchive(t), http.StatusCreated)
+
+	audits := getJSON[[]ScriptAudit](t, handler, "/api/projects/project-1/skills/"+imported.ID+"/scripts", http.StatusOK)
+	if len(audits) != 1 {
+		t.Fatalf("audit count = %d, want 1", len(audits))
+	}
+	audit := audits[0]
+	if audit.RelativePath != "scripts/analyze.sh" {
+		t.Fatalf("audit RelativePath = %q, want scripts/analyze.sh", audit.RelativePath)
+	}
+	if audit.Approval != nil {
+		t.Fatalf("audit Approval = %#v, want nil for disabled script", audit.Approval)
+	}
+}
+
+func TestHTTPScriptApprovalRejectsNetworkAndProjectFiles(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	handler := newTestSkillHTTP(service)
+
+	imported := postZip[Skill](t, handler, "/api/projects/project-1/skills/import", testSkillArchive(t), http.StatusCreated)
+	audit := firstHTTPScriptAudit(t, handler, imported.ID)
+
+	baseBody := `{
+		"enabled": true,
+		"runtimeCommand": "sh scripts/analyze.sh",
+		"timeoutMs": 1000,
+		"maxStdoutBytes": 4096,
+		"maxStderrBytes": 1024,
+		"allowNetwork": %t,
+		"allowProjectFiles": %t
+	}`
+	for _, tc := range []struct {
+		name              string
+		allowNetwork      bool
+		allowProjectFiles bool
+	}{
+		{name: "network", allowNetwork: true},
+		{name: "project files", allowProjectFiles: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			putJSON[errorResponse](
+				t,
+				handler,
+				"/api/projects/project-1/skills/"+imported.ID+"/scripts/"+audit.SkillFileID+"/approval",
+				fmt.Sprintf(baseBody, tc.allowNetwork, tc.allowProjectFiles),
+				http.StatusBadRequest,
+			)
+		})
+	}
+}
+
+func TestHTTPScriptApprovalAppearsOnAuditResponse(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	handler := newTestSkillHTTP(service)
+
+	imported := postZip[Skill](t, handler, "/api/projects/project-1/skills/import", testSkillArchive(t), http.StatusCreated)
+	audit := firstHTTPScriptAudit(t, handler, imported.ID)
+
+	approval := putJSON[ScriptApproval](t, handler, "/api/projects/project-1/skills/"+imported.ID+"/scripts/"+audit.SkillFileID+"/approval", `{
+		"enabled": true,
+		"runtimeCommand": "sh scripts/analyze.sh",
+		"timeoutMs": 1000,
+		"maxStdoutBytes": 4096,
+		"maxStderrBytes": 1024,
+		"allowNetwork": false,
+		"allowProjectFiles": false
+	}`, http.StatusOK)
+	if !approval.Enabled {
+		t.Fatalf("approval Enabled = false, want true")
+	}
+
+	audits := getJSON[[]ScriptAudit](t, handler, "/api/projects/project-1/skills/"+imported.ID+"/scripts", http.StatusOK)
+	if len(audits) != 1 || audits[0].Approval == nil {
+		t.Fatalf("audits = %#v, want approval on audit", audits)
+	}
+	if audits[0].Approval.ID != approval.ID || audits[0].Approval.RuntimeCommand != "sh scripts/analyze.sh" {
+		t.Fatalf("audit approval = %#v, want %#v", audits[0].Approval, approval)
+	}
+}
+
+func TestHTTPScriptRunHistoryRoutes(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	service.SetScriptRunner(&fakeScriptRunner{result: runtime.RunResult{
+		Status: runtime.StatusSucceeded,
+		Output: runtime.ScriptOutput{
+			Kind:     runtime.OutputKindReport,
+			Title:    "Style report",
+			Markdown: "Tighten two sentences.",
+		},
+		StdoutText: `{"kind":"report","title":"Style report","markdown":"Tighten two sentences."}`,
+		ExitCode:   0,
+		Duration:   12 * time.Millisecond,
+	}})
+	handler := newTestSkillHTTP(service)
+
+	imported := postZip[Skill](t, handler, "/api/projects/project-1/skills/import", testSkillArchive(t), http.StatusCreated)
+	audit := firstHTTPScriptAudit(t, handler, imported.ID)
+	putJSON[ScriptApproval](t, handler, "/api/projects/project-1/skills/"+imported.ID+"/scripts/"+audit.SkillFileID+"/approval", `{
+		"enabled": true,
+		"runtimeCommand": "sh scripts/analyze.sh",
+		"timeoutMs": 1000,
+		"maxStdoutBytes": 4096,
+		"maxStderrBytes": 1024,
+		"allowNetwork": false,
+		"allowProjectFiles": false
+	}`, http.StatusOK)
+	seedScriptRuntimeContent(t, db)
+
+	run, err := service.RunScript(context.Background(), RunScriptInput{
+		ProjectID:     "project-1",
+		SessionID:     "session-1",
+		SkillID:       imported.ID,
+		SkillFileID:   audit.SkillFileID,
+		ToolCallID:    "tool-call-1",
+		ContentIDs:    []string{"content-1"},
+		EntrySections: []ScriptEntrySectionInput{{ContentID: "content-1", Heading: "Opening"}},
+		Arguments:     map[string]any{"mode": "report"},
+	})
+	if err != nil {
+		t.Fatalf("RunScript() error = %v", err)
+	}
+
+	projectRuns := getJSON[[]ScriptRun](t, handler, "/api/projects/project-1/skill-script-runs", http.StatusOK)
+	if len(projectRuns) != 1 || projectRuns[0].ID != run.ID {
+		t.Fatalf("project runs = %#v, want run %s", projectRuns, run.ID)
+	}
+	sessionRuns := getJSON[[]ScriptRun](t, handler, "/api/projects/project-1/agent/sessions/session-1/skill-script-runs", http.StatusOK)
+	if len(sessionRuns) != 1 || sessionRuns[0].ID != run.ID {
+		t.Fatalf("session runs = %#v, want run %s", sessionRuns, run.ID)
+	}
+}
+
 func newTestSkillHTTP(service *Service) http.Handler {
 	r := chi.NewRouter()
 	r.Route("/api", func(r chi.Router) {
 		RegisterRoutes(r, service)
 	})
 	return r
+}
+
+func firstHTTPScriptAudit(t *testing.T, handler http.Handler, skillID string) ScriptAudit {
+	t.Helper()
+
+	audits := getJSON[[]ScriptAudit](t, handler, "/api/projects/project-1/skills/"+skillID+"/scripts", http.StatusOK)
+	if len(audits) != 1 {
+		t.Fatalf("audit count = %d, want 1", len(audits))
+	}
+	return audits[0]
 }
 
 func testSkillArchive(t *testing.T) []byte {

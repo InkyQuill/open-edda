@@ -18,6 +18,7 @@ import {
   updateProviderConfig,
   upsertPromptProfile,
 } from "./agentApi";
+import { listProjectScriptRuns, listScriptAudits, updateScriptApproval } from "./scriptRuntimeApi";
 import { getSkill, importSkill, listSessionSkills, listSkills, selectSessionSkills } from "./skillApi";
 import { login, register, clearToken, getToken } from "./authApi";
 import type {
@@ -32,6 +33,7 @@ import type {
   ProviderConfigSummary,
 } from "./agentTypes";
 import { listContent, listProjects } from "./api";
+import type { ScriptAudit, ScriptRun } from "./scriptRuntimeTypes";
 import type { WriterSkill } from "./skillTypes";
 import type { ContentItem, ContentKind, StoryProject } from "./types";
 import "./styles.css";
@@ -53,6 +55,13 @@ const emptyPromptProfile: PromptProfileRequest = {
 };
 
 const emptyProviderForm = { name: "", baseUrl: "", apiKey: "" };
+const defaultScriptRuntimePolicy = {
+  timeoutMs: 5000,
+  maxStdoutBytes: 65536,
+  maxStderrBytes: 16384,
+  allowNetwork: false,
+  allowProjectFiles: false,
+};
 
 const emptyModelForm = {
   name: "",
@@ -832,7 +841,7 @@ function SkillBrowser({ projectId, skills, skillError, onError, onSkillsChange, 
           )}
         </div>
 
-        <SkillDetail skill={skillDetail} />
+        <SkillDetail projectId={projectId} skill={skillDetail} onError={onError} />
       </div>
     </section>
   );
@@ -853,7 +862,95 @@ function SkillChips({ skill, showScriptStatus = true }: { skill: WriterSkill; sh
   );
 }
 
-function SkillDetail({ skill }: { skill: WriterSkill | null }) {
+function SkillDetail({
+  projectId,
+  skill,
+  onError,
+}: {
+  projectId: string;
+  skill: WriterSkill | null;
+  onError: (message: string | null) => void;
+}) {
+  const [scriptAudits, setScriptAudits] = useState<ScriptAudit[]>([]);
+  const [scriptRuns, setScriptRuns] = useState<ScriptRun[]>([]);
+  const [draftCommands, setDraftCommands] = useState<Record<string, string>>({});
+  const [savingScriptFileId, setSavingScriptFileId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!skill || skill.scriptCount === 0) {
+      setScriptAudits([]);
+      setScriptRuns([]);
+      setDraftCommands({});
+      setSavingScriptFileId(null);
+      return;
+    }
+
+    const abortController = new AbortController();
+    setScriptAudits([]);
+    setScriptRuns([]);
+    setDraftCommands({});
+    setSavingScriptFileId(null);
+    void Promise.all([
+      listScriptAudits(projectId, skill.id, abortController.signal),
+      listProjectScriptRuns(projectId, abortController.signal),
+    ])
+      .then(([audits, runs]) => {
+        if (abortController.signal.aborted) {
+          return;
+        }
+        const nextDraftCommands = Object.fromEntries(
+          audits.map((audit) => [audit.skillFileId, audit.approval?.runtimeCommand ?? ""]),
+        );
+        setScriptAudits(audits);
+        setScriptRuns(runs.filter((run) => run.skillId === skill.id));
+        setDraftCommands(nextDraftCommands);
+        onError(null);
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === "AbortError") {
+          return;
+        }
+        setScriptAudits([]);
+        setScriptRuns([]);
+        setDraftCommands({});
+        onError(cause instanceof Error ? cause.message : "Skill script load failed");
+      });
+
+    return () => {
+      abortController.abort();
+    };
+  }, [projectId, skill?.id, skill?.scriptCount, onError]);
+
+  function saveApproval(audit: ScriptAudit, enabled: boolean): void {
+    const runtimeCommand = (draftCommands[audit.skillFileId] ?? audit.approval?.runtimeCommand ?? "").trim();
+    const approvalPolicy = {
+      timeoutMs: audit.approval?.timeoutMs ?? defaultScriptRuntimePolicy.timeoutMs,
+      maxStdoutBytes: audit.approval?.maxStdoutBytes ?? defaultScriptRuntimePolicy.maxStdoutBytes,
+      maxStderrBytes: audit.approval?.maxStderrBytes ?? defaultScriptRuntimePolicy.maxStderrBytes,
+      allowNetwork: false,
+      allowProjectFiles: false,
+    };
+    setSavingScriptFileId(audit.skillFileId);
+    void updateScriptApproval(projectId, audit.skillId, audit.skillFileId, {
+      enabled,
+      runtimeCommand,
+      ...approvalPolicy,
+    })
+      .then((approval) => {
+        setScriptAudits((audits) =>
+          audits.map((entry) => (entry.skillFileId === audit.skillFileId ? { ...entry, approval } : entry)),
+        );
+        setDraftCommands((commands) => ({ ...commands, [audit.skillFileId]: approval.runtimeCommand }));
+        onError(null);
+      })
+      .catch((cause: unknown) => {
+        onError(cause instanceof Error ? cause.message : "Skill script approval failed");
+      })
+      .finally(() => {
+        setSavingScriptFileId((current) => (current === audit.skillFileId ? null : current));
+      });
+  }
+
   if (!skill) {
     return (
       <section className="skill-detail" aria-label="Skill detail">
@@ -869,7 +966,7 @@ function SkillDetail({ skill }: { skill: WriterSkill | null }) {
           <h3>{skill.displayName}</h3>
           <p>{skill.name}</p>
         </div>
-        {skill.scriptCount > 0 ? <span className="skill-badge skill-badge-warning">Scripts disabled</span> : null}
+        {skill.scriptCount > 0 ? <span className="skill-badge skill-badge-warning">Runtime helpers</span> : null}
       </header>
       {(skill.routingHints ?? []).length > 0 ? <SkillChips skill={skill} showScriptStatus={false} /> : null}
       <div className="skill-detail-body">
@@ -898,6 +995,76 @@ function SkillDetail({ skill }: { skill: WriterSkill | null }) {
           </div>
         </section>
       </div>
+      {skill.scriptCount > 0 ? (
+        <section className="script-runtime-panel" aria-label="Skill scripts">
+          <div>
+            <h4>Runtime helpers</h4>
+            <p className="muted">
+              Scripts are disabled until an admin enables them. Enabled helpers return reviewable reports, proposals, data, or
+              drafts.
+            </p>
+          </div>
+          {scriptAudits.length === 0 ? (
+            <p className="muted">No script audits found.</p>
+          ) : (
+            scriptAudits.map((audit) => {
+              const command = draftCommands[audit.skillFileId] ?? audit.approval?.runtimeCommand ?? "";
+              const isSaving = savingScriptFileId === audit.skillFileId;
+              return (
+                <article className="script-runtime-row" key={audit.skillFileId}>
+                  <div className="script-runtime-row-header">
+                    <strong>{audit.relativePath}</strong>
+                    <span className="skill-badge">{audit.recommendation.replaceAll("_", " ")}</span>
+                    <span className={audit.approval?.enabled ? "skill-badge" : "skill-badge skill-badge-warning"}>
+                      {audit.approval?.enabled ? "Enabled" : "Disabled"}
+                    </span>
+                  </div>
+                  <div className="script-runtime-meta">
+                    <span>{audit.runtime || "Runtime not detected"}</span>
+                    <span>{audit.networkAccess ? "Requests network" : "No network"}</span>
+                    <span>{audit.filesystemAccess || "No filesystem access"}</span>
+                  </div>
+                  {audit.riskNotes ? <p>{audit.riskNotes}</p> : null}
+                  <label>
+                    Runtime command
+                    <input
+                      value={command}
+                      onChange={(event) =>
+                        setDraftCommands((commands) => ({ ...commands, [audit.skillFileId]: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <div className="script-runtime-actions">
+                    <button
+                      type="button"
+                      onClick={() => saveApproval(audit, true)}
+                      disabled={isSaving || command.trim().length === 0}
+                    >
+                      Enable
+                    </button>
+                    <button type="button" onClick={() => saveApproval(audit, false)} disabled={isSaving}>
+                      Disable
+                    </button>
+                  </div>
+                </article>
+              );
+            })
+          )}
+          {scriptRuns.length > 0 ? (
+            <div className="script-run-history">
+              <h4>Recent runs</h4>
+              {scriptRuns.slice(0, 5).map((run) => (
+                <div className="script-run-row" key={run.id}>
+                  <strong>{run.outputKind || "script"}</strong>
+                  <span>{run.status}</span>
+                  <span>{run.durationMs}ms</span>
+                  {run.errorMessage ? <span>{run.errorMessage}</span> : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
     </section>
   );
 }

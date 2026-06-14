@@ -51,7 +51,7 @@ This plan does not implement:
 
 Create:
 
-- `migrations/00004_skill_script_runtime.sql` - script audit, approval, and run tables.
+- `migrations/00005_skill_script_runtime.sql` - script audit, approval, and run tables.
 - `queries/skill_script_runtime.sql` - sqlc queries for audits, approvals, and run history.
 - `skill/runtime/types.go` - JSON envelope, policy, input/output, and run result types.
 - `skill/runtime/runner.go` - approved command runner with timeout, temp directory, stdin/stdout limits, and output validation.
@@ -142,14 +142,14 @@ Rejected output:
 ## Task 1: Schema And Queries
 
 **Files:**
-- Create: `migrations/00004_skill_script_runtime.sql`
+- Create: `migrations/00005_skill_script_runtime.sql`
 - Create: `queries/skill_script_runtime.sql`
 - Modify: `store/db_test.go`
 - Generated: `store/skill_script_runtime.sql.go`
 - Generated: `store/models.go`
 - Generated: `store/querier.go`
 
-- [ ] **Step 1: Write the failing migration test**
+- [x] **Step 1: Write the failing migration test**
 
 Add this test to `store/db_test.go`:
 
@@ -182,7 +182,7 @@ func TestSkillScriptRuntimeTablesExist(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the failing migration test**
+- [x] **Step 2: Run the failing migration test**
 
 Run:
 
@@ -192,9 +192,9 @@ go test -tags sqlite_fts5 ./store -run TestSkillScriptRuntimeTablesExist -count=
 
 Expected: FAIL because `skill_script_audits` does not exist.
 
-- [ ] **Step 3: Add the runtime migration**
+- [x] **Step 3: Add the runtime migration**
 
-Create `migrations/00004_skill_script_runtime.sql`:
+Create `migrations/00005_skill_script_runtime.sql`:
 
 ```sql
 -- +goose Up
@@ -273,7 +273,7 @@ DROP TABLE IF EXISTS skill_script_approvals;
 DROP TABLE IF EXISTS skill_script_audits;
 ```
 
-- [ ] **Step 4: Add sqlc queries**
+- [x] **Step 4: Add sqlc queries**
 
 Create `queries/skill_script_runtime.sql`:
 
@@ -355,7 +355,7 @@ ORDER BY created_at DESC
 LIMIT ?;
 ```
 
-- [ ] **Step 5: Generate store code**
+- [x] **Step 5: Generate store code**
 
 Run:
 
@@ -365,7 +365,7 @@ sqlc generate
 
 Expected: generated files include `store/skill_script_runtime.sql.go`, and existing generated files compile.
 
-- [ ] **Step 6: Run migration tests**
+- [x] **Step 6: Run migration tests**
 
 Run:
 
@@ -375,10 +375,10 @@ go test -tags sqlite_fts5 ./store -run TestSkillScriptRuntimeTablesExist -count=
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
-git add migrations/00004_skill_script_runtime.sql queries/skill_script_runtime.sql store store/db_test.go
+git add migrations/00005_skill_script_runtime.sql queries/skill_script_runtime.sql store store/db_test.go
 git commit -m "feat: add skill script runtime schema"
 ```
 
@@ -389,7 +389,7 @@ git commit -m "feat: add skill script runtime schema"
 - Create: `skill/runtime/runner.go`
 - Create: `skill/runtime/runner_test.go`
 
-- [ ] **Step 1: Write failing runner tests**
+- [x] **Step 1: Write failing runner tests**
 
 Create `skill/runtime/runner_test.go`:
 
@@ -479,7 +479,7 @@ func TestRunnerTimesOut(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the failing runner tests**
+- [x] **Step 2: Run the failing runner tests**
 
 Run:
 
@@ -489,7 +489,7 @@ go test ./skill/runtime -count=1
 
 Expected: FAIL because package `skill/runtime` does not exist.
 
-- [ ] **Step 3: Add runtime types**
+- [x] **Step 3: Add runtime types**
 
 Create `skill/runtime/types.go`:
 
@@ -590,7 +590,7 @@ type RunResult struct {
 }
 ```
 
-- [ ] **Step 4: Add runner implementation**
+- [x] **Step 4: Add runner implementation**
 
 Create `skill/runtime/runner.go`:
 
@@ -754,7 +754,7 @@ func (b *limitedBuffer) String() string {
 }
 ```
 
-- [ ] **Step 5: Run runner tests**
+- [x] **Step 5: Run runner tests**
 
 Run:
 
@@ -764,7 +764,7 @@ go test ./skill/runtime -count=1
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skill/runtime
@@ -779,7 +779,7 @@ git commit -m "feat: add skill script runner"
 - Create: `skill/script_runtime.go`
 - Create: `skill/script_runtime_test.go`
 
-- [ ] **Step 1: Write failing service tests**
+- [x] **Step 1: Write failing service tests**
 
 Create `skill/script_runtime_test.go` with:
 
@@ -898,7 +898,7 @@ func TestRunScriptPersistsReportRun(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run failing service tests**
+- [x] **Step 2: Run failing service tests**
 
 Run:
 
@@ -908,7 +908,7 @@ go test -tags sqlite_fts5 ./skill -run 'TestInstallCreatesDisabledScriptAudit|Te
 
 Expected: FAIL because runtime service types and methods do not exist.
 
-- [ ] **Step 3: Add service DTOs**
+- [x] **Step 3: Add service DTOs**
 
 Append to `skill/types.go`:
 
@@ -1020,7 +1020,7 @@ type ScriptRun struct {
 }
 ```
 
-- [ ] **Step 4: Add runtime dependency to Skill Service**
+- [x] **Step 4: Add runtime dependency to Skill Service**
 
 Modify `skill/service.go`:
 
@@ -1050,7 +1050,7 @@ Add import:
 scriptruntime "git.inkyquill.net/inky/writer/skill/runtime"
 ```
 
-- [ ] **Step 5: Create audits during install**
+- [x] **Step 5: Create audits during install**
 
 In `skill/service.go`, after creating each `skill_files` row, add:
 
@@ -1080,7 +1080,7 @@ if file.Purpose == FilePurposeScript {
 
 Store `fileID := newID("skillfile")` before `CreateSkillFile` so the audit references the exact file row.
 
-- [ ] **Step 6: Add `skill/script_runtime.go`**
+- [x] **Step 6: Add `skill/script_runtime.go`**
 
 Create methods:
 
@@ -1106,7 +1106,7 @@ Implementation requirements:
 - `RunScript` never writes Story Text or Story Bible content.
 - `RunScript` stores invalid/failed/timed-out results as run records instead of dropping them.
 
-- [ ] **Step 7: Run service tests**
+- [x] **Step 7: Run service tests**
 
 Run:
 
@@ -1116,7 +1116,7 @@ go test -tags sqlite_fts5 ./skill -run 'TestInstallCreatesDisabledScriptAudit|Te
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add skill/types.go skill/service.go skill/script_runtime.go skill/script_runtime_test.go
@@ -1129,7 +1129,7 @@ git commit -m "feat: add skill script runtime service"
 - Modify: `skill/http.go`
 - Modify: `skill/http_test.go`
 
-- [ ] **Step 1: Write failing HTTP tests**
+- [x] **Step 1: Write failing HTTP tests**
 
 Add tests to `skill/http_test.go`:
 
@@ -1179,7 +1179,7 @@ func TestScriptApprovalRejectsNetwork(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run failing HTTP tests**
+- [x] **Step 2: Run failing HTTP tests**
 
 Run:
 
@@ -1189,7 +1189,7 @@ go test -tags sqlite_fts5 ./skill -run 'TestScriptAuditRoutesListDisabledScripts
 
 Expected: FAIL because routes do not exist.
 
-- [ ] **Step 3: Add HTTP routes**
+- [x] **Step 3: Add HTTP routes**
 
 In `skill.RegisterRoutes`, add:
 
@@ -1216,7 +1216,7 @@ type updateScriptApprovalRequest struct {
 
 Add handlers that call the service methods and return JSON. Use existing `writeError` mapping so invalid approvals return HTTP 400.
 
-- [ ] **Step 4: Run HTTP tests**
+- [x] **Step 4: Run HTTP tests**
 
 Run:
 
@@ -1226,7 +1226,7 @@ go test -tags sqlite_fts5 ./skill -run 'TestScriptAuditRoutesListDisabledScripts
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skill/http.go skill/http_test.go
@@ -1242,7 +1242,7 @@ git commit -m "feat: expose skill script admin api"
 - Modify: `agent/prompt.go`
 - Modify: `agent/prompt_test.go`
 
-- [ ] **Step 1: Write failing tool tests**
+- [x] **Step 1: Write failing tool tests**
 
 Add to `agent/tools_test.go`:
 
@@ -1289,7 +1289,7 @@ func TestSkillScriptToolStoresReportArtifact(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run failing tool tests**
+- [x] **Step 2: Run failing tool tests**
 
 Run:
 
@@ -1299,7 +1299,7 @@ go test -tags sqlite_fts5 ./agent -run 'TestSkillScriptToolRequiresEnabledScript
 
 Expected: FAIL because `skill_script` is not registered.
 
-- [ ] **Step 3: Extend `SkillProvider`**
+- [x] **Step 3: Extend `SkillProvider`**
 
 In `agent/service.go`, update the interface:
 
@@ -1314,7 +1314,7 @@ type SkillProvider interface {
 }
 ```
 
-- [ ] **Step 4: Add tool definition**
+- [x] **Step 4: Add tool definition**
 
 In `agent.ContextToolDefinitions`, after `skill`, add:
 
@@ -1339,7 +1339,7 @@ contextTool("skill_script", "Run one admin-enabled Edda skill helper script with
 }, "skillId", "scriptPath"))
 ```
 
-- [ ] **Step 5: Execute the tool**
+- [x] **Step 5: Execute the tool**
 
 In `executeContextTool`, add:
 
@@ -1386,7 +1386,7 @@ case "skill_script":
 	}, nil
 ```
 
-- [ ] **Step 6: Add special visible Markdown for script output**
+- [x] **Step 6: Add special visible Markdown for script output**
 
 Update `modelVisibleMarkdownPayload` or add a new branch so `skill_script` output renders:
 
@@ -1400,7 +1400,7 @@ _Output kind: report. This result is reviewable and did not modify project conte
 
 The implementation should parse `outputJson` into `runtime.ScriptOutput`; if parsing fails, show the status and error message.
 
-- [ ] **Step 7: Update prompt script disclosure**
+- [x] **Step 7: Update prompt script disclosure**
 
 In `agent/prompt.go`, when selected skills are rendered, include enabled script summaries:
 
@@ -1410,7 +1410,7 @@ Enabled runtime helpers are available only through the `skill_script` tool. They
 
 Disabled scripts should still be described as unavailable.
 
-- [ ] **Step 8: Run agent tests**
+- [x] **Step 8: Run agent tests**
 
 Run:
 
@@ -1420,7 +1420,7 @@ go test -tags sqlite_fts5 ./agent -run 'TestSkillScriptToolRequiresEnabledScript
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add agent/service.go agent/tools.go agent/tools_test.go agent/prompt.go agent/prompt_test.go
@@ -1435,7 +1435,7 @@ git commit -m "feat: expose enabled skill scripts to agent tools"
 - Modify: `frontend/src/App.tsx`
 - Modify: `frontend/src/styles.css`
 
-- [ ] **Step 1: Add TypeScript types**
+- [x] **Step 1: Add TypeScript types**
 
 Create `frontend/src/scriptRuntimeTypes.ts`:
 
@@ -1499,7 +1499,7 @@ export type ScriptRun = {
 };
 ```
 
-- [ ] **Step 2: Add API functions**
+- [x] **Step 2: Add API functions**
 
 Create `frontend/src/scriptRuntimeApi.ts`:
 
@@ -1544,7 +1544,7 @@ export function listProjectScriptRuns(projectId: string, signal?: AbortSignal): 
 }
 ```
 
-- [ ] **Step 3: Add Skill detail runtime panel**
+- [x] **Step 3: Add Skill detail runtime panel**
 
 In `frontend/src/App.tsx`, update `SkillDetail` so when `skill.scriptCount > 0` it loads `listScriptAudits(projectId, skill.id)` and renders:
 
@@ -1578,7 +1578,7 @@ Implementation details:
 - Disable the Enable button when the command field is empty.
 - Show API errors in the existing skill error area.
 
-- [ ] **Step 4: Add compact styles**
+- [x] **Step 4: Add compact styles**
 
 In `frontend/src/styles.css`, add:
 
@@ -1612,7 +1612,7 @@ In `frontend/src/styles.css`, add:
 
 Use existing CSS variables if these exact names exist; otherwise use the nearest existing border/text variables in `styles.css`.
 
-- [ ] **Step 5: Run frontend checks**
+- [x] **Step 5: Run frontend checks**
 
 Run:
 
@@ -1623,7 +1623,7 @@ bun run build
 
 Expected: both PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/App.tsx frontend/src/styles.css frontend/src/scriptRuntimeTypes.ts frontend/src/scriptRuntimeApi.ts
@@ -1638,7 +1638,7 @@ git commit -m "feat: add skill script admin controls"
 - Modify: `docs/adr/0005-skill-scripts-require-admin-approval.md`
 - Modify: `docs/superpowers/plans/2026-06-14-open-edda-skill-script-runtime.md`
 
-- [ ] **Step 1: Update roadmap status text**
+- [x] **Step 1: Update roadmap status text**
 
 In `docs/roadmap.md`, update Milestone 3.6 tracking plan to:
 
@@ -1648,7 +1648,7 @@ In `docs/roadmap.md`, update Milestone 3.6 tracking plan to:
 
 After implementation finishes, the finisher should change the status from `Planned` to `Implemented`.
 
-- [ ] **Step 2: Update ADR 0005**
+- [x] **Step 2: Update ADR 0005**
 
 Replace the ADR body with:
 
@@ -1662,7 +1662,7 @@ Approved scripts run through the Skill Script Runtime. Open Edda supplies databa
 The first runtime rejects network-enabled and project-file-enabled approvals. If a script needs those capabilities, it remains disabled until a later runtime policy can provide a stronger sandbox and review model.
 ```
 
-- [ ] **Step 3: Add script audit implementation note**
+- [x] **Step 3: Add script audit implementation note**
 
 At the top of `docs/skills/script-audit.md`, after the summary, add:
 
@@ -1670,7 +1670,7 @@ At the top of `docs/skills/script-audit.md`, after the summary, add:
 Milestone 3.6 implements the runtime scaffolding for `retained-for-runtime` and future approved helpers. It does not automatically revive deferred skills. `reverse-outliner`, `story-zoom`, and `world-fates` still need product-specific adapters before they should become installed skills.
 ```
 
-- [ ] **Step 4: Run documentation scan**
+- [x] **Step 4: Run documentation scan**
 
 Run:
 
@@ -1680,7 +1680,7 @@ rg -n "Skill Script Runtime|skill_script|admin approval|directly mutate" docs/ro
 
 Expected: output shows the runtime link, `skill_script` where relevant, and the no-direct-mutation policy.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/roadmap.md docs/skills/script-audit.md docs/adr/0005-skill-scripts-require-admin-approval.md docs/superpowers/plans/2026-06-14-open-edda-skill-script-runtime.md
@@ -1693,7 +1693,7 @@ git commit -m "docs: document skill script runtime policy"
 - No new files.
 - Verify all modified files from Tasks 1-7.
 
-- [ ] **Step 1: Run backend tests**
+- [x] **Step 1: Run backend tests**
 
 Run:
 
@@ -1703,7 +1703,7 @@ go test -tags sqlite_fts5 ./...
 
 Expected: PASS for all packages.
 
-- [ ] **Step 2: Run frontend checks**
+- [x] **Step 2: Run frontend checks**
 
 Run:
 
@@ -1715,7 +1715,7 @@ bun run build
 
 Expected: both PASS.
 
-- [ ] **Step 3: Run focused grep checks**
+- [x] **Step 3: Run focused grep checks**
 
 Run:
 
@@ -1730,7 +1730,7 @@ Expected:
 - `skill_script` appears in tool definition, execution, tests, and docs.
 - `Runtime helpers` appears in the Skill detail UI.
 
-- [ ] **Step 4: Manual browser smoke test**
+- [x] **Step 4: Manual browser smoke test**
 
 Run:
 
@@ -1749,7 +1749,7 @@ Expected:
 - Enabling a script with an empty command is blocked.
 - Enabling a script with `allowNetwork` or `allowProjectFiles` cannot be done through UI defaults.
 
-- [ ] **Step 5: Commit final fixes if any**
+- [x] **Step 5: Commit final fixes if any**
 
 If Step 1-4 required fixes:
 

@@ -4,6 +4,8 @@
 
 Milestone 3.5 does not execute repository scripts. Script-bearing source skills can still ship in 3.5 when their value survives as Edda-native guidance, built-in data, note templates, or human/model-readable references. Skills whose core workflow depends on filesystem mutation, long-running watchers, multi-step orchestration, or direct CLI pipelines defer to Milestone 3.6.
 
+Milestone 3.6 implements the runtime scaffolding for `retained-for-runtime` and future approved helpers. It does not automatically revive deferred skills. `reverse-outliner`, `story-zoom`, and `world-fates` still need product-specific adapters before they should become installed skills.
+
 Milestone 3.5 script policy used in this audit:
 
 - `removed`: not useful for Edda, unsafe, outside product scope, or replaced cleanly by instructions.
