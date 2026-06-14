@@ -30,9 +30,11 @@ export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
     error,
     messagesBySessionId,
     messagesStatus,
+    projectId: assistantProjectId,
     sessions,
     sessionsStatus,
   } = useSelector((state: RootState) => state.assistant);
+  const { projectId: skillsProjectId, skillsStatus } = useSelector((state: RootState) => state.skills);
   const activeModelVariantId = useSelector((state: RootState) => state.modelSettings.activeModelVariantId);
   const activeSession = sessions.find((session) => session.id === activeSessionId && session.projectId === projectId) ?? null;
   const activeSessionIdForProject = activeSession?.id ?? null;
@@ -46,11 +48,16 @@ export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
   const canSend = Boolean(activeSessionIdForProject && sessionModelVariantId && trimmedDraft);
 
   useEffect(() => {
-    dispatch(assistantActions.resetForProject());
-    dispatch(skillsActions.resetForProject());
-    void dispatch(loadAssistantSessions({ projectId }));
-    void dispatch(loadProjectSkills({ projectId }));
-  }, [dispatch, projectId]);
+    if (assistantProjectId !== projectId || sessionsStatus === "idle") {
+      void dispatch(loadAssistantSessions({ projectId }));
+    }
+  }, [assistantProjectId, dispatch, projectId, sessionsStatus]);
+
+  useEffect(() => {
+    if (skillsProjectId !== projectId || skillsStatus === "idle") {
+      void dispatch(loadProjectSkills({ projectId }));
+    }
+  }, [dispatch, projectId, skillsProjectId, skillsStatus]);
 
   useEffect(() => {
     if (!activeSessionIdForProject) {

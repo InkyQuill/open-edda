@@ -101,10 +101,16 @@ export function ReviewDrawer({ projectId }: ReviewDrawerProps) {
   const isEmpty = !visibleError && !loading && !hasActivity && !hasPromptRecords;
 
   useEffect(() => {
-    dispatch(reviewActions.resetForProject());
-    void dispatch(loadReviewActivity({ projectId }));
-    void dispatch(loadPromptRecords({ projectId }));
-  }, [dispatch, projectId]);
+    if (reviewProjectId !== projectId || activityStatus === "idle") {
+      void dispatch(loadReviewActivity({ projectId }));
+    }
+  }, [activityStatus, dispatch, projectId, reviewProjectId]);
+
+  useEffect(() => {
+    if (reviewProjectId !== projectId || promptRecordsStatus === "idle") {
+      void dispatch(loadPromptRecords({ projectId }));
+    }
+  }, [dispatch, projectId, promptRecordsStatus, reviewProjectId]);
 
   return (
     <aside className="flex h-full flex-col gap-4" aria-label="Review">
