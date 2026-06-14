@@ -33,6 +33,13 @@ function readableError(action: { error: { message?: string } }): string {
   return action.error.message ?? "Could not load review data";
 }
 
+function clearProjectScopedReviewState(state: ReviewState) {
+  state.activityEvents = [];
+  state.promptRecords = [];
+  state.selectedPromptRecordId = null;
+  state.error = null;
+}
+
 const reviewSlice = createSlice({
   name: "review",
   initialState: initialReviewState,
@@ -48,7 +55,7 @@ const reviewSlice = createSlice({
     builder
       .addCase(loadReviewActivity.pending, (state, action) => {
         if (state.projectId !== action.meta.arg.projectId) {
-          state.activityEvents = [];
+          clearProjectScopedReviewState(state);
         }
         state.projectId = action.meta.arg.projectId;
         state.activityStatus = "pending";
@@ -73,8 +80,7 @@ const reviewSlice = createSlice({
       })
       .addCase(loadPromptRecords.pending, (state, action) => {
         if (state.projectId !== action.meta.arg.projectId) {
-          state.promptRecords = [];
-          state.selectedPromptRecordId = null;
+          clearProjectScopedReviewState(state);
         }
         state.projectId = action.meta.arg.projectId;
         state.promptRecordsStatus = "pending";

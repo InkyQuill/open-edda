@@ -183,13 +183,14 @@ describe("reviewSlice", () => {
     expect(staleLoadedFirst.promptRecordsStatus).toBe("succeeded");
   });
 
-  it("clears activity events when activity is requested for a new project", () => {
+  it("clears project-scoped review data when activity is requested for a new project", () => {
     const previousState: ReviewState = {
       ...initialReviewState,
       projectId: "project-1",
       activityEvents: [activityEvent],
       promptRecords: [promptRecord],
       selectedPromptRecordId: promptRecord.id,
+      error: "Could not load review data",
     };
 
     const loading = reviewReducer(
@@ -198,19 +199,21 @@ describe("reviewSlice", () => {
     );
 
     expect(loading.activityEvents).toEqual([]);
-    expect(loading.promptRecords).toEqual([promptRecord]);
-    expect(loading.selectedPromptRecordId).toBe(promptRecord.id);
+    expect(loading.promptRecords).toEqual([]);
+    expect(loading.selectedPromptRecordId).toBeNull();
+    expect(loading.error).toBeNull();
     expect(loading.projectId).toBe("project-2");
     expect(loading.activityStatus).toBe("pending");
   });
 
-  it("clears prompt records and selection when prompts are requested for a new project", () => {
+  it("clears project-scoped review data when prompts are requested for a new project", () => {
     const previousState: ReviewState = {
       ...initialReviewState,
       projectId: "project-1",
       activityEvents: [activityEvent],
       promptRecords: [promptRecord],
       selectedPromptRecordId: promptRecord.id,
+      error: "Could not load review data",
     };
 
     const loading = reviewReducer(
@@ -220,7 +223,8 @@ describe("reviewSlice", () => {
 
     expect(loading.promptRecords).toEqual([]);
     expect(loading.selectedPromptRecordId).toBeNull();
-    expect(loading.activityEvents).toEqual([activityEvent]);
+    expect(loading.activityEvents).toEqual([]);
+    expect(loading.error).toBeNull();
     expect(loading.projectId).toBe("project-2");
     expect(loading.promptRecordsStatus).toBe("pending");
   });

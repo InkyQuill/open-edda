@@ -92,12 +92,13 @@ export function ReviewDrawer({ projectId }: ReviewDrawerProps) {
     selectedPromptRecordId,
   } = useSelector((state: RootState) => state.review);
   const isCurrentProject = reviewProjectId === projectId;
+  const visibleError = isCurrentProject ? error : null;
   const visibleActivityEvents = isCurrentProject ? activityEvents : [];
   const visiblePromptRecords = isCurrentProject ? promptRecords : [];
   const loading = activityStatus === "pending" || promptRecordsStatus === "pending";
   const hasActivity = visibleActivityEvents.length > 0;
   const hasPromptRecords = visiblePromptRecords.length > 0;
-  const isEmpty = !error && !loading && !hasActivity && !hasPromptRecords;
+  const isEmpty = !visibleError && !loading && !hasActivity && !hasPromptRecords;
 
   useEffect(() => {
     dispatch(reviewActions.resetForProject());
@@ -150,13 +151,13 @@ export function ReviewDrawer({ projectId }: ReviewDrawerProps) {
               </div>
             ) : null}
 
-            {error ? (
+            {visibleError ? (
               <p
                 role="alert"
                 className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
               >
                 <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-                {error}
+                {visibleError}
               </p>
             ) : null}
 
