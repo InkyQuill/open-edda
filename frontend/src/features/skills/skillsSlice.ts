@@ -12,7 +12,9 @@ export type SkillsState = {
   sessionSkillsStatus: AsyncStatus;
   sessionSkillsRequestId: string | null;
   loadingSessionId: string | null;
+  activeSessionId: string | null;
   selectedSkillIds: string[];
+  confirmedSelectedSkillIds: string[];
   saveStatus: AsyncStatus;
   saveRequestId: string | null;
   savingSessionId: string | null;
@@ -28,7 +30,9 @@ export const initialSkillsState: SkillsState = {
   sessionSkillsStatus: "idle",
   sessionSkillsRequestId: null,
   loadingSessionId: null,
+  activeSessionId: null,
   selectedSkillIds: [],
+  confirmedSelectedSkillIds: [],
   saveStatus: "idle",
   saveRequestId: null,
   savingSessionId: null,
@@ -49,6 +53,18 @@ const skillsSlice = createSlice({
     },
     replaceSelectedSkillIds(state, action: { payload: string[] }) {
       state.selectedSkillIds = action.payload;
+    },
+    clearSessionSelection(state) {
+      state.activeSessionId = null;
+      state.sessionSkillsStatus = "idle";
+      state.sessionSkillsRequestId = null;
+      state.loadingSessionId = null;
+      state.selectedSkillIds = [];
+      state.confirmedSelectedSkillIds = [];
+      state.saveStatus = "idle";
+      state.saveRequestId = null;
+      state.savingSessionId = null;
+      state.error = null;
     },
     resetForProject() {
       return initialSkillsState;
@@ -84,7 +100,13 @@ const skillsSlice = createSlice({
         state.sessionSkillsStatus = "pending";
         state.sessionSkillsRequestId = action.meta.requestId;
         state.loadingSessionId = action.meta.arg.sessionId;
+        state.activeSessionId = action.meta.arg.sessionId;
         state.selectedSkillIds = [];
+        if (state.savingSessionId !== action.meta.arg.sessionId) {
+          state.saveStatus = "idle";
+          state.saveRequestId = null;
+          state.savingSessionId = null;
+        }
         state.error = null;
       })
       .addCase(loadSessionSkills.fulfilled, (state, action) => {
@@ -95,7 +117,10 @@ const skillsSlice = createSlice({
         ) {
           return;
         }
-        state.selectedSkillIds = action.payload.map((skill) => skill.id);
+        const selectedSkillIds = action.payload.map((skill) => skill.id);
+        state.activeSessionId = action.meta.arg.sessionId;
+        state.selectedSkillIds = selectedSkillIds;
+        state.confirmedSelectedSkillIds = selectedSkillIds;
         state.sessionSkillsStatus = "succeeded";
         state.sessionSkillsRequestId = null;
         state.loadingSessionId = null;
@@ -112,6 +137,8 @@ const skillsSlice = createSlice({
         state.sessionSkillsStatus = "failed";
         state.sessionSkillsRequestId = null;
         state.loadingSessionId = null;
+        state.selectedSkillIds = [];
+        state.confirmedSelectedSkillIds = [];
         state.error = action.error.message ?? "Could not load session skills";
       })
       .addCase(saveSessionSkills.pending, (state, action) => {
@@ -125,11 +152,14 @@ const skillsSlice = createSlice({
         if (
           state.projectId !== action.meta.arg.projectId ||
           state.saveRequestId !== action.meta.requestId ||
-          state.savingSessionId !== action.meta.arg.sessionId
+          state.savingSessionId !== action.meta.arg.sessionId ||
+          state.activeSessionId !== action.meta.arg.sessionId
         ) {
           return;
         }
-        state.selectedSkillIds = action.payload.map((skill) => skill.id);
+        const selectedSkillIds = action.payload.map((skill) => skill.id);
+        state.selectedSkillIds = selectedSkillIds;
+        state.confirmedSelectedSkillIds = selectedSkillIds;
         state.saveStatus = "succeeded";
         state.saveRequestId = null;
         state.savingSessionId = null;
@@ -139,13 +169,15 @@ const skillsSlice = createSlice({
         if (
           state.projectId !== action.meta.arg.projectId ||
           state.saveRequestId !== action.meta.requestId ||
-          state.savingSessionId !== action.meta.arg.sessionId
+          state.savingSessionId !== action.meta.arg.sessionId ||
+          state.activeSessionId !== action.meta.arg.sessionId
         ) {
           return;
         }
         state.saveStatus = "failed";
         state.saveRequestId = null;
         state.savingSessionId = null;
+        state.selectedSkillIds = state.confirmedSelectedSkillIds;
         state.error = action.error.message ?? "Could not save session skills";
       });
   },

@@ -4,13 +4,13 @@ import { listSessionSkills, listSkills, selectSessionSkills } from "../../skillA
 
 export const loadProjectSkills = createAsyncThunk(
   "skills/loadProjectSkills",
-  async ({ projectId }: { projectId: string }) => listSkills(projectId),
+  async ({ projectId }: { projectId: string }, { signal }) => listSkills(projectId, signal),
 );
 
 export const loadSessionSkills = createAsyncThunk(
   "skills/loadSessionSkills",
-  async ({ projectId, sessionId }: { projectId: string; sessionId: string }) =>
-    listSessionSkills(projectId, sessionId),
+  async ({ projectId, sessionId }: { projectId: string; sessionId: string }, { signal }) =>
+    listSessionSkills(projectId, sessionId, signal),
 );
 
 export const saveSessionSkills = createAsyncThunk(

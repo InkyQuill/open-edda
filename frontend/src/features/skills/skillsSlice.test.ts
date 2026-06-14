@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WriterSkill } from "../../skillTypes";
-import { loadProjectSkills, loadSessionSkills } from "./skillsThunks";
+import { loadProjectSkills, loadSessionSkills, saveSessionSkills } from "./skillsThunks";
 import { initialSkillsState, skillsActions, skillsReducer } from "./skillsSlice";
 
 function skill(id: string, displayName = id, scriptsDisabled = false): WriterSkill {
@@ -61,6 +61,7 @@ describe("skillsSlice", () => {
 
     expect(pending.sessionSkillsStatus).toBe("pending");
     expect(pending.loadingSessionId).toBe("session-1");
+    expect(pending.activeSessionId).toBe("session-1");
 
     const loaded = skillsReducer(
       pending,
@@ -73,6 +74,8 @@ describe("skillsSlice", () => {
 
     expect(loaded.sessionSkillsStatus).toBe("succeeded");
     expect(loaded.selectedSkillIds).toEqual(["continuity", "revision"]);
+    expect(loaded.confirmedSelectedSkillIds).toEqual(["continuity", "revision"]);
+    expect(loaded.activeSessionId).toBe("session-1");
     expect(loaded.loadingSessionId).toBeNull();
   });
 
@@ -97,6 +100,93 @@ describe("skillsSlice", () => {
     expect(stale.selectedSkillIds).toEqual([]);
     expect(stale.sessionSkillsStatus).toBe("pending");
     expect(stale.loadingSessionId).toBe("session-2");
+    expect(stale.activeSessionId).toBe("session-2");
+  });
+
+  it("ignores stale save responses after a different session becomes active", () => {
+    const sessionALoaded = skillsReducer(
+      skillsReducer(
+        initialSkillsState,
+        loadSessionSkills.pending("load-a", { projectId: "project-1", sessionId: "session-a" }),
+      ),
+      loadSessionSkills.fulfilled([skill("continuity", "Continuity")], "load-a", {
+        projectId: "project-1",
+        sessionId: "session-a",
+      }),
+    );
+    const savePending = skillsReducer(
+      {
+        ...sessionALoaded,
+        selectedSkillIds: ["continuity", "style"],
+      },
+      saveSessionSkills.pending("save-a", {
+        projectId: "project-1",
+        sessionId: "session-a",
+        skillIds: ["continuity", "style"],
+      }),
+    );
+    const sessionBLoaded = skillsReducer(
+      skillsReducer(
+        savePending,
+        loadSessionSkills.pending("load-b", { projectId: "project-1", sessionId: "session-b" }),
+      ),
+      loadSessionSkills.fulfilled([skill("revision", "Revision")], "load-b", {
+        projectId: "project-1",
+        sessionId: "session-b",
+      }),
+    );
+
+    const staleSave = skillsReducer(
+      sessionBLoaded,
+      saveSessionSkills.fulfilled([skill("stale", "Stale")], "save-a", {
+        projectId: "project-1",
+        sessionId: "session-a",
+        skillIds: ["continuity", "style"],
+      }),
+    );
+
+    expect(staleSave.activeSessionId).toBe("session-b");
+    expect(staleSave.selectedSkillIds).toEqual(["revision"]);
+    expect(staleSave.confirmedSelectedSkillIds).toEqual(["revision"]);
+    expect(staleSave.saveStatus).toBe("idle");
+  });
+
+  it("rolls back optimistic selection when the current session save fails", () => {
+    const loaded = skillsReducer(
+      skillsReducer(
+        initialSkillsState,
+        loadSessionSkills.pending("load-1", { projectId: "project-1", sessionId: "session-1" }),
+      ),
+      loadSessionSkills.fulfilled([skill("continuity", "Continuity")], "load-1", {
+        projectId: "project-1",
+        sessionId: "session-1",
+      }),
+    );
+    const optimistic = skillsReducer(
+      {
+        ...loaded,
+        selectedSkillIds: ["continuity", "style"],
+      },
+      saveSessionSkills.pending("save-1", {
+        projectId: "project-1",
+        sessionId: "session-1",
+        skillIds: ["continuity", "style"],
+      }),
+    );
+
+    const rejected = skillsReducer(
+      optimistic,
+      saveSessionSkills.rejected(new Error("Save failed"), "save-1", {
+        projectId: "project-1",
+        sessionId: "session-1",
+        skillIds: ["continuity", "style"],
+      }),
+    );
+
+    expect(rejected.saveStatus).toBe("failed");
+    expect(rejected.selectedSkillIds).toEqual(["continuity"]);
+    expect(rejected.confirmedSelectedSkillIds).toEqual(["continuity"]);
+    expect(rejected.error).toBe("Save failed");
   });
 
   it("resets project-scoped skills state", () => {
@@ -107,7 +197,9 @@ describe("skillsSlice", () => {
         skills: [skill("continuity", "Continuity")],
         skillsStatus: "succeeded",
         sessionSkillsStatus: "succeeded",
+        activeSessionId: "session-1",
         selectedSkillIds: ["skill-1", "skill-2"],
+        confirmedSelectedSkillIds: ["skill-1"],
         importStatus: "failed",
         error: "Could not import skills",
       },

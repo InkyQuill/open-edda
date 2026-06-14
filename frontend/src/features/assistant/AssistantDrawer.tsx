@@ -54,7 +54,7 @@ export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
 
   useEffect(() => {
     if (!activeSessionIdForProject) {
-      dispatch(skillsActions.replaceSelectedSkillIds([]));
+      dispatch(skillsActions.clearSessionSelection());
       return;
     }
     void dispatch(loadAssistantMessages({ projectId, sessionId: activeSessionIdForProject }));

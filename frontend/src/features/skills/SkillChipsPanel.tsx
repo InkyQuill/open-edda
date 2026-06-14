@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { useSelector } from "react-redux";
 
 import type { RootState } from "../../app/store/store";
-import { Button } from "../../shared/ui/button";
+import { buttonVariants } from "../../shared/ui/button";
 
 export function SkillChipsPanel() {
   const { selectedSkillIds, sessionSkillsStatus, skills, skillsStatus } = useSelector((state: RootState) => state.skills);
@@ -48,9 +48,9 @@ export function SkillChipsPanel() {
       {selectedSkills.length > 0 ? (
         <div className="flex flex-wrap gap-2">
           {selectedSkills.map((skill) => (
-            <Button key={skill.id} type="button" variant="secondary" size="xs">
+            <span key={skill.id} className={buttonVariants({ variant: "secondary", size: "xs" })}>
               {skill.displayName}
-            </Button>
+            </span>
           ))}
         </div>
       ) : null}

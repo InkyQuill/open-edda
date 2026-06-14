@@ -14,7 +14,7 @@ type SkillsPanelProps = {
 
 export function SkillsPanel({ projectId, sessionId }: SkillsPanelProps) {
   const dispatch = useDispatch<AppDispatch>();
-  const { saveStatus, selectedSkillIds, sessionSkillsStatus, skills, skillsStatus } = useSelector(
+  const { error, saveStatus, selectedSkillIds, sessionSkillsStatus, skills, skillsStatus } = useSelector(
     (state: RootState) => state.skills,
   );
   const selectedSkillIdSet = useMemo(() => new Set(selectedSkillIds), [selectedSkillIds]);
@@ -56,6 +56,12 @@ export function SkillsPanel({ projectId, sessionId }: SkillsPanelProps) {
       {!isLoading && skills.length === 0 ? (
         <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
           No skills installed for this project.
+        </p>
+      ) : null}
+
+      {error ? (
+        <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
         </p>
       ) : null}
 
