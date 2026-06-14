@@ -102,10 +102,7 @@ export function loadBrowserWorkspaceState(
   try {
     const parsed = JSON.parse(raw) as Partial<BrowserWorkspaceState>;
     return {
-      defaultMode:
-        parsed.defaultMode === "draft" || parsed.defaultMode === "review"
-          ? parsed.defaultMode
-          : "assistant",
+      defaultMode: isWorkspaceMode(parsed.defaultMode) ? parsed.defaultMode : "assistant",
       density: parsed.density === "compact" ? "compact" : "comfortable",
     };
   } catch {

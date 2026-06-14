@@ -16,6 +16,7 @@ export default defineConfig({
     },
   },
   test: {
+    // Keep reducer-focused tests on node; switch to jsdom or happy-dom when component tests land.
     environment: "node",
     globals: true,
   },

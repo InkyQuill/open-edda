@@ -592,10 +592,19 @@ func TestSkillScriptToolRequiresEnabledScript(t *testing.T) {
 	storyProject := createTestProject(t, ctx, projectService, "author-1", "Skill Script Disabled Project")
 	service := NewService(db, projectService, nil)
 	service.SetSkillService(skillService)
-	session := createTestSession(t, ctx, service, storyProject.ID)
 	installed := installToolSkill(t, ctx, skillService, storyProject.ID)
+	session, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:  storyProject.ID,
+		Title:      "Skill script disabled session",
+		ActionKind: ActionKindChat,
+		ApplyMode:  ApplyModePreview,
+		SkillIDs:   []string{installed.ID},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
 
-	_, err := service.ExecuteTool(ctx, ToolCallInput{
+	_, err = service.ExecuteTool(ctx, ToolCallInput{
 		ProjectID:     storyProject.ID,
 		SessionID:     session.ID,
 		ToolCallID:    "tool-script-1",
@@ -604,6 +613,9 @@ func TestSkillScriptToolRequiresEnabledScript(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("ExecuteTool() error = nil, want invalid script")
+	}
+	if strings.Contains(err.Error(), "not selected for this session") {
+		t.Fatalf("ExecuteTool() error = %v, want enabled script rejection", err)
 	}
 
 	assertNoToolArtifactForCall(t, ctx, db, storyProject.ID, session.ID, "tool-script-1")

@@ -32,7 +32,6 @@ export function useProjects(): UseProjectsResult {
           return;
         }
         setProjects(items);
-        setError(null);
       })
       .catch((cause: unknown) => {
         if (cancelled) {

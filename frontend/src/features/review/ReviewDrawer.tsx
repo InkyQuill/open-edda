@@ -16,7 +16,7 @@ type ReviewDrawerProps = {
 function formatDateTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return value || "Unknown time";
+    return "Unknown time";
   }
 
   return new Intl.DateTimeFormat(undefined, {

@@ -12,7 +12,6 @@ import { useDispatch, useSelector } from "react-redux";
 import { AssistantDrawer } from "../assistant/AssistantDrawer";
 import { EditorFrame } from "../editor/EditorFrame";
 import { ModelSettingsPanel } from "../model-settings/ModelSettingsPanel";
-import { ModelStatus } from "../model-settings/ModelStatus";
 import { ContextDrawer } from "../notes/ContextDrawer";
 import { ReviewDrawer } from "../review/ReviewDrawer";
 import { ScriptRuntimePanel } from "../script-runtime/ScriptRuntimePanel";
