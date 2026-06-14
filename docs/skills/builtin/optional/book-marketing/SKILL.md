@@ -55,6 +55,17 @@ Publishing-adjacent copy support for authors who need blurbs, descriptions, tagl
 - Do not propose Story Bible changes in this skill.
 - Do not use Structured Writes in this skill.
 
+## Bundled Templates
+
+This skill includes publishing-adjacent templates as Writer-native references:
+
+- `templates/blurb.md` — Book blurb structure and guidance.
+- `templates/query.md` — Query letter template.
+- `templates/taglines.md` — Tagline and logline templates.
+- `templates/amazon.md` — Amazon store page description template.
+
+The agent should reference these templates in Agent Session responses when the author asks for marketing copy.
+
 ## Script Compatibility
 
 This rewrite preserves built-in blurb, store, tagline, and query templates as Writer-native references. Script execution is unavailable in Milestone 3.5, and this skill works through guidance, templates, and reviewable marketing drafts only.

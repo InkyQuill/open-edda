@@ -254,10 +254,16 @@ func parseSkillMarkdown(body string) (skillFrontmatter, string, error) {
 func parseSkillFrontmatter(body string) (skillFrontmatter, error) {
 	var parsed skillFrontmatter
 	section := ""
+	var listAccumulator []string
+	currentKey := ""
 
 	for _, line := range strings.Split(body, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "- ") && section != "" {
+			listAccumulator = append(listAccumulator, trimScalar(strings.TrimPrefix(trimmed, "- ")))
 			continue
 		}
 		if !strings.Contains(trimmed, ":") {
@@ -267,6 +273,14 @@ func parseSkillFrontmatter(body string) (skillFrontmatter, error) {
 		key, value, _ := strings.Cut(trimmed, ":")
 		key = strings.TrimSpace(key)
 		value = strings.TrimSpace(value)
+
+		if len(listAccumulator) > 0 && currentKey != "" {
+			if err := setRoutingFieldList(routingForSection(&parsed, section), currentKey, listAccumulator); err != nil {
+				return skillFrontmatter{}, err
+			}
+			listAccumulator = nil
+			currentKey = ""
+		}
 
 		switch key {
 		case "name":
@@ -283,9 +297,19 @@ func parseSkillFrontmatter(body string) (skillFrontmatter, error) {
 			if section != "route" && section != "routing" {
 				continue
 			}
-			if err := setRoutingField(routingForSection(&parsed, section), key, value); err != nil {
-				return skillFrontmatter{}, err
+			if value != "" {
+				if err := setRoutingField(routingForSection(&parsed, section), key, value); err != nil {
+					return skillFrontmatter{}, err
+				}
+			} else {
+				currentKey = key
 			}
+		}
+	}
+
+	if len(listAccumulator) > 0 && currentKey != "" {
+		if err := setRoutingFieldList(routingForSection(&parsed, section), currentKey, listAccumulator); err != nil {
+			return skillFrontmatter{}, err
 		}
 	}
 
@@ -320,6 +344,22 @@ func setRoutingField(route *routingFrontmatter, key, value string) error {
 			return fmt.Errorf("invalid routing priority %q: %w", value, err)
 		}
 		route.Priority = priority
+	}
+	return nil
+}
+
+func setRoutingFieldList(route *routingFrontmatter, key string, items []string) error {
+	switch key {
+	case "actionKinds":
+		route.ActionKinds = items
+	case "actions":
+		route.Actions = items
+	case "contentKinds":
+		route.ContentKinds = items
+	case "content":
+		route.Content = items
+	case "tags":
+		route.Tags = items
 	}
 	return nil
 }

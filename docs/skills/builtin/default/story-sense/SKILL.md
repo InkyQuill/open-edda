@@ -57,6 +57,15 @@ The broad diagnostic skill for figuring out what is wrong, what stage the work i
 - Propose Story Bible review only when continuity or canon gaps are part of the diagnosis.
 - Do not use Structured Writes in this skill.
 
+## Bundled Data
+
+This skill includes reference data the agent can consult during diagnosis:
+
+- `data/functions-forms.json` — Story function and form patterns for diagnostic routing.
+- `data/genre-elements.json` — Genre element expectations for cross-genre comparison.
+
+The agent should load these through the `skill` tool when a diagnostic session needs detailed reference material beyond the instruction prompts.
+
 ## Script Compatibility
 
 This rewrite adapts source helper logic into Writer-native diagnosis, genre tables, and function references. Source helpers are not runnable in Milestone 3.5.

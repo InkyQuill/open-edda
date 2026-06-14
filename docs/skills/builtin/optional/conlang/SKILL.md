@@ -59,6 +59,15 @@ Constructed language support for authors who need coherent naming languages, voc
 - Propose Story Bible updates for confirmed language rules, glossaries, or historical notes only after author confirmation.
 - Do not use Structured Writes in this skill.
 
+## Bundled Data
+
+This skill includes linguistic reference data as Writer-native references:
+
+- `data/phoneme-frequencies.json` — Cross-linguistic phoneme frequency data.
+- `data/syllable-templates.json` — Syllable structure templates for language construction.
+
+The agent should load these through the `skill` tool when a language construction session needs detailed reference material.
+
 ## Script Compatibility
 
 This rewrite preserves built-in phoneme and syllable data as Writer-native references. Source helper scripts are not runnable in Milestone 3.5, so the skill works through guidance, data, and reviewable language notes only.

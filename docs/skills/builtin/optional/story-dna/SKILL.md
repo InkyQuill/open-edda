@@ -56,6 +56,15 @@ Functional analysis for authors who want to understand what a story is doing ben
 - Do not propose Story Bible changes unless the author wants analysis conclusions tracked as project guidance.
 - Do not use Structured Writes in this skill.
 
+## Bundled Data
+
+This skill includes extraction schemas and taxonomies as Writer-native references:
+
+- `data/extraction-templates.json` — Structured templates for extracting story mechanics from existing works.
+- `data/function-categories.json` — Taxonomy of story functions for classification.
+
+The agent should load these through the `skill` tool when an analysis session needs detailed reference material.
+
 ## Script Compatibility
 
 This rewrite preserves built-in extraction schemas and function taxonomies as Writer-native references. Source helper scripts are not runnable in Milestone 3.5, so the skill works through analysis, data, and reviewable notes only.

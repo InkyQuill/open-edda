@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -167,7 +168,116 @@ func decodeTestResponse[T any](t *testing.T, rec *httptest.ResponseRecorder, wan
 	}
 	var value T
 	if err := json.NewDecoder(rec.Body).Decode(&value); err != nil {
-		t.Fatalf("decode response: %v; body = %s", err, rec.Body.String())
+		t.Fatalf("decode response: %v", err)
 	}
 	return value
+}
+
+func TestImportBuiltinDefaultSkillParsesFrontmatter(t *testing.T) {
+	db := openMigratedTestDB(t)
+	handler := newTestSkillHTTP(NewService(db))
+
+	archive := zipDirFromBuiltin(t, "default", "story-sense")
+	skill := postZip[Skill](t, handler, "/api/projects/project-1/skills/import", archive, http.StatusCreated)
+
+	if skill.Name != "story-sense" {
+		t.Fatalf("Name = %q, want story-sense", skill.Name)
+	}
+	if skill.Description == "" {
+		t.Fatal("description is empty")
+	}
+	if len(skill.RoutingHints) == 0 {
+		t.Fatal("no routing hints imported")
+	}
+	if skill.ScriptCount > 0 && !skill.ScriptsDisabled {
+		t.Fatal("script-bearing skill should have scriptsDisabled true")
+	}
+}
+
+func TestImportBuiltinOptionalSkillWithScripts(t *testing.T) {
+	db := openMigratedTestDB(t)
+	handler := newTestSkillHTTP(NewService(db))
+
+	archive := zipDirFromBuiltin(t, "optional", "character-names")
+	skill := postZip[Skill](t, handler, "/api/projects/project-1/skills/import", archive, http.StatusCreated)
+
+	if skill.Name != "character-names" {
+		t.Fatalf("Name = %q, want character-names", skill.Name)
+	}
+	if len(skill.Files) < 2 {
+		t.Fatalf("character-names should have bundled data and template files, got %d", len(skill.Files))
+	}
+	if !skill.ScriptsDisabled {
+		t.Fatal("scriptsDisabled should be true")
+	}
+
+	detail := getJSON[Skill](t, handler, "/api/projects/project-1/skills/"+skill.ID, http.StatusOK)
+	foundData := false
+	for _, file := range detail.Files {
+		if file.Purpose == "data" {
+			foundData = true
+			break
+		}
+	}
+	if !foundData {
+		t.Fatal("expected data file in character-names skill")
+	}
+}
+
+func TestImportBuiltinMergedSkill(t *testing.T) {
+	db := openMigratedTestDB(t)
+	handler := newTestSkillHTTP(NewService(db))
+
+	archive := zipDirFromBuiltin(t, "default", "avoid-cliches")
+	skill := postZip[Skill](t, handler, "/api/projects/project-1/skills/import", archive, http.StatusCreated)
+
+	if skill.Name != "avoid-cliches" {
+		t.Fatalf("Name = %q, want avoid-cliches", skill.Name)
+	}
+}
+
+func zipDirFromBuiltin(t *testing.T, category, name string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	dir := "../docs/skills/builtin/" + category + "/" + name
+	if _, err := os.ReadDir(dir); err != nil {
+		t.Fatalf("read builtin dir %s: %v", dir, err)
+	}
+	var walk func(base string) error
+	walk = func(base string) error {
+		entries, err := os.ReadDir(base)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			fullPath := base + "/" + entry.Name()
+			relPath := strings.TrimPrefix(fullPath, dir+"/")
+			if entry.IsDir() {
+				if err := walk(fullPath); err != nil {
+					return err
+				}
+				continue
+			}
+			w, err := zw.Create(relPath)
+			if err != nil {
+				return err
+			}
+			content, err := os.ReadFile(fullPath)
+			if err != nil {
+				return err
+			}
+			if _, err := w.Write(content); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := walk(dir); err != nil {
+		t.Fatalf("walk builtin dir: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+	return buf.Bytes()
 }

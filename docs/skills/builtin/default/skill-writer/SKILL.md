@@ -4,12 +4,12 @@ description: Skill-authoring help for drafting or revising Writer skills, with s
 route:
   actionKinds:
     - chat
-    - skill_authoring
   contentKinds:
     - project_note
     - attached_note
     - agent_session
   tags:
+    - skill_authoring
     - authoring-tool
     - skills
     - documentation
