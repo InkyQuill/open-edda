@@ -1,5 +1,5 @@
 import type React from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, LogOut, Plus, Settings2, Upload } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -11,44 +11,93 @@ import { useProjects } from "./projectHooks";
 export function ProjectsPage() {
   const navigate = useNavigate();
   const { projects, loading, error, reload } = useProjects();
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const mountedRef = useRef(true);
+  const operationIdRef = useRef(0);
   const [title, setTitle] = useState("");
   const [language, setLanguage] = useState("en");
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [operationLabel, setOperationLabel] = useState<"create" | "import" | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+      operationIdRef.current += 1;
+    };
+  }, []);
+
+  function isCurrentOperation(operationId: number): boolean {
+    return mountedRef.current && operationIdRef.current === operationId;
+  }
 
   function handleCreateProject(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     const trimmedTitle = title.trim();
     if (!trimmedTitle || creating) return;
+    const operationId = operationIdRef.current + 1;
+    operationIdRef.current = operationId;
 
     setCreating(true);
+    setOperationLabel("create");
     setCreateError(null);
     void createProject({ title: trimmedTitle, language: language.trim() || "en" })
-      .then((project) => navigate(`/projects/${encodeURIComponent(project.id)}`))
-      .catch((cause: unknown) => {
-        setCreateError(cause instanceof Error ? cause.message : "Could not create project");
+      .then((project) => {
+        if (isCurrentOperation(operationId)) {
+          navigate(`/projects/${encodeURIComponent(project.id)}`);
+        }
       })
-      .finally(() => setCreating(false));
+      .catch((cause: unknown) => {
+        if (isCurrentOperation(operationId)) {
+          setCreateError(cause instanceof Error ? cause.message : "Could not create project");
+        }
+      })
+      .finally(() => {
+        if (isCurrentOperation(operationId)) {
+          setCreating(false);
+          setOperationLabel(null);
+        }
+      });
+  }
+
+  function handleImportClick(): void {
+    importInputRef.current?.click();
   }
 
   function handleImportProject(event: React.ChangeEvent<HTMLInputElement>): void {
+    const input = event.currentTarget;
     const file = event.target.files?.[0];
     if (!file) return;
+    const operationId = operationIdRef.current + 1;
+    operationIdRef.current = operationId;
 
     setCreating(true);
+    setOperationLabel("import");
     setCreateError(null);
     void importElysiumProject(file)
-      .then((project) => navigate(`/projects/${encodeURIComponent(project.id)}`))
+      .then((project) => {
+        if (isCurrentOperation(operationId)) {
+          navigate(`/projects/${encodeURIComponent(project.id)}`);
+        }
+      })
       .catch((cause: unknown) => {
-        setCreateError(cause instanceof Error ? cause.message : "Could not import project");
+        if (isCurrentOperation(operationId)) {
+          setCreateError(cause instanceof Error ? cause.message : "Could not import project");
+        }
       })
       .finally(() => {
-        setCreating(false);
-        event.target.value = "";
+        if (isCurrentOperation(operationId)) {
+          setCreating(false);
+          setOperationLabel(null);
+          input.value = "";
+        }
       });
   }
 
   function handleLogout(): void {
+    operationIdRef.current += 1;
     clearToken();
     navigate("/login", { replace: true });
   }
@@ -67,7 +116,7 @@ export function ProjectsPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button asChild type="button" variant="outline">
+            <Button asChild variant="outline">
               <Link to="/settings">
                 <Settings2 data-icon="inline-start" aria-hidden="true" />
                 Settings
@@ -118,16 +167,15 @@ export function ProjectsPage() {
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Button type="submit" className="w-full sm:w-auto" disabled={!title.trim() || creating}>
                   <Plus data-icon="inline-start" aria-hidden="true" />
-                  {creating ? "Working..." : "Create project"}
+                  {operationLabel === "create" ? "Creating..." : "Create project"}
                 </Button>
-                <Button asChild variant="outline" className="w-full sm:w-auto">
-                  <label htmlFor="project-import-input" className={creating ? "pointer-events-none opacity-60" : undefined}>
-                    <Upload data-icon="inline-start" aria-hidden="true" />
-                    Import Elysium
-                  </label>
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={handleImportClick} disabled={creating}>
+                  <Upload data-icon="inline-start" aria-hidden="true" />
+                  {operationLabel === "import" ? "Importing..." : "Import Elysium"}
                 </Button>
                 <input
                   id="project-import-input"
+                  ref={importInputRef}
                   className="sr-only"
                   type="file"
                   accept=".zip,application/zip"
