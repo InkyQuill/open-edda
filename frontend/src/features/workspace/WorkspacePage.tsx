@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { shallowEqual, useDispatch, useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -53,6 +53,7 @@ export function WorkspacePage() {
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(false);
   const [contentCreating, setContentCreating] = useState(false);
+  const createAbortControllerRef = useRef<AbortController | null>(null);
   const contentKind = routeContentKind
     ? toContentKind(routeContentKind)
     : toContentKind(workspace.lastContentKind);
@@ -95,6 +96,15 @@ export function WorkspacePage() {
     if (!routeContentKind) return;
     dispatch(workspaceActions.setLastContentKind(toContentKind(routeContentKind)));
   }, [dispatch, routeContentKind]);
+
+  useEffect(() => {
+    setContentCreating(false);
+
+    return () => {
+      createAbortControllerRef.current?.abort();
+      createAbortControllerRef.current = null;
+    };
+  }, [projectId]);
 
   useEffect(() => {
     if (!projectId || hydratedProjectId !== projectId) return;
@@ -177,6 +187,8 @@ export function WorkspacePage() {
   function handleCreateContent(kind: ContentKind): void {
     if (!projectId || contentCreating || contentLoading) return;
     const nextNumber = contentItems.filter((item) => item.kind === kind).length + 1;
+    const abortController = new AbortController();
+    createAbortControllerRef.current = abortController;
     setContentCreating(true);
     setContentError(null);
 
@@ -187,8 +199,9 @@ export function WorkspacePage() {
       metadataJson: "{}",
       sortOrder: contentItems.length + 1,
       reason: "created from workspace",
-    })
+    }, abortController.signal)
       .then((item) => {
+        if (abortController.signal.aborted) return;
         setContentItems((items) => [...items, item]);
         dispatch(workspaceActions.setLastContentKind(item.kind));
         dispatch(workspaceActions.setFallbackContentId(item.id));
@@ -197,9 +210,15 @@ export function WorkspacePage() {
         );
       })
       .catch((cause: unknown) => {
+        if (abortController.signal.aborted) return;
         setContentError(cause instanceof Error ? cause.message : "Could not create content");
       })
-      .finally(() => setContentCreating(false));
+      .finally(() => {
+        if (createAbortControllerRef.current === abortController) {
+          createAbortControllerRef.current = null;
+        }
+        if (!abortController.signal.aborted) setContentCreating(false);
+      });
   }
 
   function handleSelectContent(item: ContentItem): void {
