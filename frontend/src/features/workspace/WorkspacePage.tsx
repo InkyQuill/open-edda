@@ -24,6 +24,8 @@ type WorkspaceRouteParams = {
   contentId?: string;
 };
 
+type WorkspaceRouteIdentity = WorkspaceRouteParams;
+
 type WorkspaceRootState = {
   workspace: WorkspaceState;
 };
@@ -39,6 +41,14 @@ function toContentKind(value: string): ContentKind {
   return contentKinds.has(value as ContentKind) ? (value as ContentKind) : "chapter";
 }
 
+function isSameRouteIdentity(left: WorkspaceRouteIdentity, right: WorkspaceRouteIdentity): boolean {
+  return (
+    left.projectId === right.projectId &&
+    left.contentKind === right.contentKind &&
+    left.contentId === right.contentId
+  );
+}
+
 export function WorkspacePage() {
   const { projectId, contentKind: routeContentKind, contentId } = useParams<WorkspaceRouteParams>();
   const navigate = useNavigate();
@@ -50,10 +60,13 @@ export function WorkspacePage() {
   const [projectError, setProjectError] = useState<string | null>(null);
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
   const [contentError, setContentError] = useState<string | null>(null);
+  const [contentCreateError, setContentCreateError] = useState<string | null>(null);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(false);
   const [contentCreating, setContentCreating] = useState(false);
   const createAbortControllerRef = useRef<AbortController | null>(null);
+  const routeIdentityRef = useRef<WorkspaceRouteIdentity>({ projectId, contentKind: routeContentKind, contentId });
+  routeIdentityRef.current = { projectId, contentKind: routeContentKind, contentId };
   const contentKind = routeContentKind
     ? toContentKind(routeContentKind)
     : toContentKind(workspace.lastContentKind);
@@ -124,6 +137,7 @@ export function WorkspacePage() {
     const abortController = new AbortController();
     setContentLoading(true);
     setContentError(null);
+    setContentCreateError(null);
     setContentItems([]);
 
     void listContent(projectId, contentKind, abortController.signal)
@@ -196,13 +210,25 @@ export function WorkspacePage() {
     setContentCreating(false);
   }
 
+  function isCurrentCreateContext(
+    abortController: AbortController,
+    routeIdentity: WorkspaceRouteIdentity,
+  ): boolean {
+    return (
+      !abortController.signal.aborted &&
+      createAbortControllerRef.current === abortController &&
+      isSameRouteIdentity(routeIdentityRef.current, routeIdentity)
+    );
+  }
+
   function handleCreateContent(kind: ContentKind): void {
     if (!projectId || contentCreating || contentLoading) return;
     const nextNumber = contentItems.filter((item) => item.kind === kind).length + 1;
     const abortController = new AbortController();
+    const routeIdentity = routeIdentityRef.current;
     createAbortControllerRef.current = abortController;
     setContentCreating(true);
-    setContentError(null);
+    setContentCreateError(null);
 
     void createContent(projectId, {
       kind,
@@ -213,10 +239,8 @@ export function WorkspacePage() {
       reason: "created from workspace",
     }, abortController.signal)
       .then((item) => {
-        if (abortController.signal.aborted) return;
-        if (createAbortControllerRef.current === abortController) {
-          createAbortControllerRef.current = null;
-        }
+        if (!isCurrentCreateContext(abortController, routeIdentity)) return;
+        createAbortControllerRef.current = null;
         setContentCreating(false);
         setContentItems((items) => [...items, item]);
         dispatch(workspaceActions.setLastContentKind(item.kind));
@@ -226,14 +250,13 @@ export function WorkspacePage() {
         );
       })
       .catch((cause: unknown) => {
-        if (abortController.signal.aborted) return;
-        setContentError(cause instanceof Error ? cause.message : "Could not create content");
+        if (!isCurrentCreateContext(abortController, routeIdentity)) return;
+        setContentCreateError(cause instanceof Error ? cause.message : "Could not create content");
       })
       .finally(() => {
-        if (createAbortControllerRef.current === abortController) {
-          createAbortControllerRef.current = null;
-        }
-        if (!abortController.signal.aborted) setContentCreating(false);
+        if (!isCurrentCreateContext(abortController, routeIdentity)) return;
+        createAbortControllerRef.current = null;
+        setContentCreating(false);
       });
   }
 
@@ -297,6 +320,7 @@ export function WorkspacePage() {
       contentItems={contentItems}
       contentLoading={contentLoading}
       contentError={contentError}
+      contentCreateError={contentCreateError}
       contentCreating={contentCreating}
       activeContentKind={contentKind}
       selectedContent={selectedContent}

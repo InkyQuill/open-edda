@@ -9,6 +9,7 @@ type ContextDrawerProps = {
   contentItems: ContentItem[];
   contentLoading: boolean;
   contentError: string | null;
+  contentCreateError: string | null;
   contentCreating: boolean;
   contentCreationDisabled: boolean;
   activeContentKind: ContentKind;
@@ -35,6 +36,7 @@ export function ContextDrawer({
   contentItems,
   contentLoading,
   contentError,
+  contentCreateError,
   contentCreating,
   contentCreationDisabled,
   activeContentKind,
@@ -90,6 +92,11 @@ export function ContextDrawer({
               {contentCreating ? "Creating..." : "New"}
             </Button>
           </div>
+          {contentCreateError ? (
+            <p className="rounded-md border border-dashed border-border p-3 text-sm text-destructive" role="alert">
+              Could not create content: {contentCreateError}
+            </p>
+          ) : null}
           {contentLoading ? (
             <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
               Loading content...
@@ -140,6 +147,11 @@ export function ContextDrawer({
               {contentCreating ? "Creating..." : "New"}
             </Button>
           </header>
+          {contentCreateError ? (
+            <p className="rounded-md border border-dashed border-border p-3 text-sm text-destructive" role="alert">
+              Could not create content: {contentCreateError}
+            </p>
+          ) : null}
           <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
             World lookup will show linked story bible entries here.
           </p>
@@ -163,6 +175,11 @@ export function ContextDrawer({
               {contentCreating ? "Creating..." : "New"}
             </Button>
           </header>
+          {contentCreateError ? (
+            <p className="rounded-md border border-dashed border-border p-3 text-sm text-destructive" role="alert">
+              Could not create content: {contentCreateError}
+            </p>
+          ) : null}
           <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
             Attached project notes will appear here.
           </p>

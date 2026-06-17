@@ -32,6 +32,7 @@ type WorkspaceShellProps = {
   contentItems: ContentItem[];
   contentLoading: boolean;
   contentError: string | null;
+  contentCreateError: string | null;
   contentCreating: boolean;
   activeContentKind: ContentKind;
   selectedContent: ContentItem | null;
@@ -85,6 +86,7 @@ export function WorkspaceShell({
   contentItems,
   contentLoading,
   contentError,
+  contentCreateError,
   contentCreating,
   activeContentKind,
   selectedContent,
@@ -109,6 +111,7 @@ export function WorkspaceShell({
       contentItems={contentItems}
       contentLoading={contentLoading}
       contentError={contentError}
+      contentCreateError={contentCreateError}
       contentCreating={contentCreating}
       contentCreationDisabled={contentCreating || contentLoading}
       activeContentKind={activeContentKind}
@@ -129,6 +132,7 @@ export function WorkspaceShell({
         contentItems={contentItems}
         contentLoading={contentLoading}
         contentError={contentError}
+        contentCreateError={contentCreateError}
         contentCreating={contentCreating}
         contentCreationDisabled={contentCreating || contentLoading}
         activeContentKind={activeContentKind}
