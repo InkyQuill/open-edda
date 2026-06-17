@@ -214,6 +214,7 @@ Cover:
 - Rewrite dispatch calls `runRewrite` with selection bytes and preview apply mode.
 - Check dispatch calls `runReadAndCheck` with selection bytes and preview apply mode.
 - A stale fulfilled result with an old `requestKey` does not replace the current candidate.
+- A stale fulfilled result with a matching `requestKey` but old `requestToken` does not replace the current candidate.
 - A rejected run stores an error and leaves candidate/check result empty.
 
 ## Task 2: Add Accept And Reject Candidate State
@@ -232,12 +233,14 @@ export interface AcceptAssistantCandidateArgs {
   projectId: string;
   candidateId: string;
   requestKey: string;
+  requestToken: string;
 }
 
 export interface RejectAssistantCandidateArgs {
   projectId: string;
   candidateId: string;
   requestKey: string;
+  requestToken: string;
 }
 ```
 
@@ -255,7 +258,7 @@ Content changed before this preview was accepted. Review the latest draft, then 
 - `rejectAssistantCandidate` calls `rejectCandidate(projectId, candidateId)`.
 - On reject success, clear `candidate`, set `rejectStatus: "succeeded"`, and return to idle action state.
 - On reject failure, keep the candidate visible and set `rejectStatus: "failed"` plus `rejectError`.
-- Stale accept/reject completions whose `requestKey` no longer matches the slice must not mutate the current preview.
+- Stale accept/reject completions whose `requestKey` or `requestToken` no longer matches the slice must not mutate the current preview.
 
 Conflict detection helper:
 
@@ -281,6 +284,7 @@ Cover:
 - Reject calls `rejectCandidate`.
 - Successful reject clears the candidate.
 - Stale accept/reject completions do not mutate a newer preview.
+- Stale accept/reject completions with a matching `requestKey` but mismatched `requestToken` do not mutate a newer preview.
 
 ## Task 3: Add Assistant Action Preview Panel
 
@@ -371,6 +375,7 @@ dispatch(
     instructions: generateInstructions.trim(),
     skillIds: selectedSkillIds,
     requestKey,
+    requestToken,
   }),
 );
 ```
@@ -378,6 +383,7 @@ dispatch(
 Request identity:
 
 - Build `requestKey` from `projectId`, `contentId`, current route location key/pathname, and `contentContext.revision`.
+- Build `requestToken` with `crypto.randomUUID()` for every dispatch.
 - Clear stale assistant action results when project/content route identity changes.
 
 On accept:
@@ -386,6 +392,7 @@ On accept:
 - Use the fulfilled `content` from `AcceptCandidateResult` to call existing editor update flow:
   - update editor content body/revision through existing editor slice actions
   - call `onContentSaved(content)` so the workspace content list stays in sync
+  - dispatch editor slice cleanup actions to clear `selection` and `actionModal` values that referenced the old revision
 
 On reject:
 
@@ -421,6 +428,7 @@ Rewrite:
 - On submit, dispatch `runRewrite` with preview mode through the assistant-actions slice.
 - Use the dialog textarea value as `instructions`.
 - Close the modal after dispatch starts, leaving the preview panel visible in the editor.
+- When a rewrite preview is accepted, the shared accept-completion handler from Task 4 must apply the returned content, call `onContentSaved(content)`, and dispatch editor slice cleanup actions to clear the old `selection` and `actionModal`.
 
 Check:
 
@@ -431,6 +439,7 @@ Check:
   - active model variant exists
 - On submit, dispatch `runCheck`.
 - Close the modal after dispatch starts, leaving the report visible in the preview panel.
+- Check results do not accept content, but dismissing or replacing a check result must not restore stale selection/action-modal state from the old revision.
 
 Note:
 
