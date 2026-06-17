@@ -19,6 +19,59 @@ export async function listProjects(): Promise<StoryProject[]> {
   return response.json() as Promise<StoryProject[]>;
 }
 
+export type CreateProjectInput = {
+  title: string;
+  language: string;
+};
+
+export async function createProject(input: CreateProjectInput): Promise<StoryProject> {
+  const response = await authFetch("/api/projects", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw new Error(`create project failed: ${response.status}`);
+  }
+  return response.json() as Promise<StoryProject>;
+}
+
+export async function importElysiumProject(file: File): Promise<StoryProject> {
+  const response = await authFetch("/api/projects/import/elysium", {
+    method: "POST",
+    body: file,
+    headers: new Headers({ "Content-Type": "application/zip" }),
+  });
+  if (!response.ok) {
+    throw new Error(`import Elysium project failed: ${response.status}`);
+  }
+  return response.json() as Promise<StoryProject>;
+}
+
+export type CreateContentInput = {
+  kind: ContentKind;
+  title: string;
+  bodyMarkdown: string;
+  metadataJson: string;
+  sortOrder: number;
+  reason: string;
+};
+
+export async function createContent(
+  projectId: string,
+  input: CreateContentInput,
+  signal?: AbortSignal,
+): Promise<ContentItem> {
+  const response = await authFetch(`/api/projects/${encodeURIComponent(projectId)}/content`, {
+    method: "POST",
+    body: JSON.stringify(input),
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(`create content failed: ${response.status}`);
+  }
+  return response.json() as Promise<ContentItem>;
+}
+
 export async function listContent(projectId: string, kind: ContentKind, signal?: AbortSignal): Promise<ContentItem[]> {
   const params = new URLSearchParams({ kind });
   const response = await authFetch(`/api/projects/${encodeURIComponent(projectId)}/content?${params}`, { signal });
