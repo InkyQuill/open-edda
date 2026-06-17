@@ -223,26 +223,32 @@ export function WorkspacePage() {
 
   function handleCreateContent(kind: ContentKind): void {
     if (!projectId || contentCreating || contentLoading) return;
-    const nextNumber = contentItems.filter((item) => item.kind === kind).length + 1;
     const abortController = new AbortController();
     const routeIdentity = routeIdentityRef.current;
     createAbortControllerRef.current = abortController;
     setContentCreating(true);
     setContentCreateError(null);
 
-    void createContent(projectId, {
-      kind,
-      title: `${contentKindLabel(kind)} ${nextNumber}`,
-      bodyMarkdown: defaultBodyForKind(kind),
-      metadataJson: "{}",
-      sortOrder: contentItems.length + 1,
-      reason: "created from workspace",
-    }, abortController.signal)
+    void (async () => {
+      const targetItems = contentKind === kind
+        ? contentItems
+        : await listContent(projectId, kind, abortController.signal);
+      const nextNumber = targetItems.length + 1;
+
+      return createContent(projectId, {
+        kind,
+        title: `${contentKindLabel(kind)} ${nextNumber}`,
+        bodyMarkdown: defaultBodyForKind(kind),
+        metadataJson: "{}",
+        sortOrder: nextNumber,
+        reason: "created from workspace",
+      }, abortController.signal);
+    })()
       .then((item) => {
         if (!isCurrentCreateContext(abortController, routeIdentity)) return;
         createAbortControllerRef.current = null;
         setContentCreating(false);
-        setContentItems((items) => [...items, item]);
+        setContentItems((items) => (item.kind === contentKind ? [...items, item] : items));
         dispatch(workspaceActions.setLastContentKind(item.kind));
         dispatch(workspaceActions.setFallbackContentId(item.id));
         navigate(

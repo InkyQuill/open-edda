@@ -154,7 +154,7 @@ export function WorkspaceShell({
         </div>
         <div className="hidden items-center gap-2 md:flex">
           <Button asChild type="button" variant="outline">
-            <Link to="/settings">
+            <Link to={`/settings?projectId=${encodeURIComponent(projectId)}`}>
               <Settings2 data-icon="inline-start" aria-hidden="true" />
               Settings
             </Link>

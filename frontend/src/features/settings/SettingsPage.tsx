@@ -1,7 +1,7 @@
 import { AlertCircle, Boxes, ChevronLeft, Loader2, RefreshCw, ServerCog } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import { listProjects } from "../../api";
 import type { AppDispatch, RootState } from "../../app/store/store";
@@ -15,6 +15,7 @@ import { settingsActions } from "./settingsSlice";
 
 export function SettingsPage() {
   const dispatch = useDispatch<AppDispatch>();
+  const location = useLocation();
   const selectedProjectId = useSelector((state: RootState) => state.settings.selectedProjectId);
   const providersStatus = useSelector((state: RootState) => state.modelSettings.providersStatus);
   const providerCount = useSelector((state: RootState) => state.modelSettings.providers.length);
@@ -24,6 +25,8 @@ export function SettingsPage() {
   const [projectsStatus, setProjectsStatus] = useState<"idle" | "pending" | "succeeded" | "failed">("idle");
   const [projectsError, setProjectsError] = useState<string | null>(null);
   const [projectsReloadKey, setProjectsReloadKey] = useState(0);
+  const [requestedProjectId] = useState(() => new URLSearchParams(location.search).get("projectId"));
+  const [requestedProjectApplied, setRequestedProjectApplied] = useState(false);
 
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
@@ -63,10 +66,20 @@ export function SettingsPage() {
       return;
     }
 
+    if (!requestedProjectApplied) {
+      setRequestedProjectApplied(true);
+      if (requestedProjectId && projects.some((project) => project.id === requestedProjectId)) {
+        if (selectedProjectId !== requestedProjectId) {
+          dispatch(settingsActions.setSelectedProjectId(requestedProjectId));
+        }
+        return;
+      }
+    }
+
     if (!selectedProjectId || !projects.some((project) => project.id === selectedProjectId)) {
       dispatch(settingsActions.setSelectedProjectId(projects[0].id));
     }
-  }, [dispatch, projects, projectsStatus, selectedProjectId]);
+  }, [dispatch, projects, projectsStatus, requestedProjectApplied, requestedProjectId, selectedProjectId]);
 
   function handleRefreshProjects(): void {
     setProjectsReloadKey((current) => current + 1);
