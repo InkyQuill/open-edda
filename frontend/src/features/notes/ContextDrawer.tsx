@@ -1,4 +1,4 @@
-import { BookOpen, FileText, StickyNote } from "lucide-react";
+import { BookOpen, FileText, Plus, StickyNote } from "lucide-react";
 
 import { Button } from "../../shared/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../shared/ui/tabs";
@@ -9,8 +9,10 @@ type ContextDrawerProps = {
   contentItems: ContentItem[];
   contentLoading: boolean;
   contentError: string | null;
+  contentCreating: boolean;
   activeContentKind: ContentKind;
   selectedContentId: string | null;
+  onCreateContent: (kind: ContentKind) => void;
   onSelectContent: (item: ContentItem) => void;
   onContentKindChange: (kind: ContentKind) => void;
   onTabChange: (tab: "contents" | "world" | "notes") => void;
@@ -32,8 +34,10 @@ export function ContextDrawer({
   contentItems,
   contentLoading,
   contentError,
+  contentCreating,
   activeContentKind,
   selectedContentId,
+  onCreateContent,
   onSelectContent,
   onContentKindChange,
   onTabChange,
@@ -58,18 +62,30 @@ export function ContextDrawer({
             <FileText className="size-4" aria-hidden="true" />
             Content
           </header>
-          <div className="grid grid-cols-2 gap-2" aria-label="Content kind">
-            {contentKindOptions.map(({ kind, label }) => (
-              <Button
-                key={kind}
-                type="button"
-                variant={activeContentKind === kind ? "secondary" : "outline"}
-                size="xs"
-                onClick={() => onContentKindChange(kind)}
-              >
-                {label}
-              </Button>
-            ))}
+          <div className="flex items-start gap-2">
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2" aria-label="Content kind">
+              {contentKindOptions.map(({ kind, label }) => (
+                <Button
+                  key={kind}
+                  type="button"
+                  variant={activeContentKind === kind ? "secondary" : "outline"}
+                  size="xs"
+                  onClick={() => onContentKindChange(kind)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              disabled={contentCreating}
+              onClick={() => onCreateContent(activeContentKind)}
+            >
+              <Plus data-icon="inline-start" aria-hidden="true" />
+              New
+            </Button>
           </div>
           {contentLoading ? (
             <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">

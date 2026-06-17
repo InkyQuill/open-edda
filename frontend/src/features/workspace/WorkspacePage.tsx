@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { shallowEqual, useDispatch, useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { listContent, listProjects } from "../../api";
+import { createContent, listContent, listProjects } from "../../api";
 import { Button } from "../../shared/ui/button";
 import type { ContentItem, ContentKind, StoryProject } from "../../types";
 import { assistantActions } from "../assistant/assistantSlice";
@@ -52,6 +52,7 @@ export function WorkspacePage() {
   const [contentError, setContentError] = useState<string | null>(null);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(false);
+  const [contentCreating, setContentCreating] = useState(false);
   const contentKind = routeContentKind
     ? toContentKind(routeContentKind)
     : toContentKind(workspace.lastContentKind);
@@ -147,6 +148,60 @@ export function WorkspacePage() {
     return contentItems[0] ?? null;
   }, [contentId, contentItems, workspace.fallbackContentId]);
 
+  function contentKindLabel(kind: ContentKind): string {
+    switch (kind) {
+      case "chapter":
+        return "Chapter";
+      case "story_bible_entry":
+        return "Story bible entry";
+      case "writing_brief":
+        return "Writing brief";
+      case "project_note":
+        return "Project note";
+    }
+  }
+
+  function defaultBodyForKind(kind: ContentKind): string {
+    switch (kind) {
+      case "chapter":
+        return "";
+      case "story_bible_entry":
+        return "## Overview\n\n";
+      case "writing_brief":
+        return "## Brief\n\n";
+      case "project_note":
+        return "## Note\n\n";
+    }
+  }
+
+  function handleCreateContent(kind: ContentKind): void {
+    if (!projectId || contentCreating) return;
+    const nextNumber = contentItems.filter((item) => item.kind === kind).length + 1;
+    setContentCreating(true);
+    setContentError(null);
+
+    void createContent(projectId, {
+      kind,
+      title: `${contentKindLabel(kind)} ${nextNumber}`,
+      bodyMarkdown: defaultBodyForKind(kind),
+      metadataJson: "{}",
+      sortOrder: contentItems.length + 1,
+      reason: "created from workspace",
+    })
+      .then((item) => {
+        setContentItems((items) => [...items, item]);
+        dispatch(workspaceActions.setLastContentKind(item.kind));
+        dispatch(workspaceActions.setFallbackContentId(item.id));
+        navigate(
+          `/projects/${encodeURIComponent(projectId)}/content/${encodeURIComponent(item.kind)}/${encodeURIComponent(item.id)}`,
+        );
+      })
+      .catch((cause: unknown) => {
+        setContentError(cause instanceof Error ? cause.message : "Could not create content");
+      })
+      .finally(() => setContentCreating(false));
+  }
+
   function handleSelectContent(item: ContentItem): void {
     if (!projectId) return;
     dispatch(workspaceActions.setFallbackContentId(item.id));
@@ -205,8 +260,10 @@ export function WorkspacePage() {
       contentItems={contentItems}
       contentLoading={contentLoading}
       contentError={contentError}
+      contentCreating={contentCreating}
       activeContentKind={contentKind}
       selectedContent={selectedContent}
+      onCreateContent={handleCreateContent}
       onSelectContent={handleSelectContent}
       onContentKindChange={handleContentKindChange}
       onContentSaved={handleContentSaved}

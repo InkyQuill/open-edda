@@ -32,8 +32,10 @@ type WorkspaceShellProps = {
   contentItems: ContentItem[];
   contentLoading: boolean;
   contentError: string | null;
+  contentCreating: boolean;
   activeContentKind: ContentKind;
   selectedContent: ContentItem | null;
+  onCreateContent: (kind: ContentKind) => void;
   onSelectContent: (item: ContentItem) => void;
   onContentKindChange: (kind: ContentKind) => void;
   onContentSaved: (item: ContentItem) => void;
@@ -83,8 +85,10 @@ export function WorkspaceShell({
   contentItems,
   contentLoading,
   contentError,
+  contentCreating,
   activeContentKind,
   selectedContent,
+  onCreateContent,
   onSelectContent,
   onContentKindChange,
   onContentSaved,
@@ -105,8 +109,10 @@ export function WorkspaceShell({
       contentItems={contentItems}
       contentLoading={contentLoading}
       contentError={contentError}
+      contentCreating={contentCreating}
       activeContentKind={activeContentKind}
       selectedContentId={selectedContent?.id ?? null}
+      onCreateContent={onCreateContent}
       onSelectContent={onSelectContent}
       onContentKindChange={onContentKindChange}
       onTabChange={(tab) => dispatch(workspaceActions.setActiveLeftTab(tab))}
@@ -122,8 +128,10 @@ export function WorkspaceShell({
         contentItems={contentItems}
         contentLoading={contentLoading}
         contentError={contentError}
+        contentCreating={contentCreating}
         activeContentKind={activeContentKind}
         selectedContentId={selectedContent?.id ?? null}
+        onCreateContent={onCreateContent}
         onSelectContent={onSelectContent}
         onContentKindChange={onContentKindChange}
         onTabChange={(tab) => dispatch(workspaceActions.setActiveLeftTab(tab))}
