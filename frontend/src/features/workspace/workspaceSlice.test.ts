@@ -64,6 +64,17 @@ describe("workspaceSlice", () => {
     expect(state.rightDrawerWidth).toBe(520);
   });
 
+  it("opens only authoring mobile sheets", () => {
+    const state = workspaceReducer(initialWorkspaceState, workspaceActions.setMobileSheet("assistant"));
+    expect(state.mobileSheet).toBe("assistant");
+  });
+
+  it("review mode opens the review tools drawer", () => {
+    const state = workspaceReducer(initialWorkspaceState, workspaceActions.setMode("review"));
+    expect(state.rightDrawerOpen).toBe(true);
+    expect(state.activeRightTab).toBe("tools");
+  });
+
   it("hydrates project state from defaults instead of previous project state", () => {
     const projectA = workspaceReducer(
       initialWorkspaceState,

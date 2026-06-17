@@ -1,4 +1,4 @@
-import { BookOpen, FileText, StickyNote } from "lucide-react";
+import { BookOpen, FileText, Plus, StickyNote } from "lucide-react";
 
 import { Button } from "../../shared/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../shared/ui/tabs";
@@ -9,8 +9,12 @@ type ContextDrawerProps = {
   contentItems: ContentItem[];
   contentLoading: boolean;
   contentError: string | null;
+  contentCreateError: string | null;
+  contentCreating: boolean;
+  contentCreationDisabled: boolean;
   activeContentKind: ContentKind;
   selectedContentId: string | null;
+  onCreateContent: (kind: ContentKind) => void;
   onSelectContent: (item: ContentItem) => void;
   onContentKindChange: (kind: ContentKind) => void;
   onTabChange: (tab: "contents" | "world" | "notes") => void;
@@ -32,8 +36,12 @@ export function ContextDrawer({
   contentItems,
   contentLoading,
   contentError,
+  contentCreateError,
+  contentCreating,
+  contentCreationDisabled,
   activeContentKind,
   selectedContentId,
+  onCreateContent,
   onSelectContent,
   onContentKindChange,
   onTabChange,
@@ -58,19 +66,37 @@ export function ContextDrawer({
             <FileText className="size-4" aria-hidden="true" />
             Content
           </header>
-          <div className="grid grid-cols-2 gap-2" aria-label="Content kind">
-            {contentKindOptions.map(({ kind, label }) => (
-              <Button
-                key={kind}
-                type="button"
-                variant={activeContentKind === kind ? "secondary" : "outline"}
-                size="xs"
-                onClick={() => onContentKindChange(kind)}
-              >
-                {label}
-              </Button>
-            ))}
+          <div className="flex items-start gap-2">
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2" aria-label="Content kind">
+              {contentKindOptions.map(({ kind, label }) => (
+                <Button
+                  key={kind}
+                  type="button"
+                  variant={activeContentKind === kind ? "secondary" : "outline"}
+                  size="xs"
+                  onClick={() => onContentKindChange(kind)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              disabled={contentCreationDisabled}
+              aria-busy={contentCreating || undefined}
+              onClick={() => onCreateContent(activeContentKind)}
+            >
+              <Plus data-icon="inline-start" aria-hidden="true" />
+              {contentCreating ? "Creating..." : "New"}
+            </Button>
           </div>
+          {contentCreateError ? (
+            <p className="rounded-md border border-dashed border-border p-3 text-sm text-destructive" role="alert">
+              Could not create content: {contentCreateError}
+            </p>
+          ) : null}
           {contentLoading ? (
             <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
               Loading content...
@@ -104,20 +130,56 @@ export function ContextDrawer({
         </TabsContent>
 
         <TabsContent value="world" className="flex flex-col gap-3">
-          <header className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <BookOpen className="size-4" aria-hidden="true" />
-            Story bible
+          <header className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <BookOpen className="size-4" aria-hidden="true" />
+              Story bible
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              disabled={contentCreationDisabled}
+              aria-busy={contentCreating || undefined}
+              onClick={() => onCreateContent("story_bible_entry")}
+            >
+              <Plus data-icon="inline-start" aria-hidden="true" />
+              {contentCreating ? "Creating..." : "New"}
+            </Button>
           </header>
+          {contentCreateError ? (
+            <p className="rounded-md border border-dashed border-border p-3 text-sm text-destructive" role="alert">
+              Could not create content: {contentCreateError}
+            </p>
+          ) : null}
           <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
             World lookup will show linked story bible entries here.
           </p>
         </TabsContent>
 
         <TabsContent value="notes" className="flex flex-col gap-3">
-          <header className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <StickyNote className="size-4" aria-hidden="true" />
-            Notes
+          <header className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <StickyNote className="size-4" aria-hidden="true" />
+              Notes
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              disabled={contentCreationDisabled}
+              aria-busy={contentCreating || undefined}
+              onClick={() => onCreateContent("project_note")}
+            >
+              <Plus data-icon="inline-start" aria-hidden="true" />
+              {contentCreating ? "Creating..." : "New"}
+            </Button>
           </header>
+          {contentCreateError ? (
+            <p className="rounded-md border border-dashed border-border p-3 text-sm text-destructive" role="alert">
+              Could not create content: {contentCreateError}
+            </p>
+          ) : null}
           <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
             Attached project notes will appear here.
           </p>

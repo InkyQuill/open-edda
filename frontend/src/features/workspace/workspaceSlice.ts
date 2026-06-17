@@ -7,15 +7,13 @@ export type DrawerTab =
   | "notes"
   | "chat"
   | "tools"
-  | "revisions"
-  | "model";
+  | "revisions";
 export type MobileSheet =
   | null
   | "contents"
   | "assistant"
   | "review"
-  | "world-notes"
-  | "model";
+  | "world-notes";
 
 export type WorkspaceProjectState = {
   mode: WorkspaceMode;

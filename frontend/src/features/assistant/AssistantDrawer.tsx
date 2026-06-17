@@ -1,4 +1,4 @@
-import { Plus, Send, WandSparkles } from "lucide-react";
+import { Plus, Send } from "lucide-react";
 import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 
@@ -150,22 +150,7 @@ export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
         </div>
       </section>
 
-      <section className="flex flex-col gap-3" aria-labelledby="quick-actions-title">
-        <div className="flex items-center justify-between gap-3">
-          <h3 id="quick-actions-title" className="text-sm font-medium text-foreground">
-            Quick actions
-          </h3>
-          <Button type="button" variant="outline" size="xs">
-            <WandSparkles />
-            Ready
-          </Button>
-        </div>
-        <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
-          Selection actions will attach to the editor in the next task.
-        </p>
-      </section>
-
-      <ModelStatus />
+      <ModelStatus projectId={projectId} />
     </aside>
   );
 }
