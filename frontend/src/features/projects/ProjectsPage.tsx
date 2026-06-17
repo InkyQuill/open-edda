@@ -181,6 +181,8 @@ export function ProjectsPage() {
                   accept=".zip,application/zip"
                   onChange={handleImportProject}
                   disabled={creating}
+                  tabIndex={-1}
+                  aria-hidden="true"
                 />
               </div>
             </form>
