@@ -18,6 +18,7 @@ export function SettingsPage() {
   const selectedProjectId = useSelector((state: RootState) => state.settings.selectedProjectId);
   const providersStatus = useSelector((state: RootState) => state.modelSettings.providersStatus);
   const providerCount = useSelector((state: RootState) => state.modelSettings.providers.length);
+  const skillsProjectId = useSelector((state: RootState) => state.skills.projectId);
   const skillsStatus = useSelector((state: RootState) => state.skills.skillsStatus);
   const [projects, setProjects] = useState<StoryProject[]>([]);
   const [projectsStatus, setProjectsStatus] = useState<"idle" | "pending" | "succeeded" | "failed">("idle");
@@ -43,7 +44,6 @@ export function SettingsPage() {
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
-        setProjects([]);
         setProjectsStatus("failed");
         setProjectsError(cause instanceof Error ? cause.message : "Could not load projects");
       });
@@ -192,7 +192,22 @@ export function SettingsPage() {
 
               {selectedProject ? (
                 <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-                  <SkillsPanel projectId={selectedProject.id} sessionId={null} />
+                  {skillsProjectId === selectedProject.id ? (
+                    <SkillsPanel projectId={selectedProject.id} sessionId={null} />
+                  ) : (
+                    <section className="flex flex-col gap-3" aria-labelledby="skills-panel-loading-title">
+                      <div>
+                        <h3 id="skills-panel-loading-title" className="text-sm font-medium text-foreground">
+                          Session skills
+                        </h3>
+                        <p className="text-xs text-muted-foreground">Loading project skills...</p>
+                      </div>
+                      <p className="flex items-center gap-2 rounded-md border border-border p-3 text-sm text-muted-foreground">
+                        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                        Loading available skills...
+                      </p>
+                    </section>
+                  )}
                   <ScriptRuntimePanel projectId={selectedProject.id} />
                 </div>
               ) : null}
