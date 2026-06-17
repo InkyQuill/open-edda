@@ -10,6 +10,7 @@ type ContextDrawerProps = {
   contentLoading: boolean;
   contentError: string | null;
   contentCreating: boolean;
+  contentCreationDisabled: boolean;
   activeContentKind: ContentKind;
   selectedContentId: string | null;
   onCreateContent: (kind: ContentKind) => void;
@@ -35,6 +36,7 @@ export function ContextDrawer({
   contentLoading,
   contentError,
   contentCreating,
+  contentCreationDisabled,
   activeContentKind,
   selectedContentId,
   onCreateContent,
@@ -80,11 +82,12 @@ export function ContextDrawer({
               type="button"
               variant="outline"
               size="xs"
-              disabled={contentCreating}
+              disabled={contentCreationDisabled}
+              aria-busy={contentCreating || undefined}
               onClick={() => onCreateContent(activeContentKind)}
             >
               <Plus data-icon="inline-start" aria-hidden="true" />
-              New
+              {contentCreating ? "Creating..." : "New"}
             </Button>
           </div>
           {contentLoading ? (

@@ -175,7 +175,7 @@ export function WorkspacePage() {
   }
 
   function handleCreateContent(kind: ContentKind): void {
-    if (!projectId || contentCreating) return;
+    if (!projectId || contentCreating || contentLoading) return;
     const nextNumber = contentItems.filter((item) => item.kind === kind).length + 1;
     setContentCreating(true);
     setContentError(null);

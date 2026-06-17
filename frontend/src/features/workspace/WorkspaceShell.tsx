@@ -110,6 +110,7 @@ export function WorkspaceShell({
       contentLoading={contentLoading}
       contentError={contentError}
       contentCreating={contentCreating}
+      contentCreationDisabled={contentCreating || contentLoading}
       activeContentKind={activeContentKind}
       selectedContentId={selectedContent?.id ?? null}
       onCreateContent={onCreateContent}
@@ -129,6 +130,7 @@ export function WorkspaceShell({
         contentLoading={contentLoading}
         contentError={contentError}
         contentCreating={contentCreating}
+        contentCreationDisabled={contentCreating || contentLoading}
         activeContentKind={activeContentKind}
         selectedContentId={selectedContent?.id ?? null}
         onCreateContent={onCreateContent}
