@@ -123,9 +123,22 @@ export function ContextDrawer({
         </TabsContent>
 
         <TabsContent value="world" className="flex flex-col gap-3">
-          <header className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <BookOpen className="size-4" aria-hidden="true" />
-            Story bible
+          <header className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <BookOpen className="size-4" aria-hidden="true" />
+              Story bible
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              disabled={contentCreationDisabled}
+              aria-busy={contentCreating || undefined}
+              onClick={() => onCreateContent("story_bible_entry")}
+            >
+              <Plus data-icon="inline-start" aria-hidden="true" />
+              {contentCreating ? "Creating..." : "New"}
+            </Button>
           </header>
           <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
             World lookup will show linked story bible entries here.
@@ -133,9 +146,22 @@ export function ContextDrawer({
         </TabsContent>
 
         <TabsContent value="notes" className="flex flex-col gap-3">
-          <header className="flex items-center gap-2 text-sm font-medium text-foreground">
-            <StickyNote className="size-4" aria-hidden="true" />
-            Notes
+          <header className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <StickyNote className="size-4" aria-hidden="true" />
+              Notes
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              disabled={contentCreationDisabled}
+              aria-busy={contentCreating || undefined}
+              onClick={() => onCreateContent("project_note")}
+            >
+              <Plus data-icon="inline-start" aria-hidden="true" />
+              {contentCreating ? "Creating..." : "New"}
+            </Button>
           </header>
           <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
             Attached project notes will appear here.
