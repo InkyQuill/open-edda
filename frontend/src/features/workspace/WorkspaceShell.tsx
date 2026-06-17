@@ -8,13 +8,12 @@ import {
   Settings2,
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
+import { Link } from "react-router-dom";
 
 import { AssistantDrawer } from "../assistant/AssistantDrawer";
 import { EditorFrame } from "../editor/EditorFrame";
-import { ModelSettingsPanel } from "../model-settings/ModelSettingsPanel";
 import { ContextDrawer } from "../notes/ContextDrawer";
 import { ReviewDrawer } from "../review/ReviewDrawer";
-import { ScriptRuntimePanel } from "../script-runtime/ScriptRuntimePanel";
 import { Button } from "../../shared/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../../shared/ui/sheet";
 import type { ContentItem, ContentKind } from "../../types";
@@ -59,7 +58,6 @@ const mobileButtons: Array<{
   { sheet: "assistant", label: "Assistant", icon: MessageSquare },
   { sheet: "review", label: "Review", icon: ClipboardCheck },
   { sheet: "world-notes", label: "World/Notes", icon: Library },
-  { sheet: "model", label: "Model", icon: Settings2 },
 ];
 
 function toContextTab(tab: DrawerTab): ContextTab {
@@ -76,20 +74,7 @@ function mobileSheetTitle(sheet: NonNullable<MobileSheet>): string {
       return "Review";
     case "world-notes":
       return "World and notes";
-    case "model":
-      return "Model";
   }
-}
-
-function ModelToolsPanel({ projectId }: { projectId: string }) {
-  return (
-    <div className="flex h-full min-h-0 flex-col gap-6 overflow-auto pr-1">
-      <div className="shrink-0">
-        <ModelSettingsPanel />
-      </div>
-      <ScriptRuntimePanel projectId={projectId} />
-    </div>
-  );
 }
 
 export function WorkspaceShell({
@@ -108,9 +93,7 @@ export function WorkspaceShell({
   const workspace = useSelector((state: WorkspaceRootState) => state.workspace);
   const activeLeftTab = toContextTab(workspace.activeLeftTab);
   const rightDrawer =
-    workspace.activeRightTab === "model" ? (
-      <ModelToolsPanel projectId={projectId} />
-    ) : workspace.mode === "review" || workspace.activeRightTab === "tools" || workspace.activeRightTab === "revisions" ? (
+    workspace.mode === "review" || workspace.activeRightTab === "tools" || workspace.activeRightTab === "revisions" ? (
       <ReviewDrawer projectId={projectId} />
     ) : (
       <AssistantDrawer projectId={projectId} />
@@ -133,7 +116,6 @@ export function WorkspaceShell({
   function renderMobileSheet(sheet: NonNullable<MobileSheet>) {
     if (sheet === "assistant") return <AssistantDrawer projectId={projectId} />;
     if (sheet === "review") return <ReviewDrawer projectId={projectId} />;
-    if (sheet === "model") return <ModelToolsPanel projectId={projectId} />;
     return (
       <ContextDrawer
         activeTab={sheet === "world-notes" ? "world" : "contents"}
@@ -157,6 +139,12 @@ export function WorkspaceShell({
           <h1 className="truncate text-base font-semibold">{projectTitle}</h1>
         </div>
         <div className="hidden items-center gap-2 md:flex">
+          <Button asChild type="button" variant="outline">
+            <Link to="/settings">
+              <Settings2 data-icon="inline-start" aria-hidden="true" />
+              Settings
+            </Link>
+          </Button>
           {modeButtons.map(({ mode, label, icon: Icon }) => (
             <Button
               key={mode}
@@ -211,7 +199,7 @@ export function WorkspaceShell({
         ) : null}
       </div>
 
-      <nav className="grid grid-cols-5 border-t border-border bg-background p-2 md:hidden" aria-label="Workspace panels">
+      <nav className="grid grid-cols-4 border-t border-border bg-background p-2 md:hidden" aria-label="Workspace panels">
         {mobileButtons.map(({ sheet, label, icon: Icon }) => (
           <Button
             key={sheet}
