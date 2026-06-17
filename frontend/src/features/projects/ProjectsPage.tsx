@@ -1,5 +1,9 @@
+import type React from "react";
+import { useState } from "react";
+import { ArrowUpRight, LogOut, Plus, Settings2, Upload } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
+import { createProject, importElysiumProject } from "../../api";
 import { clearToken } from "../../authApi";
 import { Button } from "../../shared/ui/button";
 import { useProjects } from "./projectHooks";
@@ -7,6 +11,42 @@ import { useProjects } from "./projectHooks";
 export function ProjectsPage() {
   const navigate = useNavigate();
   const { projects, loading, error, reload } = useProjects();
+  const [title, setTitle] = useState("");
+  const [language, setLanguage] = useState("en");
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  function handleCreateProject(event: React.FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle || creating) return;
+
+    setCreating(true);
+    setCreateError(null);
+    void createProject({ title: trimmedTitle, language: language.trim() || "en" })
+      .then((project) => navigate(`/projects/${encodeURIComponent(project.id)}`))
+      .catch((cause: unknown) => {
+        setCreateError(cause instanceof Error ? cause.message : "Could not create project");
+      })
+      .finally(() => setCreating(false));
+  }
+
+  function handleImportProject(event: React.ChangeEvent<HTMLInputElement>): void {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setCreating(true);
+    setCreateError(null);
+    void importElysiumProject(file)
+      .then((project) => navigate(`/projects/${encodeURIComponent(project.id)}`))
+      .catch((cause: unknown) => {
+        setCreateError(cause instanceof Error ? cause.message : "Could not import project");
+      })
+      .finally(() => {
+        setCreating(false);
+        event.target.value = "";
+      });
+  }
 
   function handleLogout(): void {
     clearToken();
@@ -15,47 +55,151 @@ export function ProjectsPage() {
 
   return (
     <main className="app-shell">
-      <section className="project-dashboard" aria-labelledby="projects-page-title">
-        <header>
-          <div>
-            <h1 id="projects-page-title">Projects</h1>
-            <p>Choose a writing workspace.</p>
+      <section className="mx-auto flex w-full max-w-6xl flex-col gap-8" aria-labelledby="projects-page-title">
+        <header className="flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="mb-1 text-sm font-medium text-muted-foreground">Open Edda</p>
+            <h1 id="projects-page-title" className="text-3xl font-semibold tracking-normal text-foreground">
+              Projects
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+              Create a new writing workspace or open an existing story project.
+            </p>
           </div>
-          <Button type="button" variant="outline" onClick={handleLogout}>
-            Logout
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild type="button" variant="outline">
+              <Link to="/settings">
+                <Settings2 data-icon="inline-start" aria-hidden="true" />
+                Settings
+              </Link>
+            </Button>
+            <Button type="button" variant="outline" onClick={handleLogout}>
+              <LogOut data-icon="inline-start" aria-hidden="true" />
+              Logout
+            </Button>
+          </div>
         </header>
 
-        {loading ? (
-          <div className="project-list" aria-live="polite">
-            <p>Loading story projects...</p>
-          </div>
-        ) : error ? (
-          <div className="project-list">
-            <p role="alert">Could not load story projects: {error}</p>
-            <Button type="button" variant="outline" onClick={reload}>
-              Try again
-            </Button>
-          </div>
-        ) : projects.length === 0 ? (
-          <div className="project-list">
-            <p>No story projects yet.</p>
-            <Button type="button" variant="outline" onClick={reload}>
-              Refresh
-            </Button>
-          </div>
-        ) : (
-          <nav className="project-list" aria-label="Story projects">
-            {projects.map((project) => (
-              <Button key={project.id} asChild variant="outline" className="project-row">
-                <Link to={`/projects/${encodeURIComponent(project.id)}`}>
-                  <span className="project-row-title">{project.title}</span>
-                  <span className="project-row-meta">{project.language || "Language not set"}</span>
-                </Link>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
+          <section className="rounded-lg border border-border bg-background p-5 shadow-sm" aria-labelledby="create-project-title">
+            <div className="mb-5">
+              <h2 id="create-project-title" className="text-lg font-semibold text-foreground">
+                Start a project
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">Name the workspace and set its default language.</p>
+            </div>
+
+            <form className="grid gap-4" onSubmit={handleCreateProject}>
+              <label className="grid gap-1.5 text-sm font-medium text-foreground">
+                Title
+                <input
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/30"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="The Glass Archive"
+                  disabled={creating}
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm font-medium text-foreground">
+                Language
+                <input
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/30"
+                  value={language}
+                  onChange={(event) => setLanguage(event.target.value)}
+                  placeholder="en"
+                  disabled={creating}
+                />
+              </label>
+              {createError ? (
+                <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+                  {createError}
+                </p>
+              ) : null}
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button type="submit" className="w-full sm:w-auto" disabled={!title.trim() || creating}>
+                  <Plus data-icon="inline-start" aria-hidden="true" />
+                  {creating ? "Working..." : "Create project"}
+                </Button>
+                <Button asChild variant="outline" className="w-full sm:w-auto">
+                  <label htmlFor="project-import-input" className={creating ? "pointer-events-none opacity-60" : undefined}>
+                    <Upload data-icon="inline-start" aria-hidden="true" />
+                    Import Elysium
+                  </label>
+                </Button>
+                <input
+                  id="project-import-input"
+                  className="sr-only"
+                  type="file"
+                  accept=".zip,application/zip"
+                  onChange={handleImportProject}
+                  disabled={creating}
+                />
+              </div>
+            </form>
+          </section>
+
+          <section className="min-w-0" aria-labelledby="story-workspaces-title">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 id="story-workspaces-title" className="text-lg font-semibold text-foreground">
+                  Story workspaces
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {projects.length === 1 ? "1 project available" : `${projects.length} projects available`}
+                </p>
+              </div>
+              <Button type="button" variant="outline" onClick={reload} disabled={loading}>
+                {loading ? "Loading..." : "Refresh"}
               </Button>
-            ))}
-          </nav>
-        )}
+            </div>
+
+            {loading ? (
+              <div className="rounded-lg border border-dashed border-border bg-background p-6 text-sm text-muted-foreground" aria-live="polite">
+                Loading story projects...
+              </div>
+            ) : error ? (
+              <div className="grid gap-3 rounded-lg border border-destructive/30 bg-background p-6">
+                <p className="text-sm text-destructive" role="alert">
+                  Could not load story projects: {error}
+                </p>
+                <Button type="button" variant="outline" onClick={reload} className="w-fit">
+                  Try again
+                </Button>
+              </div>
+            ) : projects.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border bg-background p-6">
+                <h3 className="text-base font-semibold text-foreground">No story projects yet</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Create a project with the form or import an Elysium archive to begin.
+                </p>
+              </div>
+            ) : (
+              <nav className="grid gap-3 sm:grid-cols-2" aria-label="Story projects">
+                {projects.map((project) => (
+                  <Link
+                    key={project.id}
+                    to={`/projects/${encodeURIComponent(project.id)}`}
+                    className="group grid min-h-36 gap-4 rounded-lg border border-border bg-background p-4 text-left shadow-sm transition hover:border-ring hover:bg-muted/40 focus:outline-none focus:ring-3 focus:ring-ring/30"
+                  >
+                    <span className="flex min-w-0 items-start justify-between gap-3">
+                      <span className="min-w-0">
+                        <span className="block truncate text-base font-semibold text-foreground">{project.title}</span>
+                        <span className="mt-1 block truncate text-sm text-muted-foreground">{project.slug}</span>
+                      </span>
+                      <ArrowUpRight className="mt-0.5 size-4 shrink-0 text-muted-foreground transition group-hover:text-foreground" aria-hidden="true" />
+                    </span>
+                    <span className="flex flex-wrap items-end justify-between gap-3 text-sm">
+                      <span className="rounded-md border border-border bg-muted px-2 py-1 font-medium text-foreground">
+                        {project.language || "Language not set"}
+                      </span>
+                      <span className="text-muted-foreground">Open workspace</span>
+                    </span>
+                  </Link>
+                ))}
+              </nav>
+            )}
+          </section>
+        </div>
       </section>
     </main>
   );
