@@ -30,6 +30,7 @@ func TestContextToolDefinitionsExposeExplicitSchemas(t *testing.T) {
 		"read_entry_section",
 		"list_revisions",
 		"skill",
+		"read_skill_file",
 		"skill_script",
 		"append_to_chapter",
 		"insert_into_chapter",
@@ -70,6 +71,14 @@ func TestContextToolDefinitionsExposeExplicitSchemas(t *testing.T) {
 	skillProps := skillSchema["properties"].(map[string]any)
 	if _, ok := skillProps["skillId"]; !ok {
 		t.Fatal("skill schema missing skillId property")
+	}
+	readSkillFileSchema := names["read_skill_file"].Function.Parameters
+	readSkillFileRequired, ok := readSkillFileSchema["required"].([]string)
+	if !ok {
+		t.Fatalf("read_skill_file schema required = %#v, want []string", readSkillFileSchema["required"])
+	}
+	if strings.Join(readSkillFileRequired, ",") != "skillId,path" {
+		t.Fatalf("read_skill_file schema required = %#v, want [skillId path]", readSkillFileRequired)
 	}
 
 	sectionSchema := names["update_entry_section"].Function.Parameters
@@ -521,15 +530,73 @@ func TestExecuteSkillToolReturnsRenderedSkillAndRecordsActivityAndArtifact(t *te
 	assertMarkdownContains(t, result.ModelVisibleMarkdown,
 		`<skill_content name="style-pass">`,
 		`Always tighten prose.`,
-		`<file path="templates/rewrite.md" purpose="template">Rewrite template</file>`,
+		`<file path="templates/rewrite.md" purpose="template" bytes="16" readable="true">Use read_skill_file with this path to load the file only if needed.</file>`,
 	)
 	assertFullJSONContains(t, result.FullResultJSON,
 		`"modelVisibleMarkdown"`,
 		`"skill"`,
 		`"instructionsMarkdown": "Always tighten prose."`,
+	)
+	if strings.Contains(result.FullResultJSON, `"bodyText": "Rewrite template"`) {
+		t.Fatalf("skill tool full JSON included supporting file body:\n%s", result.FullResultJSON)
+	}
+	assertSkillToolActivityAndArtifact(t, ctx, db, storyProject.ID, session.ID, result, installed.ID)
+}
+
+func TestExecuteReadSkillFileToolLoadsOneSupportingFile(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	skillService := skill.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Skill File Tool Project")
+	service := NewService(db, projectService, nil)
+	service.SetSkillService(skillService)
+	session := createTestSession(t, ctx, service, storyProject.ID)
+
+	installed := installToolSkill(t, ctx, skillService, storyProject.ID)
+	result, err := service.ExecuteTool(ctx, ToolCallInput{
+		ProjectID:     storyProject.ID,
+		SessionID:     session.ID,
+		ToolCallID:    "call-skill-file",
+		ToolName:      "read_skill_file",
+		ArgumentsJSON: `{"skillId":"` + installed.ID + `","path":"templates/rewrite.md"}`,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool(read_skill_file) error = %v", err)
+	}
+
+	assertMarkdownContains(t, result.ModelVisibleMarkdown,
+		`<skill_file skill="style-pass" path="templates/rewrite.md" purpose="template">`,
+		`Rewrite template`,
+		`</skill_file>`,
+	)
+	assertFullJSONContains(t, result.FullResultJSON,
+		`"relativePath": "templates/rewrite.md"`,
 		`"bodyText": "Rewrite template"`,
 	)
-	assertSkillToolActivityAndArtifact(t, ctx, db, storyProject.ID, session.ID, result, installed.ID)
+}
+
+func TestExecuteReadSkillFileToolRejectsScripts(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	skillService := skill.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Skill Script File Rejection Project")
+	service := NewService(db, projectService, nil)
+	service.SetSkillService(skillService)
+	session := createTestSession(t, ctx, service, storyProject.ID)
+
+	installed := installToolSkill(t, ctx, skillService, storyProject.ID)
+	_, err := service.ExecuteTool(ctx, ToolCallInput{
+		ProjectID:     storyProject.ID,
+		SessionID:     session.ID,
+		ToolCallID:    "call-script-file",
+		ToolName:      "read_skill_file",
+		ArgumentsJSON: `{"skillId":"` + installed.ID + `","path":"scripts/analyze.sh"}`,
+	})
+	if err == nil {
+		t.Fatal("ExecuteTool(read_skill_file script) error = nil, want error")
+	}
 }
 
 func TestExecuteSkillToolReturnsErrorForMissingSkill(t *testing.T) {

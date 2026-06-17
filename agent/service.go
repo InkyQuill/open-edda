@@ -34,6 +34,7 @@ type SkillProvider interface {
 	ListSessionSkills(ctx context.Context, projectID, sessionID string) ([]skill.Skill, error)
 	SelectSessionSkills(ctx context.Context, input skill.SelectSessionSkillsInput) ([]skill.Skill, error)
 	RenderForModel(ctx context.Context, input skill.RenderSkillInput) (string, skill.Skill, error)
+	RenderFileForModel(ctx context.Context, input skill.RenderSkillFileInput) (string, skill.SkillFile, skill.Skill, error)
 	ListScriptAudits(ctx context.Context, projectID, skillID string) ([]skill.ScriptAudit, error)
 	RunScript(ctx context.Context, input skill.RunScriptInput) (skill.ScriptRun, error)
 }
@@ -1181,10 +1182,11 @@ func (s *Service) runQuickActionCompletion(ctx context.Context, input quickActio
 			{Role: MessageRoleSystem, Content: bundle.DeveloperMessage},
 			{Role: MessageRoleUser, Content: bundle.UserMessage},
 		},
+		Tools:           bundle.Tools,
 		Temperature:     &modelVariant.Temperature,
 		MaxOutputTokens: modelVariant.MaxOutputTokens,
 	}
-	response, err := provider.Complete(ctx, request)
+	response, err := s.completeQuickActionWithTools(ctx, provider, request, input.ProjectID, session.ID)
 	if err != nil {
 		return "", Session{}, fmt.Errorf("complete quick action: %w", err)
 	}
@@ -1193,6 +1195,64 @@ func (s *Service) runQuickActionCompletion(ctx context.Context, input quickActio
 		return "", Session{}, fmt.Errorf("provider did not return generated markdown")
 	}
 	return generated, session, nil
+}
+
+func (s *Service) completeQuickActionWithTools(ctx context.Context, provider Provider, request CompletionRequest, projectID, sessionID string) (CompletionResponse, error) {
+	messages := append([]CompletionMessage(nil), request.Messages...)
+	tools := request.Tools
+	for round := 0; round <= maxToolRounds; round++ {
+		request.Messages = messages
+		request.Tools = tools
+		response, err := provider.Complete(ctx, request)
+		if err != nil {
+			return CompletionResponse{}, err
+		}
+		if len(response.Message.ToolCalls) == 0 {
+			return response, nil
+		}
+		if round == maxToolRounds {
+			return CompletionResponse{}, fmt.Errorf("tool call rounds exceeded %d", maxToolRounds)
+		}
+		messages = append(messages, response.Message)
+		for _, toolCall := range response.Message.ToolCalls {
+			if isWriteTool(toolCall.Function.Name) {
+				return CompletionResponse{}, fmt.Errorf("tool %q is not available during quick-action generation", toolCall.Function.Name)
+			}
+			toolResult, err := s.ExecuteTool(ctx, ToolCallInput{
+				ProjectID:     projectID,
+				SessionID:     sessionID,
+				ToolCallID:    toolCall.ID,
+				ToolName:      toolCall.Function.Name,
+				ArgumentsJSON: toolCall.Function.Arguments,
+			})
+			if err != nil {
+				return CompletionResponse{}, err
+			}
+			toolMetadata, err := marshalJSON(map[string]any{
+				"toolCallId": toolResult.ToolCallID,
+				"toolName":   toolResult.ToolName,
+				"truncated":  toolResult.Truncated,
+			})
+			if err != nil {
+				return CompletionResponse{}, err
+			}
+			if _, err := s.AppendMessage(ctx, AppendMessageInput{
+				ProjectID:    projectID,
+				SessionID:    sessionID,
+				Role:         MessageRoleTool,
+				BodyMarkdown: toolResult.ModelVisibleMarkdown,
+				MetadataJSON: toolMetadata,
+			}); err != nil {
+				return CompletionResponse{}, err
+			}
+			messages = append(messages, CompletionMessage{
+				Role:       MessageRoleTool,
+				Content:    toolResult.ModelVisibleMarkdown,
+				ToolCallID: toolResult.ToolCallID,
+			})
+		}
+	}
+	return CompletionResponse{}, fmt.Errorf("tool call rounds exceeded %d", maxToolRounds)
 }
 
 func (s *Service) completionProvider(providerConfig store.ProviderConfig, model ModelVariant) Provider {

@@ -1,9 +1,9 @@
 {
   "_meta": {
-    "description": "Hispanic/Latino given names for character naming in a combined-gender pool. Gender-specific variants also exist in the built-in dataset.",
+    "description": "Hispanic/Latino given names (combined male and female) for character naming. Use hispanic-given-male.json or hispanic-given-female.json for gender-specific names.",
     "maturity": "production",
     "count": 100,
-    "source": "Compiled from the built-in Hispanic gender-specific given-name pools",
+    "source": "Combined selection from hispanic-given-male.json and hispanic-given-female.json",
     "dimensions": {
       "gender": "Mixed - both traditionally male and female names",
       "era": "Mix of traditional, religious, and contemporary"

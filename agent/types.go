@@ -57,11 +57,13 @@ type CreateSessionInput struct {
 }
 
 type SkillSummary struct {
-	ID              string `json:"id"`
-	Name            string `json:"name"`
-	Description     string `json:"description"`
-	ScriptCount     int64  `json:"scriptCount"`
-	ScriptsDisabled bool   `json:"scriptsDisabled"`
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	Description     string   `json:"description"`
+	UseCases        []string `json:"useCases,omitempty"`
+	DoNotUse        []string `json:"doNotUse,omitempty"`
+	ScriptCount     int64    `json:"scriptCount"`
+	ScriptsDisabled bool     `json:"scriptsDisabled"`
 }
 
 type AppendMessageInput struct {

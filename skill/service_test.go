@@ -150,15 +150,40 @@ func TestServiceInstallsListsGetsReimportsAndRendersSkill(t *testing.T) {
 		`<instructions>`,
 		`Always tighten prose.`,
 		`<script_status disabled="true" count="1">Script files are imported for reference only. Writer does not execute bundled skill scripts in v1.</script_status>`,
-		`<file path="templates/rewrite.md" purpose="template">Rewrite template</file>`,
-		`<file path="scripts/analyze.sh" purpose="script" disabled="true">Script file is disabled and not executable.</file>`,
+		`<file path="templates/rewrite.md" purpose="template" bytes="16" readable="true">Use read_skill_file with this path to load the file only if needed.</file>`,
+		`<file path="scripts/analyze.sh" purpose="script" bytes="23" disabled="true" readable="false">Script file is disabled and not readable through skill file loading.</file>`,
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("RenderForModel() missing %q in:\n%s", want, rendered)
 		}
 	}
+	if strings.Contains(rendered, "Rewrite template") {
+		t.Fatalf("RenderForModel() included supporting file body:\n%s", rendered)
+	}
 	if strings.Contains(rendered, "echo should-not-execute") {
 		t.Fatalf("RenderForModel() included executable script body:\n%s", rendered)
+	}
+
+	renderedFile, fileForModel, skillForFile, err := service.RenderFileForModel(ctx, RenderSkillFileInput{
+		ProjectID: "project-1",
+		SkillID:   renderedSkill.ID,
+		Path:      "templates/rewrite.md",
+	})
+	if err != nil {
+		t.Fatalf("RenderFileForModel() error = %v", err)
+	}
+	if skillForFile.ID != renderedSkill.ID || fileForModel.RelativePath != "templates/rewrite.md" {
+		t.Fatalf("RenderFileForModel() skill/file = %q/%q", skillForFile.ID, fileForModel.RelativePath)
+	}
+	if !strings.Contains(renderedFile, "Rewrite template") {
+		t.Fatalf("RenderFileForModel() missing file body:\n%s", renderedFile)
+	}
+	if _, _, _, err := service.RenderFileForModel(ctx, RenderSkillFileInput{
+		ProjectID: "project-1",
+		SkillID:   renderedSkill.ID,
+		Path:      "scripts/analyze.sh",
+	}); err == nil {
+		t.Fatal("RenderFileForModel(script) error = nil, want error")
 	}
 }
 

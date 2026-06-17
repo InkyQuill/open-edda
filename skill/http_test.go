@@ -367,6 +367,28 @@ func TestImportBuiltinDefaultSkillParsesFrontmatter(t *testing.T) {
 	}
 }
 
+func TestImportBuiltinSkillWriterParsesSelectionMetadata(t *testing.T) {
+	db := openMigratedTestDB(t)
+	handler := newTestSkillHTTP(NewService(db))
+
+	archive := zipDirFromBuiltin(t, "default", "skill-writer")
+	skill := postZip[Skill](t, handler, "/api/projects/project-1/skills/import", archive, http.StatusCreated)
+
+	var metadata struct {
+		UseCases []string `json:"useCases"`
+		DoNotUse []string `json:"doNotUse"`
+	}
+	if err := json.Unmarshal([]byte(skill.MetadataJSON), &metadata); err != nil {
+		t.Fatalf("unmarshal metadata: %v", err)
+	}
+	if len(metadata.UseCases) == 0 {
+		t.Fatalf("metadata useCases empty in %s", skill.MetadataJSON)
+	}
+	if len(metadata.DoNotUse) == 0 {
+		t.Fatalf("metadata doNotUse empty in %s", skill.MetadataJSON)
+	}
+}
+
 func TestImportBuiltinOptionalSkillWithScripts(t *testing.T) {
 	db := openMigratedTestDB(t)
 	handler := newTestSkillHTTP(NewService(db))

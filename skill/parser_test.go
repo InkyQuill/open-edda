@@ -3,7 +3,10 @@ package skill
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -21,6 +24,12 @@ route:
   contentKinds: [chapter]
   tags: [style, prose]
   priority: 70
+metadata:
+  useCases:
+    - Rewrite prose when style and rhythm are the main problem.
+    - Check a chapter for sentence-level drag before applying edits.
+  doNotUse:
+    - Do not use for broad plot restructuring.
 ---
 
 # Style Pass
@@ -44,6 +53,19 @@ Prefer concrete verbs and keep the author's POV.
 	if parsed.Description != "Use when rewriting prose for style and rhythm" {
 		t.Fatalf("Description = %q", parsed.Description)
 	}
+	var metadata struct {
+		UseCases []string `json:"useCases"`
+		DoNotUse []string `json:"doNotUse"`
+	}
+	if err := json.Unmarshal([]byte(parsed.MetadataJSON), &metadata); err != nil {
+		t.Fatalf("unmarshal MetadataJSON: %v", err)
+	}
+	if len(metadata.UseCases) != 2 || metadata.UseCases[0] != "Rewrite prose when style and rhythm are the main problem." {
+		t.Fatalf("metadata useCases = %#v", metadata.UseCases)
+	}
+	if len(metadata.DoNotUse) != 1 || metadata.DoNotUse[0] != "Do not use for broad plot restructuring." {
+		t.Fatalf("metadata doNotUse = %#v", metadata.DoNotUse)
+	}
 	if !strings.Contains(parsed.InstructionsMarkdown, "Prefer concrete verbs") {
 		t.Fatalf("InstructionsMarkdown missing body: %q", parsed.InstructionsMarkdown)
 	}
@@ -57,6 +79,56 @@ Prefer concrete verbs and keep the author's POV.
 	assertImportedFile(t, parsed.Files, "templates/rewrite.md", FilePurposeTemplate, false)
 	assertImportedFile(t, parsed.Files, "references/checklist.md", FilePurposeReference, false)
 	assertImportedFile(t, parsed.Files, "scripts/analyze.sh", FilePurposeScript, true)
+}
+
+func TestParseBuiltinSkillDirectories(t *testing.T) {
+	t.Parallel()
+
+	root := filepath.Join("..", "docs", "skills", "builtin")
+	for _, category := range []string{"default", "optional"} {
+		category := category
+		entries, err := os.ReadDir(filepath.Join(root, category))
+		if err != nil {
+			t.Fatalf("read %s builtins: %v", category, err)
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			t.Run(category+"/"+name, func(t *testing.T) {
+				t.Parallel()
+
+				parsed, err := ParseSkillDirectory(filepath.Join(root, category, name))
+				if err != nil {
+					t.Fatalf("ParseSkillDirectory() error = %v", err)
+				}
+				if parsed.Name == "" {
+					t.Fatal("Name is empty")
+				}
+				if parsed.Description == "" {
+					t.Fatal("Description is empty")
+				}
+				if strings.TrimSpace(parsed.InstructionsMarkdown) == "" {
+					t.Fatal("InstructionsMarkdown is empty")
+				}
+				var metadata struct {
+					UseCases []string `json:"useCases"`
+					DoNotUse []string `json:"doNotUse"`
+				}
+				if err := json.Unmarshal([]byte(parsed.MetadataJSON), &metadata); err != nil {
+					t.Fatalf("unmarshal MetadataJSON: %v", err)
+				}
+				if len(metadata.UseCases) == 0 {
+					t.Fatalf("metadata useCases empty in %s", parsed.MetadataJSON)
+				}
+				if len(metadata.DoNotUse) == 0 {
+					t.Fatalf("metadata doNotUse empty in %s", parsed.MetadataJSON)
+				}
+				assertImportedFile(t, parsed.Files, "SKILL.md", FilePurposeInstruction, false)
+			})
+		}
+	}
 }
 
 func TestParseSkillArchiveRejectsUnsafePaths(t *testing.T) {

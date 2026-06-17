@@ -3,7 +3,7 @@
     "description": "Jewish given names (combined male and female) for character naming.",
     "maturity": "production",
     "count": 100,
-    "source": "Compiled from the built-in Jewish gender-specific given-name pools",
+    "source": "Combined selection from jewish-given-male.json and jewish-given-female.json",
     "dimensions": {
       "gender": "Mixed - both traditionally male and female names",
       "tradition": "Hebrew biblical, Yiddish, modern Israeli, anglicized names"

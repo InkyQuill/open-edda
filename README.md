@@ -128,6 +128,7 @@ Open Edda supports:
 - Routed writing workspace with desktop drawers and mobile sheets for editor, assistant, review, skills, model settings, and script runtime surfaces.
 
 See [docs/roadmap.md](docs/roadmap.md) for milestone status and follow-up phases.
+See [docs/agent-tools.md](docs/agent-tools.md) for the current agent tool catalog, invocation flow, prompt guidance, and known tool gaps.
 
 ## Notes
 

@@ -330,42 +330,58 @@ func (s *Service) RenderForModel(ctx context.Context, input RenderSkillInput) (s
 	fmt.Fprintf(&b, `<script_status disabled="%t" count="%d">Script files are imported for reference only. Writer does not execute bundled skill scripts in v1.</script_status>`, skill.ScriptsDisabled, skill.ScriptCount)
 	b.WriteString("\n\n<skill_files>\n")
 
-	remaining := 40 * 1024
-	truncated := false
 	for _, file := range skill.Files {
 		b.WriteString(`<file path="`)
 		b.WriteString(escape(file.RelativePath))
 		b.WriteString(`" purpose="`)
 		b.WriteString(escape(string(file.Purpose)))
 		b.WriteString(`"`)
+		fmt.Fprintf(&b, ` bytes="%d"`, file.Bytes)
 		if file.ScriptDisabled {
 			b.WriteString(` disabled="true"`)
 		}
-		b.WriteString(">")
-
 		if file.ScriptDisabled || file.Purpose == FilePurposeScript {
-			b.WriteString("Script file is disabled and not executable.")
-		} else if remaining > 0 {
-			body := file.BodyText
-			if len(body) > remaining {
-				body = body[:remaining]
-				truncated = true
-			}
-			remaining -= len(body)
-			b.WriteString(escape(body))
+			b.WriteString(` readable="false">Script file is disabled and not readable through skill file loading.`)
 		} else {
-			truncated = true
+			b.WriteString(` readable="true">Use read_skill_file with this path to load the file only if needed.`)
 		}
-
 		b.WriteString("</file>\n")
 	}
 	b.WriteString("</skill_files>\n")
-	if truncated {
-		b.WriteString("\n<truncated>Additional skill file content is stored in Writer but omitted from model-visible output.</truncated>\n")
-	}
 	b.WriteString("</skill_content>")
 
 	return b.String(), skill, nil
+}
+
+func (s *Service) RenderFileForModel(ctx context.Context, input RenderSkillFileInput) (string, SkillFile, Skill, error) {
+	if strings.TrimSpace(input.Path) == "" {
+		return "", SkillFile{}, Skill{}, ErrInvalidInput
+	}
+	skill, err := s.Get(ctx, input.ProjectID, input.SkillID)
+	if err != nil {
+		return "", SkillFile{}, Skill{}, err
+	}
+	for _, file := range skill.Files {
+		if file.RelativePath != input.Path {
+			continue
+		}
+		if file.Purpose == FilePurposeScript || file.ScriptDisabled {
+			return "", SkillFile{}, Skill{}, ErrInvalidInput
+		}
+		var b strings.Builder
+		b.WriteString(`<skill_file skill="`)
+		b.WriteString(escape(skill.Name))
+		b.WriteString(`" path="`)
+		b.WriteString(escape(file.RelativePath))
+		b.WriteString(`" purpose="`)
+		b.WriteString(escape(string(file.Purpose)))
+		b.WriteString(`">`)
+		b.WriteString("\n")
+		b.WriteString(escape(file.BodyText))
+		b.WriteString("\n</skill_file>")
+		return b.String(), file, skill, nil
+	}
+	return "", SkillFile{}, Skill{}, ErrInvalidInput
 }
 
 func (s *Service) inTx(ctx context.Context, fn func(*store.Queries) error) error {

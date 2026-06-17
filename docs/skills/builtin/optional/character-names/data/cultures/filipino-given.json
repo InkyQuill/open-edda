@@ -3,7 +3,7 @@
     "description": "Filipino given names (combined male and female) for character naming.",
     "maturity": "production",
     "count": 100,
-    "source": "Compiled from the built-in Filipino gender-specific given-name pools",
+    "source": "Combined selection from filipino-given-male.json and filipino-given-female.json",
     "dimensions": {
       "gender": "Mixed - both traditionally male and female names",
       "origin": "Spanish-derived, indigenous Filipino, modern Filipino"

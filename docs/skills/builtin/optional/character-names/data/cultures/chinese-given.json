@@ -1,9 +1,9 @@
 {
   "_meta": {
-    "description": "Chinese given names (名) for character naming in a combined-gender pool. Gender-specific variants also exist in the built-in dataset.",
+    "description": "Chinese given names (名) for character naming - combined male and female. Use chinese-given-male.json or chinese-given-female.json for gender-specific names.",
     "maturity": "production",
     "count": 100,
-    "source": "Compiled from the built-in Chinese gender-specific given-name pools",
+    "source": "Combined from chinese-given-male.json and chinese-given-female.json",
     "dimensions": {
       "gender": "Mixed - both traditionally male and female names",
       "style": "Mix of traditional and contemporary"

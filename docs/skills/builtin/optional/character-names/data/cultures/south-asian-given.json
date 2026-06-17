@@ -3,7 +3,7 @@
     "description": "South Asian given names (combined male and female) for character naming.",
     "maturity": "production",
     "count": 100,
-    "source": "Compiled from the built-in South Asian gender-specific given-name pools",
+    "source": "Combined selection from south-asian-given-male.json and south-asian-given-female.json",
     "dimensions": {
       "gender": "Mixed - both traditionally male and female names",
       "regional": "North India, South India, Bengal, Punjab, Gujarat, Pakistan, Bangladesh"

@@ -31,6 +31,12 @@ type skillFrontmatter struct {
 	Description string
 	Route       routingFrontmatter
 	Routing     routingFrontmatter
+	Metadata    skillMetadataFrontmatter
+}
+
+type skillMetadataFrontmatter struct {
+	UseCases []string
+	DoNotUse []string
 }
 
 type routingFrontmatter struct {
@@ -256,6 +262,22 @@ func parseSkillFrontmatter(body string) (skillFrontmatter, error) {
 	section := ""
 	var listAccumulator []string
 	currentKey := ""
+	flushList := func() error {
+		if len(listAccumulator) == 0 || currentKey == "" {
+			return nil
+		}
+		switch section {
+		case "route", "routing":
+			if err := setRoutingFieldList(routingForSection(&parsed, section), currentKey, listAccumulator); err != nil {
+				return err
+			}
+		case "metadata":
+			setMetadataFieldList(&parsed.Metadata, currentKey, listAccumulator)
+		}
+		listAccumulator = nil
+		currentKey = ""
+		return nil
+	}
 
 	for _, line := range strings.Split(body, "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -274,12 +296,8 @@ func parseSkillFrontmatter(body string) (skillFrontmatter, error) {
 		key = strings.TrimSpace(key)
 		value = strings.TrimSpace(value)
 
-		if len(listAccumulator) > 0 && currentKey != "" {
-			if err := setRoutingFieldList(routingForSection(&parsed, section), currentKey, listAccumulator); err != nil {
-				return skillFrontmatter{}, err
-			}
-			listAccumulator = nil
-			currentKey = ""
+		if err := flushList(); err != nil {
+			return skillFrontmatter{}, err
 		}
 
 		switch key {
@@ -293,13 +311,20 @@ func parseSkillFrontmatter(body string) (skillFrontmatter, error) {
 			section = "route"
 		case "routing":
 			section = "routing"
+		case "metadata":
+			section = "metadata"
 		default:
-			if section != "route" && section != "routing" {
+			if section != "route" && section != "routing" && section != "metadata" {
 				continue
 			}
 			if value != "" {
-				if err := setRoutingField(routingForSection(&parsed, section), key, value); err != nil {
-					return skillFrontmatter{}, err
+				switch section {
+				case "route", "routing":
+					if err := setRoutingField(routingForSection(&parsed, section), key, value); err != nil {
+						return skillFrontmatter{}, err
+					}
+				case "metadata":
+					setMetadataField(&parsed.Metadata, key, value)
 				}
 			} else {
 				currentKey = key
@@ -307,16 +332,34 @@ func parseSkillFrontmatter(body string) (skillFrontmatter, error) {
 		}
 	}
 
-	if len(listAccumulator) > 0 && currentKey != "" {
-		if err := setRoutingFieldList(routingForSection(&parsed, section), currentKey, listAccumulator); err != nil {
-			return skillFrontmatter{}, err
-		}
+	if err := flushList(); err != nil {
+		return skillFrontmatter{}, err
 	}
 
 	if strings.TrimSpace(parsed.Name) == "" {
 		return skillFrontmatter{}, fmt.Errorf("skill frontmatter requires name")
 	}
 	return parsed, nil
+}
+
+func setMetadataField(metadata *skillMetadataFrontmatter, key, value string) {
+	items := parseInlineStringList(value)
+	if len(items) == 0 {
+		scalar := trimScalar(value)
+		if scalar != "" {
+			items = []string{scalar}
+		}
+	}
+	setMetadataFieldList(metadata, key, items)
+}
+
+func setMetadataFieldList(metadata *skillMetadataFrontmatter, key string, items []string) {
+	switch key {
+	case "useCases", "useCase", "useWhen", "whenToUse":
+		metadata.UseCases = append(metadata.UseCases, items...)
+	case "doNotUse", "doNotUseWhen", "dontUse", "dontUseWhen":
+		metadata.DoNotUse = append(metadata.DoNotUse, items...)
+	}
 }
 
 func routingForSection(frontmatter *skillFrontmatter, section string) *routingFrontmatter {
@@ -430,9 +473,15 @@ func hasScriptExtension(relative string) bool {
 }
 
 func frontmatterMetadataJSON(frontmatter skillFrontmatter) string {
-	metadata := map[string]string{
+	metadata := map[string]any{
 		"name":        frontmatter.Name,
 		"description": frontmatter.Description,
+	}
+	if len(frontmatter.Metadata.UseCases) > 0 {
+		metadata["useCases"] = frontmatter.Metadata.UseCases
+	}
+	if len(frontmatter.Metadata.DoNotUse) > 0 {
+		metadata["doNotUse"] = frontmatter.Metadata.DoNotUse
 	}
 	data, err := json.Marshal(metadata)
 	if err != nil {

@@ -1,9 +1,9 @@
 {
   "_meta": {
-    "description": "West African given names for character naming in a combined-gender pool. Gender-specific variants also exist in the built-in dataset.",
+    "description": "West African given names (combined male and female) for character naming. Use west-african-given-male.json or west-african-given-female.json for gender-specific names.",
     "maturity": "production",
     "count": 100,
-    "source": "Compiled from the built-in West African gender-specific given-name pools",
+    "source": "Combined selection from west-african-given-male.json and west-african-given-female.json",
     "dimensions": {
       "gender": "Mixed - both traditionally male and female names",
       "ethnic": "Yoruba, Igbo, Akan, Hausa, Wolof, Fulani representation"

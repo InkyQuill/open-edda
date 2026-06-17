@@ -3,7 +3,7 @@
     "description": "Arabic and Middle Eastern given names (combined male and female) for character naming.",
     "maturity": "production",
     "count": 100,
-    "source": "Compiled from the built-in Arabic gender-specific given-name pools",
+    "source": "Combined selection from arabic-given-male.json and arabic-given-female.json",
     "dimensions": {
       "gender": "Mixed - both traditionally male and female names",
       "regional": "Levant, Gulf, North Africa, Persia, Turkey representation"

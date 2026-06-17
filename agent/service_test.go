@@ -54,6 +54,84 @@ func TestContinuationDirectApplyAppendsGeneratedProseAndCreatesRevision(t *testi
 	assertAgentRevision(t, ctx, db, chapter.ID, "Existing text.\n\nNew paragraph.", "continuation")
 }
 
+func TestContinuationCanUseContextToolsBeforeGenerating(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	storyProject := createTestProject(t, ctx, projectService, "author-1", "Tool Aware Continuation Project")
+	worldbuilding := createPromptContent(t, ctx, projectService, project.CreateContentInput{
+		ProjectID:    storyProject.ID,
+		Kind:         project.KindStoryBibleEntry,
+		Title:        "Lanterns",
+		BodyMarkdown: "Lanterns in this city remember every promise made beside them.",
+	})
+	provider := &fakeChatProvider{responses: []CompletionResponse{
+		{
+			ID: "completion-tool",
+			Message: CompletionMessage{
+				Role: MessageRoleAssistant,
+				ToolCalls: []CompletionToolCall{
+					{
+						ID:   "tool-call-worldbuilding",
+						Type: "function",
+						Function: CompletionToolCallFunction{
+							Name:      "read_story_bible_entry",
+							Arguments: `{"contentId":"` + worldbuilding.ID + `"}`,
+						},
+					},
+				},
+			},
+			FinishReason:   "tool_calls",
+			UsageAvailable: true,
+		},
+		quickActionResponse("completion-final", "\n\nThe lantern remembered the promise before she did."),
+	}}
+	service := NewService(db, projectService, provider)
+	model := createTestProviderAndModel(t, ctx, service, "author-1")
+	createPromptProfileWithRetention(t, ctx, service, storyProject.ID, 0)
+	chapter := createTestChapter(t, ctx, projectService, storyProject.ID, "Opening", "Existing text.")
+
+	result, err := service.RunContinuation(ctx, ContinuationInput{
+		ProjectID:         storyProject.ID,
+		ContentID:         chapter.ID,
+		ModelVariantID:    model.ID,
+		ApplyMode:         ApplyModePreview,
+		ExpectedRevision:  chapter.CurrentRevision,
+		ContinuationUnits: "paragraph",
+		ContinuationCount: 1,
+	})
+	if err != nil {
+		t.Fatalf("RunContinuation() error = %v", err)
+	}
+
+	if result.Candidate.GeneratedMarkdown != "\n\nThe lantern remembered the promise before she did." {
+		t.Fatalf("candidate markdown = %q", result.Candidate.GeneratedMarkdown)
+	}
+	if len(provider.requests) != 2 {
+		t.Fatalf("provider request count = %d, want 2", len(provider.requests))
+	}
+	if len(provider.requests[0].Tools) == 0 {
+		t.Fatal("first quick-action provider request did not include tools")
+	}
+	for _, tool := range provider.requests[0].Tools {
+		if isWriteTool(tool.Function.Name) {
+			t.Fatalf("quick-action tools included write tool %q", tool.Function.Name)
+		}
+	}
+	secondMessages := provider.requests[1].Messages
+	got := secondMessages[len(secondMessages)-1]
+	if got.Role != MessageRoleTool || got.ToolCallID != "tool-call-worldbuilding" || !strings.Contains(got.Content, "Lanterns in this city") {
+		t.Fatalf("last second-round message = %#v, want worldbuilding tool result", got)
+	}
+	messages, err := service.ListMessages(ctx, storyProject.ID, result.Session.ID)
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	if len(messages) != 1 || messages[0].Role != MessageRoleTool {
+		t.Fatalf("messages = %#v, want one stored tool result", messages)
+	}
+}
+
 func TestCreateSessionPersistsSkillSelection(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()

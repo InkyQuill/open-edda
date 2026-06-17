@@ -100,6 +100,12 @@ type RenderSkillInput struct {
 	SkillID   string
 }
 
+type RenderSkillFileInput struct {
+	ProjectID string
+	SkillID   string
+	Path      string
+}
+
 type ScriptRecommendation string
 
 const (

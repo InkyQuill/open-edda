@@ -143,6 +143,10 @@ func TestPromptBuildActionPromptAssemblesContinuationContext(t *testing.T) {
 	assertContains(t, contextMarkdown, "Target chapter: Chapter 3: The Glass Atrium")
 	assertContains(t, contextMarkdown, "Cursor is after the copper-rain sentence.")
 	assertContains(t, contextMarkdown, "Use tools for additional project context instead of assuming the whole project is present in this prompt.")
+	assertContains(t, contextMarkdown, "Project context tools are available for this action.")
+	if len(bundle.Tools) == 0 {
+		t.Fatal("BuildActionPrompt() tools is empty, want context tools for action prompts")
+	}
 
 	if !json.Valid([]byte(bundle.MetadataJSON)) {
 		t.Fatalf("MetadataJSON is not valid JSON: %q", bundle.MetadataJSON)
@@ -185,6 +189,7 @@ func TestPromptBuildActionPromptAddsSkillGuidanceSources(t *testing.T) {
 		Name:                 `style-pass`,
 		Description:          `Use when rewriting prose for style & rhythm`,
 		InstructionsMarkdown: "Full instructions must not be preloaded.",
+		MetadataJSON:         `{"useCases":["Rewrite prose when style and rhythm are the main problem."],"doNotUse":["Do not use for broad plot restructuring."]}`,
 		ScriptCount:          1,
 		ScriptsDisabled:      true,
 	})
@@ -230,6 +235,10 @@ func TestPromptBuildActionPromptAddsSkillGuidanceSources(t *testing.T) {
 	assertContains(t, available.RenderedMarkdown, "<id>"+describedSkill.ID+"</id>")
 	assertContains(t, available.RenderedMarkdown, "<name>style-pass</name>")
 	assertContains(t, available.RenderedMarkdown, "<description>Use when rewriting prose for style &amp; rhythm</description>")
+	assertContains(t, available.RenderedMarkdown, "<use_cases>")
+	assertContains(t, available.RenderedMarkdown, "<case>Rewrite prose when style and rhythm are the main problem.</case>")
+	assertContains(t, available.RenderedMarkdown, "<do_not_use>")
+	assertContains(t, available.RenderedMarkdown, "<case>Do not use for broad plot restructuring.</case>")
 	if strings.Contains(available.RenderedMarkdown, undescribedSkill.ID) || strings.Contains(available.RenderedMarkdown, "private-notes") {
 		t.Fatalf("available_skills advertised undescribed skill:\n%s", available.RenderedMarkdown)
 	}
@@ -241,6 +250,8 @@ func TestPromptBuildActionPromptAddsSkillGuidanceSources(t *testing.T) {
 	assertContains(t, selected.RenderedMarkdown, "The author selected these skills for this session.")
 	assertContains(t, selected.RenderedMarkdown, "<selected_skills>")
 	assertContains(t, selected.RenderedMarkdown, "<id>"+describedSkill.ID+"</id>")
+	assertContains(t, selected.RenderedMarkdown, "<case>Rewrite prose when style and rhythm are the main problem.</case>")
+	assertContains(t, selected.RenderedMarkdown, "<case>Do not use for broad plot restructuring.</case>")
 	assertContains(t, selected.RenderedMarkdown, `<script_status disabled="true" count="1">Scripts are available only as inert reference files.</script_status>`)
 	assertContains(t, selected.RenderedMarkdown, "Disabled scripts remain unavailable.")
 	assertContains(t, selected.RenderedMarkdown, "Enabled runtime helpers are available only through the `skill_script` tool.")

@@ -3,7 +3,7 @@
     "description": "Japanese given names (combined male and female) for character naming.",
     "maturity": "production",
     "count": 100,
-    "source": "Compiled from the built-in Japanese gender-specific given-name pools",
+    "source": "Combined selection from japanese-given-male.json and japanese-given-female.json",
     "dimensions": {
       "gender": "Mixed - both traditionally male and female names",
       "romanization": "Modified Hepburn romanization"

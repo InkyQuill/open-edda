@@ -48,7 +48,7 @@ func (s *Service) BuildActionPrompt(ctx context.Context, input BuildPromptInput)
 		return PromptBundle{}, err
 	}
 
-	tools := []CompletionTool{}
+	tools := QuickActionToolDefinitions()
 	sources, err := buildContextSources(profile, writingBriefs, target, input, tools)
 	if err != nil {
 		return PromptBundle{}, err
@@ -245,7 +245,7 @@ func buildContextSources(profile PromptProfile, writingBriefs []project.ContentI
 		return nil, err
 	}
 
-	toolRendered := "## Tool Catalog\n\nNo project context tools are registered for this task yet."
+	toolRendered := "## Tool Catalog\n\nProject context tools are available for this action. Use them to inspect worldbuilding, other chapters, notes, skills, and revisions when needed before generating the final action output. Direct write tools are not available in this action request; the action pipeline handles preview or direct apply after the final response."
 	toolValue, err := marshalJSON(map[string]any{
 		"tools": tools,
 	})
@@ -355,13 +355,30 @@ func skillSummaries(skills []skill.Skill) []SkillSummary {
 }
 
 func skillSummary(item skill.Skill) SkillSummary {
+	metadata := skillPromptMetadata(item.MetadataJSON)
 	return SkillSummary{
 		ID:              item.ID,
 		Name:            item.Name,
 		Description:     item.Description,
+		UseCases:        metadata.UseCases,
+		DoNotUse:        metadata.DoNotUse,
 		ScriptCount:     item.ScriptCount,
 		ScriptsDisabled: item.ScriptsDisabled,
 	}
+}
+
+type skillPromptMetadataValue struct {
+	UseCases []string `json:"useCases"`
+	DoNotUse []string `json:"doNotUse"`
+}
+
+func skillPromptMetadata(value string) skillPromptMetadataValue {
+	var metadata skillPromptMetadataValue
+	if strings.TrimSpace(value) == "" {
+		return metadata
+	}
+	_ = json.Unmarshal([]byte(value), &metadata)
+	return metadata
 }
 
 type selectedSkillPromptSummary struct {
@@ -415,6 +432,7 @@ func renderAvailableSkills(skills []SkillSummary, installedCount int) string {
 		b.WriteString("    <id>" + escapePromptXML(item.ID) + "</id>\n")
 		b.WriteString("    <name>" + escapePromptXML(item.Name) + "</name>\n")
 		b.WriteString("    <description>" + escapePromptXML(item.Description) + "</description>\n")
+		renderSkillUseMetadata(&b, item.UseCases, item.DoNotUse, "    ")
 		b.WriteString("  </skill>\n")
 	}
 	b.WriteString("</available_skills>\n")
@@ -432,6 +450,10 @@ func renderSelectedSkills(skills []selectedSkillPromptSummary) string {
 		b.WriteString("  <skill>\n")
 		b.WriteString("    <id>" + escapePromptXML(item.ID) + "</id>\n")
 		b.WriteString("    <name>" + escapePromptXML(item.Name) + "</name>\n")
+		if item.Description != "" {
+			b.WriteString("    <description>" + escapePromptXML(item.Description) + "</description>\n")
+		}
+		renderSkillUseMetadata(&b, item.UseCases, item.DoNotUse, "    ")
 		if len(item.EnabledScripts) == 0 {
 			fmt.Fprintf(&b, "    <script_status disabled=\"%t\" count=\"%d\">Scripts are available only as inert reference files.</script_status>\n", item.ScriptsDisabled, item.ScriptCount)
 		} else {
@@ -449,6 +471,29 @@ func renderSelectedSkills(skills []selectedSkillPromptSummary) string {
 	}
 	b.WriteString("</selected_skills>\n")
 	return b.String()
+}
+
+func renderSkillUseMetadata(b *strings.Builder, useCases []string, doNotUse []string, indent string) {
+	if len(useCases) > 0 {
+		b.WriteString(indent + "<use_cases>\n")
+		for _, item := range useCases {
+			if strings.TrimSpace(item) == "" {
+				continue
+			}
+			b.WriteString(indent + "  <case>" + escapePromptXML(item) + "</case>\n")
+		}
+		b.WriteString(indent + "</use_cases>\n")
+	}
+	if len(doNotUse) > 0 {
+		b.WriteString(indent + "<do_not_use>\n")
+		for _, item := range doNotUse {
+			if strings.TrimSpace(item) == "" {
+				continue
+			}
+			b.WriteString(indent + "  <case>" + escapePromptXML(item) + "</case>\n")
+		}
+		b.WriteString(indent + "</do_not_use>\n")
+	}
 }
 
 func skillsVersion(skills []skill.Skill) string {

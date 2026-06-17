@@ -3,7 +3,7 @@
     "description": "Vietnamese given names (combined male and female) for character naming.",
     "maturity": "production",
     "count": 100,
-    "source": "Compiled from the built-in Vietnamese gender-specific given-name pools",
+    "source": "Combined selection from vietnamese-given-male.json and vietnamese-given-female.json",
     "dimensions": {
       "gender": "Mixed - many Vietnamese names are unisex; includes both gendered and shared names"
     }

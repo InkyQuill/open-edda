@@ -2,6 +2,11 @@
 
 This directory tracks Edda skill source material, rewrite staging, and policy notes for the Built-In Skill Library.
 
+Agent-facing mechanics and authoring standards:
+
+- [Open Edda Skill Mechanics](open-edda-skill-mechanics.md) records how Skill Core imports, stores, routes, and exposes skills to the model.
+- [Writing Skills](important/writing-skills/SKILL.md) is the Edda-native authoring standard for rewriting skills as executable agent instructions.
+
 ## Milestone 3.5 Scope
 
 Milestone 3.5 follows the accepted library rewrite plan in [docs/superpowers/plans/2026-06-14-writer-skill-library-rewrite.md](/home/inky/Development/writer/.worktrees/milestone-3-5-skill-library/docs/superpowers/plans/2026-06-14-writer-skill-library-rewrite.md). The goal is to curate a Edda-native built-in skill shelf, not to import every copied prompt as an installed skill.

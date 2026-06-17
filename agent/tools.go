@@ -43,9 +43,13 @@ func ContextToolDefinitions() []CompletionTool {
 			"heading":   map[string]any{"type": "string"},
 		}, "contentId", "heading")),
 		contextTool("list_revisions", "List revisions for one content item.", contentIDSchema()),
-		contextTool("skill", "Load one installed Edda skill by ID when the task matches the available skill guidance. Returns instructions and inert supporting files. Bundled scripts are never executed.", objectSchema(map[string]any{
+		contextTool("skill", "Load one installed Edda skill by ID when the task matches the available skill guidance. Returns instructions and a manifest of supporting files. Use read_skill_file to load a listed reference, template, or data file only when needed. Bundled scripts are never executed.", objectSchema(map[string]any{
 			"skillId": map[string]any{"type": "string"},
 		}, "skillId")),
+		contextTool("read_skill_file", "Read one non-script supporting file from an installed Edda skill by skill ID and relative path. Use only after the skill tool lists the file as readable.", objectSchema(map[string]any{
+			"skillId": map[string]any{"type": "string"},
+			"path":    map[string]any{"type": "string"},
+		}, "skillId", "path")),
 		contextTool("skill_script", "Run one admin-enabled Edda skill helper script with explicit JSON inputs. Returns a reviewable report, proposal, draft, or generated data. It cannot directly mutate project content.", objectSchema(map[string]any{
 			"skillId":    map[string]any{"type": "string"},
 			"scriptPath": map[string]any{"type": "string"},
@@ -81,6 +85,18 @@ func ContextToolDefinitions() []CompletionTool {
 			"reason":            map[string]any{"type": "string"},
 		}, "contentId", "heading", "generatedMarkdown", "expectedRevision", "reason")),
 	}
+}
+
+func QuickActionToolDefinitions() []CompletionTool {
+	all := ContextToolDefinitions()
+	tools := make([]CompletionTool, 0, len(all))
+	for _, tool := range all {
+		if isWriteTool(tool.Function.Name) {
+			continue
+		}
+		tools = append(tools, tool)
+	}
+	return tools
 }
 
 func (s *Service) ExecuteTool(ctx context.Context, input ToolCallInput) (ToolResult, error) {
@@ -304,14 +320,54 @@ func (s *Service) executeContextTool(ctx context.Context, input ToolCallInput, s
 		if err != nil {
 			return nil, false, nil, err
 		}
+		loadedSummary := loaded
+		for i := range loadedSummary.Files {
+			loadedSummary.Files[i].BodyText = ""
+		}
 		return map[string]any{
-				"skill":                loaded,
+				"skill":                loadedSummary,
 				"modelVisibleMarkdown": rendered,
 			}, true, map[string]any{
 				"skillId":         loaded.ID,
 				"name":            loaded.Name,
 				"scriptCount":     loaded.ScriptCount,
 				"scriptsDisabled": loaded.ScriptsDisabled,
+			}, nil
+	case "read_skill_file":
+		if s.skillService == nil {
+			return nil, false, nil, fmt.Errorf("skill service is not configured")
+		}
+		var args struct {
+			SkillID string `json:"skillId"`
+			Path    string `json:"path"`
+		}
+		if err := decodeToolArgs(input.ArgumentsJSON, &args); err != nil {
+			return nil, false, nil, err
+		}
+		if strings.TrimSpace(args.SkillID) == "" {
+			return nil, false, nil, fmt.Errorf("skillId is required")
+		}
+		if strings.TrimSpace(args.Path) == "" {
+			return nil, false, nil, fmt.Errorf("path is required")
+		}
+		rendered, file, loaded, err := s.skillService.RenderFileForModel(ctx, skill.RenderSkillFileInput{
+			ProjectID: input.ProjectID,
+			SkillID:   args.SkillID,
+			Path:      args.Path,
+		})
+		if err != nil {
+			return nil, false, nil, err
+		}
+		return map[string]any{
+				"skillId":              loaded.ID,
+				"skillName":            loaded.Name,
+				"file":                 file,
+				"modelVisibleMarkdown": rendered,
+			}, true, map[string]any{
+				"skillId": loaded.ID,
+				"name":    loaded.Name,
+				"path":    file.RelativePath,
+				"purpose": string(file.Purpose),
 			}, nil
 	case "skill_script":
 		if s.skillService == nil {

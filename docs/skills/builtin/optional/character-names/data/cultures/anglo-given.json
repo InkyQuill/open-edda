@@ -1,9 +1,9 @@
 {
   "_meta": {
-    "description": "Anglo/English given names for character naming in a combined-gender pool. Gender-specific variants also exist in the built-in dataset.",
+    "description": "Anglo/English given names (combined male and female) for character naming. Use anglo-given-male.json or anglo-given-female.json for gender-specific names.",
     "maturity": "production",
     "count": 100,
-    "source": "Compiled from the built-in Anglo gender-specific given-name pools",
+    "source": "Combined selection from anglo-given-male.json and anglo-given-female.json",
     "dimensions": {
       "gender": "Mixed - both traditionally male and female names",
       "era": "Mix of classic, mid-century, and contemporary"
