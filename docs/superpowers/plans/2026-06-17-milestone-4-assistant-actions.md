@@ -98,6 +98,7 @@ export interface AssistantActionState {
   projectId: string | null;
   contentId: string | null;
   requestKey: string | null;
+  requestToken: string | null;
   candidate: GenerationCandidate | null;
   checkResult: ReadAndCheckResult | null;
   error: string | null;
@@ -106,7 +107,7 @@ export interface AssistantActionState {
 }
 ```
 
-Use a `requestKey` string derived by the component from the current route/editor identity. Thunks must ignore stale fulfilled/rejected results when the slice's `requestKey` no longer matches the thunk arg.
+Use a `requestKey` string derived by the component from the current route/editor identity and a unique `requestToken` generated for each dispatch, such as `crypto.randomUUID()`. Pending reducers store both values. Fulfilled and rejected reducers must ignore stale results unless both the slice's `requestKey` and `requestToken` match the thunk arg, so multiple rapid actions on the same content cannot let a slower older response replace a newer preview.
 
 Add thunk args:
 
@@ -120,6 +121,7 @@ export interface RunGenerateArgs {
   instructions: string;
   skillIds?: string[];
   requestKey: string;
+  requestToken: string;
 }
 
 export interface RunRewriteArgs {
@@ -132,6 +134,7 @@ export interface RunRewriteArgs {
   instructions: string;
   skillIds?: string[];
   requestKey: string;
+  requestToken: string;
 }
 
 export interface RunCheckArgs {
@@ -144,6 +147,7 @@ export interface RunCheckArgs {
   instructions: string;
   skillIds?: string[];
   requestKey: string;
+  requestToken: string;
 }
 ```
 
@@ -192,7 +196,7 @@ runReadAndCheck(projectId, {
 
 Reducer behavior:
 
-- `runGenerate.pending`, `runRewrite.pending`, and `runCheck.pending` clear the previous candidate, previous check result, and previous action error.
+- `runGenerate.pending`, `runRewrite.pending`, and `runCheck.pending` clear the previous candidate, previous check result, previous action error, `acceptStatus`, `rejectStatus`, `acceptError`, and `rejectError`.
 - Fulfilled generate/rewrite stores `result.candidate`.
 - Fulfilled check stores the complete `ReadAndCheckResult`.
 - Rejected requests set `status: "failed"` and a user-readable error.

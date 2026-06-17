@@ -150,7 +150,7 @@ export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
         </div>
       </section>
 
-      <ModelStatus />
+      <ModelStatus projectId={projectId} />
     </aside>
   );
 }

@@ -14,6 +14,7 @@ export function ProjectsPage() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(true);
   const operationIdRef = useRef(0);
+  const operationInFlightRef = useRef(false);
   const [title, setTitle] = useState("");
   const [language, setLanguage] = useState("en");
   const [createError, setCreateError] = useState<string | null>(null);
@@ -25,6 +26,7 @@ export function ProjectsPage() {
 
     return () => {
       mountedRef.current = false;
+      operationInFlightRef.current = false;
       operationIdRef.current += 1;
     };
   }, []);
@@ -36,7 +38,8 @@ export function ProjectsPage() {
   function handleCreateProject(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     const trimmedTitle = title.trim();
-    if (!trimmedTitle || creating) return;
+    if (!trimmedTitle || operationInFlightRef.current) return;
+    operationInFlightRef.current = true;
     const operationId = operationIdRef.current + 1;
     operationIdRef.current = operationId;
 
@@ -56,6 +59,7 @@ export function ProjectsPage() {
       })
       .finally(() => {
         if (isCurrentOperation(operationId)) {
+          operationInFlightRef.current = false;
           setCreating(false);
           setOperationLabel(null);
         }
@@ -69,7 +73,8 @@ export function ProjectsPage() {
   function handleImportProject(event: React.ChangeEvent<HTMLInputElement>): void {
     const input = event.currentTarget;
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file || operationInFlightRef.current) return;
+    operationInFlightRef.current = true;
     const operationId = operationIdRef.current + 1;
     operationIdRef.current = operationId;
 
@@ -89,6 +94,7 @@ export function ProjectsPage() {
       })
       .finally(() => {
         if (isCurrentOperation(operationId)) {
+          operationInFlightRef.current = false;
           setCreating(false);
           setOperationLabel(null);
           input.value = "";
@@ -97,6 +103,7 @@ export function ProjectsPage() {
   }
 
   function handleLogout(): void {
+    operationInFlightRef.current = false;
     operationIdRef.current += 1;
     clearToken();
     navigate("/login", { replace: true });

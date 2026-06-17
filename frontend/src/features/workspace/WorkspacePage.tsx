@@ -222,7 +222,7 @@ export function WorkspacePage() {
   }
 
   function handleCreateContent(kind: ContentKind): void {
-    if (!projectId || contentCreating || contentLoading) return;
+    if (!projectId || contentLoading || createAbortControllerRef.current) return;
     const abortController = new AbortController();
     const routeIdentity = routeIdentityRef.current;
     createAbortControllerRef.current = abortController;

@@ -7,7 +7,11 @@ import type { AppDispatch, RootState } from "../../app/store/store";
 import { Button } from "../../shared/ui/button";
 import { loadModelVariants, loadProviderConfigs } from "./modelSettingsThunks";
 
-export function ModelStatus() {
+type ModelStatusProps = {
+  projectId: string;
+};
+
+export function ModelStatus({ projectId }: ModelStatusProps) {
   const dispatch = useDispatch<AppDispatch>();
   const {
     activeModelVariantId,
@@ -52,7 +56,7 @@ export function ModelStatus() {
           size="icon-sm"
           aria-label="Open model settings"
         >
-          <Link to="/settings">
+          <Link to={`/settings?projectId=${encodeURIComponent(projectId)}`}>
             {isLoading ? <Loader2 className="animate-spin" /> : <Settings2 />}
           </Link>
         </Button>

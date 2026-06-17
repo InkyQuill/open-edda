@@ -11,6 +11,7 @@ import type { StoryProject } from "../../types";
 import { ModelSettingsPanel } from "../model-settings/ModelSettingsPanel";
 import { ScriptRuntimePanel } from "../script-runtime/ScriptRuntimePanel";
 import { SkillsPanel } from "../skills/SkillsPanel";
+import { loadProjectSkills } from "../skills/skillsThunks";
 import { settingsActions } from "./settingsSlice";
 
 export function SettingsPage() {
@@ -25,13 +26,18 @@ export function SettingsPage() {
   const [projectsStatus, setProjectsStatus] = useState<"idle" | "pending" | "succeeded" | "failed">("idle");
   const [projectsError, setProjectsError] = useState<string | null>(null);
   const [projectsReloadKey, setProjectsReloadKey] = useState(0);
-  const [requestedProjectId] = useState(() => new URLSearchParams(location.search).get("projectId"));
+  const [requestedProjectId, setRequestedProjectId] = useState<string | null>(null);
   const [requestedProjectApplied, setRequestedProjectApplied] = useState(false);
 
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId],
   );
+
+  useEffect(() => {
+    setRequestedProjectId(new URLSearchParams(location.search).get("projectId"));
+    setRequestedProjectApplied(false);
+  }, [location.search]);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +87,11 @@ export function SettingsPage() {
     }
   }, [dispatch, projects, projectsStatus, requestedProjectApplied, requestedProjectId, selectedProjectId]);
 
+  useEffect(() => {
+    if (!selectedProject || skillsProjectId === selectedProject.id) return;
+    void dispatch(loadProjectSkills({ projectId: selectedProject.id }));
+  }, [dispatch, selectedProject, skillsProjectId]);
+
   function handleRefreshProjects(): void {
     setProjectsReloadKey((current) => current + 1);
   }
@@ -101,7 +112,12 @@ export function SettingsPage() {
               Configure providers, model defaults, skills, and script runtime controls.
             </p>
           </div>
-          <Button type="button" variant="outline" onClick={handleRefreshProjects}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleRefreshProjects}
+            disabled={projectsStatus === "pending"}
+          >
             {projectsStatus === "pending" ? (
               <Loader2 data-icon="inline-start" className="animate-spin" aria-hidden="true" />
             ) : (
