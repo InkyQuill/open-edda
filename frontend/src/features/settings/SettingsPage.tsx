@@ -9,10 +9,8 @@ import { Button } from "../../shared/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../shared/ui/tabs";
 import type { StoryProject } from "../../types";
 import { ModelSettingsPanel } from "../model-settings/ModelSettingsPanel";
-import { loadProviderConfigs } from "../model-settings/modelSettingsThunks";
 import { ScriptRuntimePanel } from "../script-runtime/ScriptRuntimePanel";
 import { SkillsPanel } from "../skills/SkillsPanel";
-import { loadProjectSkills as loadSkills } from "../skills/skillsThunks";
 import { settingsActions } from "./settingsSlice";
 
 export function SettingsPage() {
@@ -24,12 +22,12 @@ export function SettingsPage() {
   const [projects, setProjects] = useState<StoryProject[]>([]);
   const [projectsStatus, setProjectsStatus] = useState<"idle" | "pending" | "succeeded" | "failed">("idle");
   const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [projectsReloadKey, setProjectsReloadKey] = useState(0);
 
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
     [projects, selectedProjectId],
   );
-  const selectedProjectLoadId = selectedProject?.id ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -53,13 +51,7 @@ export function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  useEffect(() => {
-    if (providersStatus === "idle") {
-      void dispatch(loadProviderConfigs());
-    }
-  }, [dispatch, providersStatus]);
+  }, [projectsReloadKey]);
 
   useEffect(() => {
     if (projectsStatus !== "succeeded") return;
@@ -76,24 +68,8 @@ export function SettingsPage() {
     }
   }, [dispatch, projects, projectsStatus, selectedProjectId]);
 
-  useEffect(() => {
-    if (!selectedProjectLoadId) return;
-    void dispatch(loadSkills({ projectId: selectedProjectLoadId }));
-  }, [dispatch, selectedProjectLoadId]);
-
   function handleRefreshProjects(): void {
-    setProjectsStatus("pending");
-    setProjectsError(null);
-    void listProjects()
-      .then((items) => {
-        setProjects(items);
-        setProjectsStatus("succeeded");
-      })
-      .catch((cause: unknown) => {
-        setProjects([]);
-        setProjectsStatus("failed");
-        setProjectsError(cause instanceof Error ? cause.message : "Could not load projects");
-      });
+    setProjectsReloadKey((current) => current + 1);
   }
 
   return (
