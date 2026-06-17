@@ -161,6 +161,12 @@ export function WorkspacePage() {
     navigate(`/projects/${encodeURIComponent(projectId)}`);
   }
 
+  function handleContentSaved(item: ContentItem): void {
+    setContentItems((items) =>
+      items.map((existing) => (existing.id === item.id ? item : existing)),
+    );
+  }
+
   if (!projectId) {
     return (
       <main className="flex min-h-dvh items-center justify-center bg-background p-6 text-foreground">
@@ -203,6 +209,7 @@ export function WorkspacePage() {
       selectedContent={selectedContent}
       onSelectContent={handleSelectContent}
       onContentKindChange={handleContentKindChange}
+      onContentSaved={handleContentSaved}
     />
   );
 }

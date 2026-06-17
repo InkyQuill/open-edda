@@ -814,11 +814,11 @@ At max-width `760px`:
 
 This first slice should not reimplement every legacy form. Add stable placeholders wired to real context:
 
-- `AssistantDrawer`: chat transcript placeholder, selected model label area, quick action status area.
+- `AssistantDrawer`: chat transcript placeholder, minimal selected model disclosure, quick action status area. It must not own provider settings, skill administration, or script runtime controls; those move to settings in Phase 3.5.
 - `ReviewDrawer`: Read/Check reports area, revisions area, activity area.
 - `ContextDrawer`: content list, story bible/world lookup placeholder, attached notes placeholder.
 - `ModelStatus`: selected model unavailable state and settings link placeholder.
-- `SkillChipsPanel`: selected skills placeholder and installed skills count if loaded later.
+- `SkillChipsPanel`: superseded by Phase 3.5 settings IA; do not render it in the assistant right panel.
 
 Text should be concise UI labels only, not tutorial copy.
 

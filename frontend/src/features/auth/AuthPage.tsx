@@ -1,11 +1,9 @@
 import { FormEvent, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
-import { getToken, login, register } from "../../authApi";
+import { getToken, login } from "../../authApi";
 import { Button } from "../../shared/ui/button";
 import { Input } from "../../shared/ui/input";
-
-type AuthMode = "login" | "register";
 
 function safeRedirectPath(value: unknown): string | null {
   if (typeof value !== "string") {
@@ -27,7 +25,6 @@ function redirectTargetFromState(state: unknown): string {
 export function AuthPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -37,16 +34,13 @@ export function AuthPage() {
     return <Navigate to="/projects" replace />;
   }
 
-  const isRegistering = mode === "register";
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setError(null);
     setIsSubmitting(true);
 
     try {
-      const authenticate = isRegistering ? register : login;
-      await authenticate(email, password);
+      await login(email, password);
       navigate(redirectTargetFromState(location.state), { replace: true });
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : "Authentication failed");
@@ -60,13 +54,15 @@ export function AuthPage() {
       <section className="auth-form-section" aria-labelledby="auth-page-title">
         <header>
           <h1 id="auth-page-title">Writer</h1>
-          <p>{isRegistering ? "Create your author account." : "Sign in to your writing workspace."}</p>
+          <p>Sign in to your writing workspace.</p>
         </header>
 
         <form className="auth-form" onSubmit={(event) => void handleSubmit(event)}>
           <label>
             Email
             <Input
+              id="auth-email"
+              name="email"
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
@@ -79,12 +75,14 @@ export function AuthPage() {
           <label>
             Password
             <Input
+              id="auth-password"
+              name="password"
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               required
               minLength={8}
-              autoComplete={isRegistering ? "new-password" : "current-password"}
+              autoComplete="current-password"
               disabled={isSubmitting}
             />
           </label>
@@ -96,19 +94,7 @@ export function AuthPage() {
           ) : null}
 
           <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Please wait..." : isRegistering ? "Register" : "Login"}
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            disabled={isSubmitting}
-            onClick={() => {
-              setError(null);
-              setMode((current) => (current === "login" ? "register" : "login"));
-            }}
-          >
-            {isRegistering ? "Use existing account" : "Create account"}
+            {isSubmitting ? "Please wait..." : "Login"}
           </Button>
         </form>
       </section>

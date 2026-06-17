@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -67,6 +69,10 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 	}
 
 	authService := auth.NewService(db, jwtSecret)
+	if err := bootstrapSingleUser(authService); err != nil {
+		cleanup()
+		return nil, func() {}, err
+	}
 	projectService := project.NewService(db)
 	agentService := agent.NewService(db, projectService, nil)
 	skillService := skill.NewService(db)
@@ -79,6 +85,25 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 		SkillService:   skillService,
 		StaticFS:       os.DirFS(staticPath),
 	}, cleanup, nil
+}
+
+func bootstrapSingleUser(authService *auth.Service) error {
+	email := firstEnv("OPEN_EDDA_BOOTSTRAP_EMAIL", "WRITER_BOOTSTRAP_EMAIL")
+	password := firstEnv("OPEN_EDDA_BOOTSTRAP_PASSWORD", "WRITER_BOOTSTRAP_PASSWORD")
+	if email == "" && password == "" {
+		return nil
+	}
+	if email == "" || password == "" {
+		return fmt.Errorf("single-user bootstrap requires both OPEN_EDDA_BOOTSTRAP_EMAIL and OPEN_EDDA_BOOTSTRAP_PASSWORD")
+	}
+
+	if _, err := authService.Register(context.Background(), email, password); err != nil {
+		if errors.Is(err, auth.ErrEmailTaken) {
+			return nil
+		}
+		return fmt.Errorf("bootstrap single user: %w", err)
+	}
+	return nil
 }
 
 func jwtSecret() (string, error) {

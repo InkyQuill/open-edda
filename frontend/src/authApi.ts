@@ -28,21 +28,3 @@ export async function login(email: string, password: string): Promise<AuthRespon
   localStorage.setItem("open_edda_token", data.token);
   return data;
 }
-
-export async function register(email: string, password: string): Promise<AuthResponse> {
-  const resp = await fetch("/api/auth/register", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({ error: `register failed: ${resp.status}` }));
-    throw new Error(err.error ?? `register failed: ${resp.status}`);
-  }
-  const data: AuthResponse = await resp.json();
-  if (!data.token) {
-    throw new Error("register failed: missing token");
-  }
-  localStorage.setItem("open_edda_token", data.token);
-  return data;
-}

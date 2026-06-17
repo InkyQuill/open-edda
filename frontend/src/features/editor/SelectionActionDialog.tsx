@@ -66,6 +66,8 @@ export function SelectionActionDialog() {
             </div>
 
             <Textarea
+              id="selection-action-instructions"
+              name="selection-action-instructions"
               value={actionModal.instructions}
               onChange={(event) => dispatch(editorActions.setActionInstructions(event.target.value))}
               aria-label={`${action.title} instructions`}

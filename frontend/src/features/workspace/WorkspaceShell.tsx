@@ -37,6 +37,7 @@ type WorkspaceShellProps = {
   selectedContent: ContentItem | null;
   onSelectContent: (item: ContentItem) => void;
   onContentKindChange: (kind: ContentKind) => void;
+  onContentSaved: (item: ContentItem) => void;
 };
 
 const modeButtons: Array<{
@@ -101,6 +102,7 @@ export function WorkspaceShell({
   selectedContent,
   onSelectContent,
   onContentKindChange,
+  onContentSaved,
 }: WorkspaceShellProps) {
   const dispatch = useDispatch();
   const workspace = useSelector((state: WorkspaceRootState) => state.workspace);
@@ -193,10 +195,12 @@ export function WorkspaceShell({
 
         <section className="workspace-editor-stage flex min-w-0 flex-1 justify-center overflow-auto bg-muted/30 px-4 py-6">
           <EditorFrame
+            projectId={projectId}
             content={selectedContent}
             mode={workspace.mode}
             contentLoading={contentLoading}
             contentError={contentError}
+            onContentSaved={onContentSaved}
           />
         </section>
 

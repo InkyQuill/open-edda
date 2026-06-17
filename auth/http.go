@@ -14,7 +14,6 @@ func RegisterRoutes(r chi.Router, service *Service) {
 	}
 	h := httpHandler{service: service}
 	r.Post("/auth/login", h.login)
-	r.Post("/auth/register", h.register)
 }
 
 type httpHandler struct {
@@ -43,30 +42,6 @@ func (h *httpHandler) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
-}
-
-func (h *httpHandler) register(w http.ResponseWriter, r *http.Request) {
-	var req RegisterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
-		return
-	}
-
-	resp, err := h.service.Register(r.Context(), req.Email, req.Password)
-	if err != nil {
-		if errors.Is(err, ErrInvalidEmail) || errors.Is(err, ErrPasswordTooShort) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-			return
-		}
-		if errors.Is(err, ErrEmailTaken) {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "registration failed"})
-		return
-	}
-
-	writeJSON(w, http.StatusCreated, resp)
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

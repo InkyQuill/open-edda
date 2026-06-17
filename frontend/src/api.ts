@@ -27,3 +27,30 @@ export async function listContent(projectId: string, kind: ContentKind, signal?:
   }
   return response.json() as Promise<ContentItem[]>;
 }
+
+export type UpdateContentInput = {
+  expectedRevision: number;
+  bodyMarkdown: string;
+  metadataJson: string;
+  reason: string;
+};
+
+export async function updateContent(
+  projectId: string,
+  contentId: string,
+  input: UpdateContentInput,
+  signal?: AbortSignal,
+): Promise<ContentItem> {
+  const response = await authFetch(
+    `/api/projects/${encodeURIComponent(projectId)}/content/${encodeURIComponent(contentId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(input),
+      signal,
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`update content failed: ${response.status}`);
+  }
+  return response.json() as Promise<ContentItem>;
+}

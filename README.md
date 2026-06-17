@@ -46,10 +46,12 @@ Run the backend API/server:
 
 ```bash
 OPEN_EDDA_JWT_SECRET="replace-with-at-least-32-bytes-secret" \
+OPEN_EDDA_BOOTSTRAP_EMAIL="author@example.com" \
+OPEN_EDDA_BOOTSTRAP_PASSWORD="change-this-password" \
 go run -tags sqlite_fts5 .
 ```
 
-By default the backend listens on `:8080`, uses `edda.db`, runs migrations from `migrations`, and serves the built frontend from `frontend/dist`.
+By default the backend listens on `:8080`, uses `edda.db`, runs migrations from `migrations`, and serves the built frontend from `frontend/dist`. Open Edda is currently single-user: create the initial login by setting `OPEN_EDDA_BOOTSTRAP_EMAIL` and `OPEN_EDDA_BOOTSTRAP_PASSWORD` on first server start. Existing users are not overwritten by later bootstrap env values.
 
 For a production-like local run, build the frontend first:
 
@@ -72,6 +74,8 @@ Environment variables:
 | `OPEN_EDDA_MIGRATIONS_PATH` | `migrations` | Goose migrations directory |
 | `OPEN_EDDA_STATIC_PATH` | `frontend/dist` | Built frontend directory |
 | `OPEN_EDDA_JWT_SECRET` | required | JWT signing secret, at least 32 bytes |
+| `OPEN_EDDA_BOOTSTRAP_EMAIL` | optional | Initial single-user email; requires `OPEN_EDDA_BOOTSTRAP_PASSWORD` |
+| `OPEN_EDDA_BOOTSTRAP_PASSWORD` | optional | Initial single-user password; requires `OPEN_EDDA_BOOTSTRAP_EMAIL` |
 
 Legacy `WRITER_*` equivalents are still accepted for these settings.
 
@@ -125,7 +129,7 @@ Open Edda supports:
 - Structured agent tools for project map, content search/read, revisions, writes, selected skills, and skill scripts.
 - Skill import, browsing, session selection, and built-in fiction-writing skills.
 - Audited skill script runtime with admin approval, safe input envelopes, reviewable outputs, and run history.
-- Routed writing workspace with desktop drawers and mobile sheets for editor, assistant, review, skills, model settings, and script runtime surfaces.
+- Routed writing workspace with desktop drawers and mobile sheets for editor, assistant, and review surfaces. System settings for providers, models, skills, and script runtime administration are planned as the next Milestone 4 IA correction.
 
 See [docs/roadmap.md](docs/roadmap.md) for milestone status and follow-up phases.
 See [docs/agent-tools.md](docs/agent-tools.md) for the current agent tool catalog, invocation flow, prompt guidance, and known tool gaps.

@@ -4,6 +4,8 @@
 
 **Goal:** Restore the old monolithic frontend's working assistant, model settings, skills, activity, prompt-record, and script-runtime visibility inside the new routed Milestone 4 workspace architecture.
 
+> Post-implementation correction: this phase restored behavior into workspace drawers, but product review found that provider settings and skill administration do not belong in the assistant right panel. Milestone 4 Phase 3.5 (`docs/superpowers/plans/2026-06-17-milestone-4-system-settings-and-ia.md`) supersedes those placement decisions and moves them to settings.
+
 **Architecture:** Keep the current domain-oriented vertical-slice structure. Route params continue to own `projectId`, `contentKind`, and `contentId`; Redux owns workspace/editor/assistant/model/skills UI state; existing API modules remain the transport layer until each feature has enough code to justify moving API adapters into that slice.
 
 **Tech Stack:** React + Vite, React Router, Redux Toolkit, React Redux, Tailwind v4, shadcn/ui primitives, TypeScript, Vitest.

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,8 @@ func TestBuildDependenciesRequiresAuthForProjectRoutes(t *testing.T) {
 	t.Setenv("OPEN_EDDA_DB_PATH", filepath.Join(t.TempDir(), "edda.db"))
 	t.Setenv("OPEN_EDDA_MIGRATIONS_PATH", "migrations")
 	t.Setenv("OPEN_EDDA_JWT_SECRET", "test-secret-32-bytes-minimum-value")
+	t.Setenv("OPEN_EDDA_BOOTSTRAP_EMAIL", "test@writersmoke.invalid")
+	t.Setenv("OPEN_EDDA_BOOTSTRAP_PASSWORD", "test1234")
 	staticPath := t.TempDir()
 	if err := os.WriteFile(filepath.Join(staticPath, "index.html"), []byte("<!doctype html><html></html>"), 0o644); err != nil {
 		t.Fatalf("write static index: %v", err)
@@ -41,22 +44,22 @@ func TestBuildDependenciesRequiresAuthForProjectRoutes(t *testing.T) {
 		t.Fatalf("unauthenticated status = %d, want %d; body = %s", rec.Code, http.StatusUnauthorized, rec.Body.String())
 	}
 
-	// Register to get a token.
-	regBody := bytes.NewBufferString(`{"email":"test@writersmoke.invalid","password":"test1234"}`)
-	regReq := httptest.NewRequest(http.MethodPost, "/api/auth/register", regBody)
-	regRec := httptest.NewRecorder()
-	handler.ServeHTTP(regRec, regReq)
-	if regRec.Code != http.StatusCreated {
-		t.Fatalf("register status = %d, want %d; body = %s", regRec.Code, http.StatusCreated, regRec.Body.String())
+	// Login with the bootstrapped single user to get a token.
+	loginBody := bytes.NewBufferString(`{"email":"test@writersmoke.invalid","password":"test1234"}`)
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", loginBody)
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d; body = %s", loginRec.Code, http.StatusOK, loginRec.Body.String())
 	}
-	var regResp struct {
+	var loginResp struct {
 		Token string `json:"token"`
 	}
-	if err := json.NewDecoder(regRec.Body).Decode(&regResp); err != nil {
-		t.Fatalf("decode register response: %v", err)
+	if err := json.NewDecoder(loginRec.Body).Decode(&loginResp); err != nil {
+		t.Fatalf("decode login response: %v", err)
 	}
-	if regResp.Token == "" {
-		t.Fatal("register response token is empty")
+	if loginResp.Token == "" {
+		t.Fatal("login response token is empty")
 	}
 
 	// Authenticated request succeeds.
@@ -64,11 +67,80 @@ func TestBuildDependenciesRequiresAuthForProjectRoutes(t *testing.T) {
 		"title": "Elysium",
 		"language": "en"
 	}`))
-	req.Header.Set("Authorization", "Bearer "+regResp.Token)
+	req.Header.Set("Authorization", "Bearer "+loginResp.Token)
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("authenticated status = %d, want %d; body = %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+}
+
+func TestBuildDependenciesBootstrapsSingleUserFromEnv(t *testing.T) {
+	t.Setenv("OPEN_EDDA_DB_PATH", filepath.Join(t.TempDir(), "edda.db"))
+	t.Setenv("OPEN_EDDA_MIGRATIONS_PATH", "migrations")
+	t.Setenv("OPEN_EDDA_JWT_SECRET", "test-secret-32-bytes-minimum-value")
+	t.Setenv("OPEN_EDDA_BOOTSTRAP_EMAIL", "solo@writersmoke.invalid")
+	t.Setenv("OPEN_EDDA_BOOTSTRAP_PASSWORD", "solo-password")
+	staticPath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(staticPath, "index.html"), []byte("<!doctype html><html></html>"), 0o644); err != nil {
+		t.Fatalf("write static index: %v", err)
+	}
+	t.Setenv("OPEN_EDDA_STATIC_PATH", staticPath)
+
+	deps, cleanup, err := buildDependencies()
+	if err != nil {
+		t.Fatalf("build dependencies: %v", err)
+	}
+	defer cleanup()
+
+	handler := app.New(deps)
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewBufferString(`{
+		"email": "solo@writersmoke.invalid",
+		"password": "solo-password"
+	}`))
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d; body = %s", loginRec.Code, http.StatusOK, loginRec.Body.String())
+	}
+	var loginResp struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(loginRec.Body).Decode(&loginResp); err != nil {
+		t.Fatalf("decode login response: %v", err)
+	}
+	if loginResp.Token == "" {
+		t.Fatal("login response token is empty")
+	}
+}
+
+func TestPublicRegistrationRouteIsDisabled(t *testing.T) {
+	t.Setenv("OPEN_EDDA_DB_PATH", filepath.Join(t.TempDir(), "edda.db"))
+	t.Setenv("OPEN_EDDA_MIGRATIONS_PATH", "migrations")
+	t.Setenv("OPEN_EDDA_JWT_SECRET", "test-secret-32-bytes-minimum-value")
+	staticPath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(staticPath, "index.html"), []byte("<!doctype html><html></html>"), 0o644); err != nil {
+		t.Fatalf("write static index: %v", err)
+	}
+	t.Setenv("OPEN_EDDA_STATIC_PATH", staticPath)
+
+	deps, cleanup, err := buildDependencies()
+	if err != nil {
+		t.Fatalf("build dependencies: %v", err)
+	}
+	defer cleanup()
+
+	handler := app.New(deps)
+	regReq := httptest.NewRequest(http.MethodPost, "/api/auth/register", bytes.NewBufferString(`{
+		"email": "new@writersmoke.invalid",
+		"password": "test1234"
+	}`))
+	regRec := httptest.NewRecorder()
+	handler.ServeHTTP(regRec, regReq)
+
+	if regRec.Code != http.StatusNotFound {
+		t.Fatalf("register status = %d, want %d; body = %s", regRec.Code, http.StatusNotFound, regRec.Body.String())
 	}
 }
 
@@ -89,8 +161,14 @@ func TestBuildDependenciesRejectsCrossAuthorProjectAccess(t *testing.T) {
 	defer cleanup()
 
 	handler := app.New(deps)
-	authorAToken := registerTestAuthor(t, handler, "author-a@writersmoke.invalid")
-	authorBToken := registerTestAuthor(t, handler, "author-b@writersmoke.invalid")
+	if _, err := deps.AuthService.Register(context.Background(), "author-a@writersmoke.invalid", "test1234"); err != nil {
+		t.Fatalf("seed author A: %v", err)
+	}
+	if _, err := deps.AuthService.Register(context.Background(), "author-b@writersmoke.invalid", "test1234"); err != nil {
+		t.Fatalf("seed author B: %v", err)
+	}
+	authorAToken := loginTestAuthor(t, handler, "author-a@writersmoke.invalid", "test1234")
+	authorBToken := loginTestAuthor(t, handler, "author-b@writersmoke.invalid", "test1234")
 
 	createReq := httptest.NewRequest(http.MethodPost, "/api/projects", bytes.NewBufferString(`{
 		"title": "A Private Story",
@@ -122,6 +200,8 @@ func TestBuildDependenciesRejectsWrongPassword(t *testing.T) {
 	t.Setenv("OPEN_EDDA_DB_PATH", filepath.Join(t.TempDir(), "edda.db"))
 	t.Setenv("OPEN_EDDA_MIGRATIONS_PATH", "migrations")
 	t.Setenv("OPEN_EDDA_JWT_SECRET", "test-secret-32-bytes-minimum-value")
+	t.Setenv("OPEN_EDDA_BOOTSTRAP_EMAIL", "test2@writersmoke.invalid")
+	t.Setenv("OPEN_EDDA_BOOTSTRAP_PASSWORD", "test1234")
 	staticPath := t.TempDir()
 	if err := os.WriteFile(filepath.Join(staticPath, "index.html"), []byte("<!doctype html><html></html>"), 0o644); err != nil {
 		t.Fatalf("write static index: %v", err)
@@ -136,15 +216,6 @@ func TestBuildDependenciesRejectsWrongPassword(t *testing.T) {
 
 	handler := app.New(deps)
 
-	// Register a user.
-	regBody := bytes.NewBufferString(`{"email":"test2@writersmoke.invalid","password":"test1234"}`)
-	regReq := httptest.NewRequest(http.MethodPost, "/api/auth/register", regBody)
-	regRec := httptest.NewRecorder()
-	handler.ServeHTTP(regRec, regReq)
-	if regRec.Code != http.StatusCreated {
-		t.Fatalf("register status = %d, want %d; body = %s", regRec.Code, http.StatusCreated, regRec.Body.String())
-	}
-
 	// Wrong password.
 	loginBody := bytes.NewBufferString(`{"email":"test2@writersmoke.invalid","password":"wrong"}`)
 	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", loginBody)
@@ -155,27 +226,27 @@ func TestBuildDependenciesRejectsWrongPassword(t *testing.T) {
 	}
 }
 
-func registerTestAuthor(t *testing.T, handler http.Handler, email string) string {
+func loginTestAuthor(t *testing.T, handler http.Handler, email string, password string) string {
 	t.Helper()
-	regReq := httptest.NewRequest(http.MethodPost, "/api/auth/register", bytes.NewBufferString(`{
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewBufferString(`{
 		"email": "`+email+`",
-		"password": "test1234"
+		"password": "`+password+`"
 	}`))
-	regRec := httptest.NewRecorder()
-	handler.ServeHTTP(regRec, regReq)
-	if regRec.Code != http.StatusCreated {
-		t.Fatalf("register %s status = %d, want %d; body = %s", email, regRec.Code, http.StatusCreated, regRec.Body.String())
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login %s status = %d, want %d; body = %s", email, loginRec.Code, http.StatusOK, loginRec.Body.String())
 	}
-	var regResp struct {
+	var loginResp struct {
 		Token string `json:"token"`
 	}
-	if err := json.NewDecoder(regRec.Body).Decode(&regResp); err != nil {
-		t.Fatalf("decode register response: %v", err)
+	if err := json.NewDecoder(loginRec.Body).Decode(&loginResp); err != nil {
+		t.Fatalf("decode login response: %v", err)
 	}
-	if regResp.Token == "" {
-		t.Fatalf("register %s returned empty token", email)
+	if loginResp.Token == "" {
+		t.Fatalf("login %s returned empty token", email)
 	}
-	return regResp.Token
+	return loginResp.Token
 }
 
 func TestBuildDependenciesRequiresFrontendBuild(t *testing.T) {

@@ -6,10 +6,6 @@ import type { AppDispatch, RootState } from "../../app/store/store";
 import { Button } from "../../shared/ui/button";
 import { Textarea } from "../../shared/ui/textarea";
 import { ModelStatus } from "../model-settings/ModelStatus";
-import { SkillChipsPanel } from "../skills/SkillChipsPanel";
-import { SkillsPanel } from "../skills/SkillsPanel";
-import { skillsActions } from "../skills/skillsSlice";
-import { loadProjectSkills, loadSessionSkills } from "../skills/skillsThunks";
 import { assistantActions } from "./assistantSlice";
 import {
   loadAssistantMessages,
@@ -34,7 +30,6 @@ export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
     sessions,
     sessionsStatus,
   } = useSelector((state: RootState) => state.assistant);
-  const { projectId: skillsProjectId, skillsStatus } = useSelector((state: RootState) => state.skills);
   const activeModelVariantId = useSelector((state: RootState) => state.modelSettings.activeModelVariantId);
   const activeSession = sessions.find((session) => session.id === activeSessionId && session.projectId === projectId) ?? null;
   const activeSessionIdForProject = activeSession?.id ?? null;
@@ -54,18 +49,10 @@ export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
   }, [assistantProjectId, dispatch, projectId, sessionsStatus]);
 
   useEffect(() => {
-    if (skillsProjectId !== projectId || skillsStatus === "idle") {
-      void dispatch(loadProjectSkills({ projectId }));
-    }
-  }, [dispatch, projectId, skillsProjectId, skillsStatus]);
-
-  useEffect(() => {
     if (!activeSessionIdForProject) {
-      dispatch(skillsActions.clearSessionSelection());
       return;
     }
     void dispatch(loadAssistantMessages({ projectId, sessionId: activeSessionIdForProject }));
-    void dispatch(loadSessionSkills({ projectId, sessionId: activeSessionIdForProject }));
   }, [activeSessionIdForProject, dispatch, projectId]);
 
   function handleNewChat(): void {
@@ -144,6 +131,8 @@ export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
 
         <div className="flex flex-col gap-2">
           <Textarea
+            id="assistant-message"
+            name="assistant-message"
             value={draftMessage}
             onChange={(event) => dispatch(assistantActions.setDraftMessage(event.target.value))}
             placeholder="Message the assistant..."
@@ -176,8 +165,6 @@ export function AssistantDrawer({ projectId }: AssistantDrawerProps) {
         </p>
       </section>
 
-      <SkillChipsPanel />
-      <SkillsPanel projectId={projectId} sessionId={activeSessionIdForProject} />
       <ModelStatus />
     </aside>
   );

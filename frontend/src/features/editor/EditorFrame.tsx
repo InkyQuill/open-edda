@@ -1,21 +1,24 @@
-import { ClipboardCheck, FileText, MessageSquarePlus, PenLine } from "lucide-react";
-import { useEffect, useState, type SyntheticEvent } from "react";
+import { ClipboardCheck, FileText, MessageSquarePlus, PenLine, Save } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { GalleyEditor, type GalleyMode } from "@inky/galley-editor";
 
-import { textareaSelectionToByteRange, utf8ByteLength } from "../../shared/lib/byteOffsets";
+import { updateContent } from "../../api";
 import { Button } from "../../shared/ui/button";
-import { Textarea } from "../../shared/ui/textarea";
 import type { ContentItem } from "../../types";
 import type { WorkspaceMode } from "../workspace/workspaceSlice";
+import { createGalleyEditorSnapshot, type GalleySelectionSnapshot } from "./editorAdapter";
 import { GenerateComposer } from "./GenerateComposer";
 import { SelectionActionDialog } from "./SelectionActionDialog";
 import { editorActions, type EditorActionKind, type EditorState } from "./editorSlice";
 
 export type EditorFrameProps = {
+  projectId: string;
   content: ContentItem | null;
   mode: WorkspaceMode;
   contentLoading?: boolean;
   contentError?: string | null;
+  onContentSaved: (content: ContentItem) => void;
 };
 
 type EditorFrameRootState = {
@@ -31,6 +34,12 @@ const actionButtons: Array<{
   { kind: "check", label: "Check", icon: ClipboardCheck },
   { kind: "note", label: "Note", icon: MessageSquarePlus },
 ];
+
+const workspaceModeToGalleyMode: Record<WorkspaceMode, GalleyMode> = {
+  draft: "live",
+  assistant: "live",
+  review: "preview",
+};
 
 function formatKind(kind: ContentItem["kind"]): string {
   return kind.replaceAll("_", " ");
@@ -57,29 +66,86 @@ function SelectionActions({ className }: { className: string }) {
   );
 }
 
-export function EditorFrame({ content, mode, contentLoading = false, contentError = null }: EditorFrameProps) {
+export function EditorFrame({
+  projectId,
+  content,
+  mode,
+  contentLoading = false,
+  contentError = null,
+  onContentSaved,
+}: EditorFrameProps) {
   const dispatch = useDispatch();
-  const selection = useSelector((state: EditorFrameRootState) => state.editor.selection);
+  const editor = useSelector((state: EditorFrameRootState) => state.editor);
   const [generateStatus, setGenerateStatus] = useState<string | null>(null);
-  const body = content?.bodyMarkdown ?? "";
+  const contextMatchesContent =
+    editor.contentContext?.projectId === projectId && editor.contentContext.contentId === content?.id;
+  const selection = contextMatchesContent ? editor.selection : null;
+  const draftMarkdown = contextMatchesContent ? editor.draftMarkdown : (content?.bodyMarkdown ?? "");
+  const dirty = contextMatchesContent && editor.dirty;
+  const saveStatus = contextMatchesContent ? editor.saveStatus : "idle";
+  const generateDisabled = !content || !contextMatchesContent || editor.cursorByte === null;
+  const generateHelperText = !content
+    ? "Select content before generating."
+    : editor.cursorByte === null
+      ? "Place the cursor in the draft before generating."
+      : `Ready at byte ${editor.cursorByte} on revision ${editor.contentContext?.revision ?? content.currentRevision}.`;
 
   useEffect(() => {
-    dispatch(editorActions.resetEditorContext());
-  }, [content?.id, content?.currentRevision, body, dispatch]);
-
-  function handleSelect(event: SyntheticEvent<HTMLTextAreaElement>) {
-    const textarea = event.currentTarget;
-    const { selectionStart, selectionEnd, value } = textarea;
-    if (value.length === 0) {
-      dispatch(editorActions.setCursorByte(null));
-      dispatch(editorActions.setSelection(null));
+    if (!content) {
+      dispatch(editorActions.resetEditorContext());
       return;
     }
-    const cursorByte = utf8ByteLength(value.slice(0, selectionStart));
-    const byteRange = textareaSelectionToByteRange(value, selectionStart, selectionEnd);
+    dispatch(
+      editorActions.hydrateEditorContext({
+        projectId,
+        contentId: content.id,
+        contentKind: content.kind,
+        revision: content.currentRevision,
+        bodyMarkdown: content.bodyMarkdown,
+      }),
+    );
+  }, [content?.bodyMarkdown, content?.currentRevision, content?.id, content?.kind, dispatch, projectId]);
 
-    dispatch(editorActions.setCursorByte(cursorByte));
-    dispatch(editorActions.setSelection(byteRange));
+  function handleSelectionChange(galleySelection: GalleySelectionSnapshot) {
+    const snapshot = createGalleyEditorSnapshot(editor.draftMarkdown, galleySelection);
+
+    dispatch(editorActions.setCursorByte(snapshot.cursorByte));
+    dispatch(editorActions.setSelection(snapshot.selection));
+  }
+
+  async function handleSave(): Promise<void> {
+    if (!content || !contextMatchesContent || !editor.contentContext || editor.saveStatus === "pending") return;
+
+    dispatch(editorActions.saveStarted());
+    try {
+      const saved = await updateContent(projectId, content.id, {
+        expectedRevision: editor.contentContext.revision,
+        bodyMarkdown: editor.draftMarkdown,
+        metadataJson: content.metadataJson,
+        reason: "editor save",
+      });
+      dispatch(
+        editorActions.saveSucceeded({
+          revision: saved.currentRevision,
+          bodyMarkdown: saved.bodyMarkdown,
+        }),
+      );
+      onContentSaved(saved);
+    } catch (cause: unknown) {
+      dispatch(editorActions.saveFailed(cause instanceof Error ? cause.message : "Could not save content"));
+    }
+  }
+
+  function handleGenerate(): void {
+    if (!content || !contextMatchesContent || !editor.contentContext) {
+      setGenerateStatus("Select content before generating.");
+      return;
+    }
+    if (editor.cursorByte === null) {
+      setGenerateStatus("Place the cursor in the draft before generating.");
+      return;
+    }
+    setGenerateStatus(`Generate is ready for revision ${editor.contentContext.revision} at byte ${editor.cursorByte}.`);
   }
 
   if (contentLoading) {
@@ -121,19 +187,48 @@ export function EditorFrame({ content, mode, contentLoading = false, contentErro
           <span className="capitalize">{mode} mode</span>
         </div>
         <h2 className="text-2xl font-semibold text-foreground">{content.title}</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={!dirty || saveStatus === "pending"}
+            onClick={() => {
+              void handleSave();
+            }}
+          >
+            <Save data-icon="inline-start" aria-hidden="true" />
+            {saveStatus === "pending" ? "Saving" : "Save"}
+          </Button>
+          {dirty ? <span className="text-xs text-muted-foreground">Unsaved changes</span> : null}
+          {saveStatus === "succeeded" ? <span className="text-xs text-muted-foreground">Saved</span> : null}
+          {saveStatus === "failed" ? (
+            <span role="alert" className="text-xs text-destructive">
+              {editor.saveError}
+            </span>
+          ) : null}
+        </div>
       </header>
 
       <div className="relative">
         {selection ? (
           <SelectionActions className="selection-bubble absolute right-2 top-2 z-10 hidden items-center gap-2 rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-md md:flex" />
         ) : null}
-        <Textarea
-          readOnly
-          value={body}
-          onSelect={handleSelect}
+        <GalleyEditor
+          value={draftMarkdown}
+          onChange={(nextValue) => dispatch(editorActions.setDraftMarkdown(nextValue))}
+          onSelectionChange={handleSelectionChange}
           placeholder="No draft text yet."
-          className="min-h-[48dvh] resize-none bg-background text-sm leading-7 text-foreground"
-          aria-label={`${content.title} draft text`}
+          ariaLabel={`${content.title} draft text`}
+          mode={workspaceModeToGalleyMode[mode]}
+          minRows={18}
+          className="open-edda-galley"
+          surface={{
+            className: "open-edda-galley-surface",
+            contentPadding: "1rem",
+            toolbarPadding: "0.5rem 0.75rem",
+            footerPadding: "0.5rem 0.75rem",
+          }}
         />
       </div>
 
@@ -141,7 +236,7 @@ export function EditorFrame({ content, mode, contentLoading = false, contentErro
         <SelectionActions className="mobile-selection-toolbar sticky bottom-2 z-10 flex items-center justify-center gap-2 rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-md md:hidden" />
       ) : null}
 
-      <GenerateComposer disabled={!content} onGenerate={() => setGenerateStatus("Generate wiring is next")} />
+      <GenerateComposer disabled={generateDisabled} helperText={generateHelperText} onGenerate={handleGenerate} />
       {generateStatus ? <p className="text-sm text-muted-foreground">{generateStatus}</p> : null}
       <SelectionActionDialog />
     </article>

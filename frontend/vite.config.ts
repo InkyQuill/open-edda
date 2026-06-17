@@ -3,12 +3,27 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath } from "node:url";
 
+const peerDedupe = [
+  "react",
+  "react-dom",
+  "react/jsx-runtime",
+  "@codemirror/commands",
+  "@codemirror/lang-markdown",
+  "@codemirror/language",
+  "@codemirror/state",
+  "@codemirror/view",
+  "@lezer/common",
+  "@lezer/highlight",
+  "@lezer/markdown",
+];
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
+    dedupe: peerDedupe,
   },
   server: {
     proxy: {

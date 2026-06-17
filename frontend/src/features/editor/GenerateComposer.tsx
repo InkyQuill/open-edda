@@ -11,10 +11,11 @@ type GenerateComposerRootState = {
 
 type GenerateComposerProps = {
   disabled: boolean;
+  helperText: string;
   onGenerate: () => void;
 };
 
-export function GenerateComposer({ disabled, onGenerate }: GenerateComposerProps) {
+export function GenerateComposer({ disabled, helperText, onGenerate }: GenerateComposerProps) {
   const dispatch = useDispatch();
   const instructions = useSelector(
     (state: GenerateComposerRootState) => state.editor.generateInstructions,
@@ -23,6 +24,8 @@ export function GenerateComposer({ disabled, onGenerate }: GenerateComposerProps
   return (
     <section className="flex flex-col gap-3 border-t border-border pt-5" aria-label="Generate">
       <Textarea
+        id="generate-instructions"
+        name="generate-instructions"
         value={instructions}
         onChange={(event) => dispatch(editorActions.setGenerateInstructions(event.target.value))}
         aria-label="Generate instructions"
@@ -31,9 +34,7 @@ export function GenerateComposer({ disabled, onGenerate }: GenerateComposerProps
         className="min-h-24 resize-y bg-background"
       />
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">
-          {disabled ? "Select content before generating." : "Generation will use the current draft context."}
-        </p>
+        <p className="text-xs text-muted-foreground">{helperText}</p>
         <Button type="button" disabled={disabled} onClick={onGenerate}>
           <Sparkles data-icon="inline-start" aria-hidden="true" />
           Generate

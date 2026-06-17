@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@inky/galley-editor/style.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -203,6 +204,29 @@ select {
 
 .editor-action-preview {
   overflow-wrap: anywhere;
+}
+
+.open-edda-galley {
+  min-width: 0;
+}
+
+.open-edda-galley-surface {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+}
+
+.open-edda-galley .cm-editor {
+  min-height: 48dvh;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 0.95rem;
+  line-height: 1.75;
+}
+
+.open-edda-galley .cm-content {
+  font-family: var(--font-sans);
 }
 
 @media (max-width: 760px) {

@@ -113,13 +113,15 @@ Acceptance target:
 
 ## Milestone 4: Daily Writing Polish
 
-Editor ergonomics, mobile-friendly layouts, side-panel Attached Notes, better diff/restore UI, export polish, provider disclosure polish, and model-switching UX.
+Editor ergonomics, mobile-friendly layouts, system settings, project/content creation flows, side-panel Attached Notes, better diff/restore UI, export polish, provider disclosure polish, and assistant chat UX.
 
 Acceptance target:
 
 - The Writing Workspace feels usable for daily chapter work, not just API validation.
 - Selection/cursor workflows are comfortable on desktop and tablet, with phone support for reading, chat, small edits, and triggering actions.
-- Revision review, attached notes, model switching, and provider disclosure are visible without dominating the writing surface.
+- Revision review, attached notes, model availability, and provider disclosure are visible without dominating the writing surface.
+- Provider configuration, model catalog selection, and skill administration live in system/project settings, not in the writing workspace's assistant drawer.
+- Assistant mode keeps the right panel focused on chat only.
 
 ### Milestone 4 Phase Tracker
 
@@ -128,9 +130,10 @@ Detailed design context lives in `docs/superpowers/specs/2026-06-14-milestone-4-
 | Phase | Scope | Status | Plan |
 | --- | --- | --- | --- |
 | 1 | Routed workspace foundation: React Router, Redux, Tailwind v4, shadcn/ui, responsive shell, editor-local action shells | Implemented | `docs/superpowers/plans/2026-06-14-milestone-4-workspace-foundation.md` |
-| 2 | Behavior parity and data slices: move old monolithic assistant/settings/skills/activity behavior into routed vertical slices | Planned | `docs/superpowers/plans/2026-06-14-milestone-4-behavior-parity.md` |
-| 3 | Editor adapter: replace read-only textarea assumptions with an editor boundary prepared for Galley integration and mutation-safe cursor/selection APIs | Planned | Create after Phase 2 is implemented |
-| 4 | Assistant actions: wire Generate, Rewrite, Check, preview, accept/reject, and revision-safe conflict handling from the editor-local controls | Planned | Create after Phase 3 is implemented |
+| 2 | Behavior parity and data slices: move old monolithic assistant/settings/skills/activity behavior into routed vertical slices | Implemented | `docs/superpowers/plans/2026-06-14-milestone-4-behavior-parity.md` |
+| 3 | Editor adapter: replace read-only textarea assumptions with an editor boundary prepared for Galley integration and mutation-safe cursor/selection APIs | Implemented | `docs/superpowers/plans/2026-06-17-milestone-4-editor-adapter.md` |
+| 3.5 | Information architecture correction: move provider/model/skill administration to settings, make assistant drawer chat-only, add project/content creation controls, and redesign the projects page | Planned | `docs/superpowers/plans/2026-06-17-milestone-4-system-settings-and-ia.md` |
+| 4 | Assistant actions: wire Generate, Rewrite, Check, preview, accept/reject, and revision-safe conflict handling from the editor-local controls | Planned | Create after Phase 3.5 is implemented |
 | 5 | Review surfaces: revisions, diff/restore, attached notes, activity, prompt records, and review-oriented drawer workflows | Planned | Create after Phase 4 is implemented |
 | 6 | Mobile and browser smoke hardening: sheet behavior, persistence, responsive ergonomics, and Playwright/browser coverage | Planned | Create after Phase 5 is implemented |
 
