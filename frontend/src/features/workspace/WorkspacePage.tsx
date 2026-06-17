@@ -98,6 +98,10 @@ export function WorkspacePage() {
   }, [dispatch, routeContentKind]);
 
   useEffect(() => {
+    abortPendingCreate();
+  }, [routeContentKind, contentId]);
+
+  useEffect(() => {
     setContentCreating(false);
 
     return () => {
@@ -184,6 +188,14 @@ export function WorkspacePage() {
     }
   }
 
+  function abortPendingCreate(): void {
+    const abortController = createAbortControllerRef.current;
+    if (!abortController) return;
+    abortController.abort();
+    createAbortControllerRef.current = null;
+    setContentCreating(false);
+  }
+
   function handleCreateContent(kind: ContentKind): void {
     if (!projectId || contentCreating || contentLoading) return;
     const nextNumber = contentItems.filter((item) => item.kind === kind).length + 1;
@@ -202,6 +214,10 @@ export function WorkspacePage() {
     }, abortController.signal)
       .then((item) => {
         if (abortController.signal.aborted) return;
+        if (createAbortControllerRef.current === abortController) {
+          createAbortControllerRef.current = null;
+        }
+        setContentCreating(false);
         setContentItems((items) => [...items, item]);
         dispatch(workspaceActions.setLastContentKind(item.kind));
         dispatch(workspaceActions.setFallbackContentId(item.id));
@@ -223,6 +239,7 @@ export function WorkspacePage() {
 
   function handleSelectContent(item: ContentItem): void {
     if (!projectId) return;
+    abortPendingCreate();
     dispatch(workspaceActions.setFallbackContentId(item.id));
     navigate(
       `/projects/${encodeURIComponent(projectId)}/content/${encodeURIComponent(item.kind)}/${encodeURIComponent(item.id)}`,
@@ -231,6 +248,7 @@ export function WorkspacePage() {
 
   function handleContentKindChange(kind: ContentKind): void {
     if (!projectId) return;
+    abortPendingCreate();
     dispatch(workspaceActions.setLastContentKind(kind));
     navigate(`/projects/${encodeURIComponent(projectId)}`);
   }
