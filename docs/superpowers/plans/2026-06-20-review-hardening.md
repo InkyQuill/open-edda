@@ -791,7 +791,7 @@ git commit -m "fix: cap JSON request bodies"
 - Modify: `auth/http.go`
 - Modify: `auth/http_test.go`
 
-- [ ] **Step 1: Write failing login limiter test**
+- [x] **Step 1: Write failing login limiter test**
 
 Add to `auth/http_test.go`:
 
@@ -825,7 +825,7 @@ func TestLoginRateLimiterReturnsTooManyRequests(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run:
 
@@ -835,7 +835,7 @@ go test ./auth -run TestLoginRateLimiterReturnsTooManyRequests -count=1
 
 Expected: FAIL because the sixth login attempt is not throttled.
 
-- [ ] **Step 3: Implement process-local limiter**
+- [x] **Step 3: Implement process-local limiter**
 
 In `auth/http.go`, add imports:
 
@@ -918,7 +918,7 @@ At the start of `login`, before decoding:
 	}
 ```
 
-- [ ] **Step 4: Run auth tests**
+- [x] **Step 4: Run auth tests**
 
 Run:
 
@@ -928,7 +928,7 @@ go test ./auth -run 'TestLogin|Test.*RateLimiter' -count=1
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add auth/http.go auth/http_test.go
