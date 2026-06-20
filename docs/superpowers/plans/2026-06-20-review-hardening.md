@@ -35,7 +35,7 @@
 - Create: `internal/crypto/apikey.go`
 - Create: `internal/crypto/apikey_test.go`
 
-- [ ] **Step 1: Write failing tests for encryption format, round trip, legacy fallback, and wrong-secret failure**
+- [x] **Step 1: Write failing tests for encryption format, round trip, legacy fallback, and wrong-secret failure**
 
 Create `internal/crypto/apikey_test.go`:
 
@@ -116,7 +116,7 @@ func TestEncryptAPIKeyFallsBackForEmptySecret(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run:
 
@@ -126,7 +126,7 @@ go test ./internal/crypto
 
 Expected: FAIL because `EncryptAPIKey`, `DecryptAPIKey`, and `encryptedAPIKeyPrefix` do not exist.
 
-- [ ] **Step 3: Implement the helper**
+- [x] **Step 3: Implement the helper**
 
 Create `internal/crypto/apikey.go`:
 
@@ -212,7 +212,7 @@ func deriveAPIKeyEncryptionKey(jwtSecret string) [32]byte {
 }
 ```
 
-- [ ] **Step 4: Run helper tests**
+- [x] **Step 4: Run helper tests**
 
 Run:
 
@@ -222,7 +222,7 @@ go test ./internal/crypto
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/crypto/apikey.go internal/crypto/apikey_test.go
