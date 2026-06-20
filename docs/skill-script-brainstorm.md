@@ -8,8 +8,8 @@ This document outlines the architectural brainstorm for exposing database contex
 
 To prevent scripts from directly querying the database (which could lead to SQL injection, privilege escalation, or cross-project data exposure), we enforce the **JSON Input Envelope** pattern.
 
-1. **Pre-Fetched Envelopes:** The Go backend (via [Service.RunScript](file:///home/inky/Development/writer/skill/script_runtime.go#L122)) queries the SQLite store for the precise records requested (e.g., specific chapters, notes, or world-bible entries).
-2. **Stdin Stream:** This data is marshaled into a standard [Envelope](file:///home/inky/Development/writer/skill/runtime/types.go#L521) JSON schema and passed to the script's `stdin`.
+1. **Pre-Fetched Envelopes:** The Go backend (via [Service.RunScript](skill/script_runtime.go#L122)) queries the SQLite store for the precise records requested (e.g., specific chapters, notes, or world-bible entries).
+2. **Stdin Stream:** This data is marshaled into a standard [Envelope](skill/runtime/types.go#L521) JSON schema and passed to the script's `stdin`.
 3. **No Direct Connections:** Scripts do not receive a database DSN, connection pool, or raw file path to the database. They operate purely on memory representations passed via `stdin`.
 
 ### Gap: Content body text is not included in the envelope
@@ -43,7 +43,7 @@ type ContentInput struct {
 The Go backend would fetch each content item by ID (reusing the existing project-service access checks) and include its full body in the envelope. The `skill_script` tool arguments from the agent would specify `contentIds` (which content to load), and the backend resolves them into `ContentItems` before calling the runner.
 
 **Considerations:**
-- Body text can be very large (100k-word manuscripts). The envelope should enforce a configurable per-item byte limit and a total envelope size limit (e.g., 2 MB). If a content item exceeds the limit, include a truncation marker and the item's metadata so the script knows it got a partial view.
+- Body text can exceed 100k words. The envelope should enforce a configurable per-item byte limit and a total envelope size limit (e.g., 2 MB). If a content item exceeds the limit, include a truncation marker and the item's metadata so the script knows it got a partial view.
 - `ContentIDs` should remain for backward compatibility with scripts that only need the ID list (e.g., to count items). New scripts should use `ContentItems`.
 - The `buildScriptEnvelope` method in `script_runtime.go` currently validates that content IDs exist but doesn't fetch body text. This is where the change would land.
 
@@ -59,8 +59,8 @@ Instead of always including body text, the agent could pass `includeBody: true` 
 
 To ensure scripts cannot damage the story or project repository:
 
-1. **Ephemeral Working Directory:** Scripts run inside a temporary folder (e.g., `/tmp/open-edda-skill-script-*`) which is recursively deleted immediately upon execution (see [Runner.Run](file:///home/inky/Development/writer/skill/runtime/runner.go#L45-L50)).
-2. **Proposal-Only Outputs:** Scripts return a JSON envelope on `stdout`. The backend validates the payload against a strict schema (e.g., `ScriptOutput` in [runner.go](file:///home/inky/Development/writer/skill/runtime/runner.go#L117-L135)).
+1. **Ephemeral Working Directory:** Scripts run inside a temporary folder (e.g., `/tmp/open-edda-skill-script-*`) which is recursively deleted immediately upon execution (see [Runner.Run](skill/runtime/runner.go#L45-L50)).
+2. **Proposal-Only Outputs:** Scripts return a JSON envelope on `stdout`. The backend validates the payload against a strict schema (e.g., `ScriptOutput` in [runner.go](skill/runtime/runner.go#L117-L135)).
 3. **Review Queues:** Scripts are strictly forbidden from directly updating database records. All modifications are parsed as **Proposals** (e.g., `proposals` array) and sent to a review queue where the author must explicitly accept or reject them.
 
 ### Gap: Proposal format is too narrow for generated-data scripts
@@ -91,9 +91,11 @@ A script receiving a content ID might determine that it also needs related conte
 To protect the host system from untrusted script execution:
 
 * **Deno Permission Sandbox (Recommended):** Since **96% of the original scripts** are written in Deno TypeScript, we can execute Deno with strict permission flags:
+
   ```bash
   deno run --no-net --allow-read=/tmp/workdir --allow-write=/tmp/workdir script.ts
   ```
+
   This isolates filesystem access and blocks network socket creation natively.
 * **WebAssembly (WASM) Isolation:** Compile script runtimes into WebAssembly modules and run them via a WASI-compliant engine (like Wasmtime), preventing host system access entirely.
 * **Linux Namespaces:** Spawn commands using `unshare` to restrict PID, mount, and network namespaces.
@@ -105,7 +107,7 @@ The current `Runner` uses `sh -c` to execute whatever `RuntimeCommand` is stored
 
 This means the approval system needs to store the **complete command** including Deno flags. The admin approving the script would see something like:
 
-```
+```bash
 deno run --no-net --allow-read --allow-write=/tmp script.ts
 ```
 
@@ -129,7 +131,7 @@ While many diagnostic scripts can be converted to prompt instructions, several a
 
 | Script / Pipeline | Original Path | Why it Cannot be Prompt-Based |
 | --- | --- | --- |
-| **Graphviz Rendering** | [render-graphs.js](file:///home/inky/Development/writer/docs/skills/important/writing-skills/render-graphs.js) | Requires executing the `dot` CLI compiler to output physical SVG image files. |
+| **Graphviz Rendering** | [render-graphs.js](docs/skills/important/writing-skills/render-graphs.js) | Requires executing the `dot` CLI compiler to output physical SVG files. |
 | **Phonology & Combinatorial Lexicons** | `conlang/scripts/words.ts` | Generating thousands of unique words conforming to strict mathematical syllable constraints (e.g., `(C)V(C)`) is slow, expensive, and error-prone for LLMs. |
 | **Statistical Prose Metrics** | `craft/prose-style/scripts/rhythm.ts` | Exact calculations of sentence length variance and standard deviation are highly inaccurate in LLMs due to tokenization. Heuristics are better computed in code. |
 | **Batch Document Pipelines** | `structure/reverse-outliner/scripts/reverse-outline.ts` | Sequencing multi-step analysis across an entire 100k-word manuscript exceeds LLM context windows. It requires scripts to batch, save intermediate JSON, and coordinate API calls. |

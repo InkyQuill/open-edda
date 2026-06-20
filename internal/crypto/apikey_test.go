@@ -90,16 +90,20 @@ func TestDecryptAPIKeyRejectsMalformedPrefixedCiphertext(t *testing.T) {
 	}
 }
 
-func TestEncryptAPIKeyFallsBackForEmptySecret(t *testing.T) {
-	ciphertext, err := EncryptAPIKey("test-secret", "")
+func TestEncryptAPIKeyRejectsMissingSecret(t *testing.T) {
+	_, err := EncryptAPIKey("test-secret", "")
+	if !errors.Is(err, ErrMissingEncryptionSecret) {
+		t.Fatalf("EncryptAPIKey() error = %v, want ErrMissingEncryptionSecret", err)
+	}
+}
+
+func TestDecryptAPIKeyRejectsMissingSecretForEncryptedValue(t *testing.T) {
+	ciphertext, err := EncryptAPIKey("test-secret", "jwt-secret-32-bytes-minimum-value")
 	if err != nil {
 		t.Fatalf("EncryptAPIKey() error = %v", err)
 	}
-	plaintext, err := DecryptAPIKey(ciphertext, "")
-	if err != nil {
-		t.Fatalf("DecryptAPIKey() error = %v", err)
-	}
-	if plaintext != "test-secret" {
-		t.Fatalf("plaintext = %q, want test-secret", plaintext)
+	_, err = DecryptAPIKey(ciphertext, "")
+	if !errors.Is(err, ErrMissingEncryptionSecret) {
+		t.Fatalf("DecryptAPIKey() error = %v, want ErrMissingEncryptionSecret", err)
 	}
 }

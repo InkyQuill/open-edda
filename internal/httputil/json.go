@@ -45,6 +45,12 @@ func IsRequestTooLarge(err error) bool {
 	return errors.As(err, &maxBytesErr)
 }
 
+// RemoteIP returns the peer IP from RemoteAddr.
+//
+// It intentionally ignores X-Forwarded-For and X-Real-IP because those headers
+// are client-spoofable unless the server has an explicit trusted-proxy model.
+// Deployments behind a reverse proxy must rewrite RemoteAddr to the real client
+// IP before requests reach Open Edda, or add trusted-proxy handling here.
 func RemoteIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err == nil {

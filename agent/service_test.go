@@ -11,11 +11,14 @@ import (
 	"strings"
 	"testing"
 
+	edcrypto "git.inkyquill.net/inky/writer/internal/crypto"
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/skill"
 	"git.inkyquill.net/inky/writer/store"
 	"github.com/pressly/goose/v3"
 )
+
+const testEncryptionSecret = "test-api-key-encryption-secret-32"
 
 func TestContinuationDirectApplyAppendsGeneratedProseAndCreatesRevision(t *testing.T) {
 	db := openMigratedTestDB(t)
@@ -1357,6 +1360,7 @@ func TestRunChatTurnUsesDBProviderConfigWhenProviderNotInjected(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	service := NewService(db, projectService, nil)
+	service.SetEncryptionSecret(testEncryptionSecret)
 	provider, err := service.CreateProviderConfig(ctx, CreateProviderConfigInput{
 		AuthorID: "author-1",
 		Name:     "Runtime Provider",
@@ -1911,6 +1915,7 @@ func TestProviderConfigServiceSavesConfigsWithoutReturningAPIKey(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()
 	service := NewService(db, project.NewService(db), nil)
+	service.SetEncryptionSecret(testEncryptionSecret)
 
 	provider, err := service.CreateProviderConfig(ctx, CreateProviderConfigInput{
 		AuthorID: "author-1",
@@ -1958,6 +1963,13 @@ func TestProviderConfigServiceSavesConfigsWithoutReturningAPIKey(t *testing.T) {
 	if !strings.HasPrefix(storedKey, "edda:v1:") {
 		t.Fatalf("stored API key = %q, want encrypted edda:v1 prefix", storedKey)
 	}
+	decryptedKey, err := edcrypto.DecryptAPIKey(storedKey, testEncryptionSecret)
+	if err != nil {
+		t.Fatalf("decrypt stored API key: %v", err)
+	}
+	if decryptedKey != "secret-key" {
+		t.Fatalf("decrypted API key = %q, want secret-key", decryptedKey)
+	}
 }
 
 func TestProviderConfigLegacyPlaintextKeyStillWorks(t *testing.T) {
@@ -2001,6 +2013,7 @@ func TestModelVariantServiceSavesPricingCompatibilityAndProjectSelection(t *test
 	projectService := project.NewService(db)
 	storyProject := createTestProject(t, ctx, projectService, "author-1", "Provider Project")
 	service := NewService(db, projectService, nil)
+	service.SetEncryptionSecret(testEncryptionSecret)
 
 	provider, err := service.CreateProviderConfig(ctx, CreateProviderConfigInput{
 		AuthorID: "author-1",
@@ -2201,6 +2214,7 @@ func createChatTurnTestSessionWithModel(t *testing.T, ctx context.Context, servi
 
 func createTestProviderAndModel(t *testing.T, ctx context.Context, service *Service, authorID string) ModelVariant {
 	t.Helper()
+	service.SetEncryptionSecret(testEncryptionSecret)
 
 	provider, err := service.CreateProviderConfig(ctx, CreateProviderConfigInput{
 		AuthorID: authorID,

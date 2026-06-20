@@ -54,8 +54,8 @@ func (s *Service) SetSkillService(service SkillProvider) {
 	s.skillService = service
 }
 
-func (s *Service) SetEncryptionSecret(jwtSecret string) {
-	s.encryptionSecret = jwtSecret
+func (s *Service) SetEncryptionSecret(encryptionSecret string) {
+	s.encryptionSecret = encryptionSecret
 }
 
 func (s *Service) validateSelectedSkillIDs(ctx context.Context, projectID string, skillIDs []string) error {

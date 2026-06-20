@@ -15,17 +15,15 @@ import (
 const (
 	encryptedAPIKeyPrefix = "edda:v1:"
 	encryptionLabel       = "open-edda-api-key-encryption"
-
-	// devTestSecret is a dev/test-only fallback for call sites that have not
-	// been wired with configuration yet. Production must call SetEncryptionSecret
-	// with the configured JWT secret before encrypting or decrypting API keys.
-	devTestSecret = "test-encryption-key-for-edda-dev-only-32bytes"
 )
 
-var ErrInvalidCiphertext = errors.New("invalid encrypted API key")
+var (
+	ErrInvalidCiphertext       = errors.New("invalid encrypted API key")
+	ErrMissingEncryptionSecret = errors.New("API key encryption secret is not configured")
+)
 
-func EncryptAPIKey(plaintext, jwtSecret string) (string, error) {
-	gcm, err := apiKeyGCM(jwtSecret)
+func EncryptAPIKey(plaintext, encryptionSecret string) (string, error) {
+	gcm, err := apiKeyGCM(encryptionSecret)
 	if err != nil {
 		return "", err
 	}
@@ -37,7 +35,7 @@ func EncryptAPIKey(plaintext, jwtSecret string) (string, error) {
 	return encryptedAPIKeyPrefix + base64.StdEncoding.EncodeToString(sealed), nil
 }
 
-func DecryptAPIKey(value, jwtSecret string) (string, error) {
+func DecryptAPIKey(value, encryptionSecret string) (string, error) {
 	if !strings.HasPrefix(value, encryptedAPIKeyPrefix) {
 		return value, nil
 	}
@@ -46,7 +44,7 @@ func DecryptAPIKey(value, jwtSecret string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%w: decode ciphertext: %w", ErrInvalidCiphertext, err)
 	}
-	gcm, err := apiKeyGCM(jwtSecret)
+	gcm, err := apiKeyGCM(encryptionSecret)
 	if err != nil {
 		return "", err
 	}
@@ -62,8 +60,11 @@ func DecryptAPIKey(value, jwtSecret string) (string, error) {
 	return string(plaintext), nil
 }
 
-func apiKeyGCM(jwtSecret string) (cipher.AEAD, error) {
-	key := deriveAPIKeyEncryptionKey(jwtSecret)
+func apiKeyGCM(encryptionSecret string) (cipher.AEAD, error) {
+	if encryptionSecret == "" {
+		return nil, ErrMissingEncryptionSecret
+	}
+	key := deriveAPIKeyEncryptionKey(encryptionSecret)
 	block, err := aes.NewCipher(key[:])
 	if err != nil {
 		return nil, fmt.Errorf("create API key cipher: %w", err)
@@ -75,9 +76,6 @@ func apiKeyGCM(jwtSecret string) (cipher.AEAD, error) {
 	return gcm, nil
 }
 
-func deriveAPIKeyEncryptionKey(jwtSecret string) [32]byte {
-	if jwtSecret == "" {
-		jwtSecret = devTestSecret
-	}
-	return sha256.Sum256([]byte(encryptionLabel + jwtSecret))
+func deriveAPIKeyEncryptionKey(encryptionSecret string) [32]byte {
+	return sha256.Sum256([]byte(encryptionLabel + encryptionSecret))
 }

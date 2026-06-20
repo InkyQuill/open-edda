@@ -20,6 +20,7 @@ func TestProviderConfigHTTPEndpoints(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()
 	service := NewService(db, project.NewService(db), nil)
+	service.SetEncryptionSecret(testEncryptionSecret)
 	handler := newTestAgentHTTP(service)
 
 	provider := postJSON[ProviderConfig](t, handler, "/api/provider-configs", `{
@@ -411,6 +412,7 @@ func TestQuickActionHTTPValidationErrorsReturnBadRequest(t *testing.T) {
 func TestProviderAndModelHTTPValidationAndConflicts(t *testing.T) {
 	db := openMigratedTestDB(t)
 	service := NewService(db, project.NewService(db), nil)
+	service.SetEncryptionSecret(testEncryptionSecret)
 	handler := newTestAgentHTTP(service)
 
 	badProviderRequests := []string{
