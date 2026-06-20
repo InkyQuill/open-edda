@@ -943,7 +943,7 @@ git commit -m "fix: rate limit login attempts"
 - Modify: `auth/service.go`
 - Modify tests if any use `Service.Secret()`
 
-- [ ] **Step 1: Find usages**
+- [x] **Step 1: Find usages**
 
 Run:
 
@@ -953,7 +953,7 @@ rg -n "Secret\\(\\)" auth app agent project skill main.go main_test.go
 
 Expected before change: `auth/service.go` defines `Secret()`. If other usages appear, update those tests to use the known test secret value directly.
 
-- [ ] **Step 2: Remove method**
+- [x] **Step 2: Remove method**
 
 Delete this method from `auth/service.go`:
 
@@ -963,7 +963,7 @@ func (s *Service) Secret() string {
 }
 ```
 
-- [ ] **Step 3: Run auth tests**
+- [x] **Step 3: Run auth tests**
 
 Run:
 
@@ -973,7 +973,7 @@ go test ./auth
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add auth/service.go
