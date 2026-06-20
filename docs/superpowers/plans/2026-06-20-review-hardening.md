@@ -239,7 +239,7 @@ git commit -m "feat: add provider key encryption helper"
 - Modify: `agent/service_test.go`
 - Modify: `agent/http_test.go`
 
-- [ ] **Step 1: Write failing provider-key storage and compatibility tests**
+- [x] **Step 1: Write failing provider-key storage and compatibility tests**
 
 In `agent/service_test.go`, replace the existing plaintext storage assertion in the provider-config test near the current `SELECT api_key_encrypted` check with this shape:
 
@@ -298,7 +298,7 @@ func TestProviderConfigLegacyPlaintextKeyStillWorks(t *testing.T) {
 
 Ensure `agent/service_test.go` imports `git.inkyquill.net/inky/writer/store`. The file already imports `strings`; keep that import for the encrypted-prefix assertion.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run:
 
@@ -308,7 +308,7 @@ go test ./agent -run 'Test.*Provider.*Key|TestProviderConfigLegacyPlaintextKeySt
 
 Expected: FAIL because provider keys are still stored as plaintext.
 
-- [ ] **Step 3: Add encryption secret state and setter**
+- [x] **Step 3: Add encryption secret state and setter**
 
 Modify the `Service` struct in `agent/service.go`:
 
@@ -331,7 +331,7 @@ func (s *Service) SetEncryptionSecret(jwtSecret string) {
 }
 ```
 
-- [ ] **Step 4: Encrypt create/update provider keys**
+- [x] **Step 4: Encrypt create/update provider keys**
 
 Import the helper with this alias:
 
@@ -365,7 +365,7 @@ In `UpdateProviderConfig`, before `UpdateProviderConfig`:
 
 Use `encryptedAPIKey` in the update params.
 
-- [ ] **Step 5: Decrypt before provider construction**
+- [x] **Step 5: Decrypt before provider construction**
 
 Change `completionProvider` from returning `Provider` to returning `(Provider, error)`:
 
@@ -412,7 +412,7 @@ to:
 	}
 ```
 
-- [ ] **Step 6: Wire production secret from main**
+- [x] **Step 6: Wire production secret from main**
 
 Modify `main.go` after `agentService := agent.NewService(...)`:
 
@@ -420,7 +420,7 @@ Modify `main.go` after `agentService := agent.NewService(...)`:
 	agentService.SetEncryptionSecret(jwtSecret)
 ```
 
-- [ ] **Step 7: Run focused tests**
+- [x] **Step 7: Run focused tests**
 
 Run:
 
@@ -430,7 +430,7 @@ go test ./internal/crypto ./agent -run 'Test.*Provider|TestProviderConfigLegacyP
 
 Expected: PASS unless the package-level migration tests hit the local FTS5 build issue. If FTS5 blocks this command, record the exact `no such module: fts5` failure and continue after running `go test ./internal/crypto`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add agent/service.go agent/service_test.go agent/http_test.go main.go
@@ -439,7 +439,7 @@ git commit -m "feat: encrypt provider API keys at rest"
 
 ---
 
-### Task 3: Add Shared HTTP JSON Helpers
+ Add Shared HTTP JSON Helpers
 
 **Files:**
 - Create: `internal/httputil/json.go`
