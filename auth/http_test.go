@@ -36,10 +36,6 @@ func TestLoginRejectsOversizedJSON(t *testing.T) {
 }
 
 func TestLoginRateLimiterReturnsTooManyRequests(t *testing.T) {
-	previousLimiter := defaultLoginLimiter
-	defaultLoginLimiter = newLoginLimiter(5, time.Hour, 1000)
-	t.Cleanup(func() { defaultLoginLimiter = previousLimiter })
-
 	db := openAuthHTTPTestDB(t)
 	service := NewService(db, strings.Repeat("s", MinSecretBytes))
 	if _, err := service.Register(context.Background(), "limit@example.invalid", "correct-password"); err != nil {
@@ -47,7 +43,7 @@ func TestLoginRateLimiterReturnsTooManyRequests(t *testing.T) {
 	}
 
 	r := chi.NewRouter()
-	RegisterRoutes(r, service)
+	registerRoutesWithLoginLimiter(r, service, newLoginLimiter(5, time.Hour, 1000))
 
 	for range 5 {
 		rec := postLogin(t, r, "192.0.2.44:12345", "limit@example.invalid", "wrong-password")
@@ -62,6 +58,23 @@ func TestLoginRateLimiterReturnsTooManyRequests(t *testing.T) {
 	}
 	if got, want := strings.TrimSpace(rec.Body.String()), `{"error":"too many login attempts"}`; got != want {
 		t.Fatalf("body = %s, want %s", got, want)
+	}
+}
+
+func TestLoginRateLimiterPrunesToMaxEntries(t *testing.T) {
+	limiter := newLoginLimiter(5, time.Hour, 2)
+
+	for _, ip := range []string{"192.0.2.1", "192.0.2.2", "192.0.2.3", "192.0.2.4"} {
+		if !limiter.allow(ip) {
+			t.Fatalf("allow(%q) = false, want true", ip)
+		}
+	}
+
+	limiter.mu.Lock()
+	defer limiter.mu.Unlock()
+
+	if got, want := len(limiter.entries), 2; got > want {
+		t.Fatalf("entries = %d, want <= %d", got, want)
 	}
 }
 

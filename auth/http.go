@@ -10,22 +10,28 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-var defaultLoginLimiter = newLoginLimiter(5, 2*time.Second, 1000)
-
 func RegisterRoutes(r chi.Router, service *Service) {
+	registerRoutesWithLoginLimiter(r, service, newLoginLimiter(5, 2*time.Second, 1000))
+}
+
+func registerRoutesWithLoginLimiter(r chi.Router, service *Service, limiter *loginLimiter) {
 	if service == nil {
 		return
 	}
-	h := httpHandler{service: service}
+	if limiter == nil {
+		limiter = newLoginLimiter(5, 2*time.Second, 1000)
+	}
+	h := httpHandler{service: service, loginLimiter: limiter}
 	r.Post("/auth/login", h.login)
 }
 
 type httpHandler struct {
-	service *Service
+	service      *Service
+	loginLimiter *loginLimiter
 }
 
 func (h *httpHandler) login(w http.ResponseWriter, r *http.Request) {
-	if !defaultLoginLimiter.allow(httputil.RemoteIP(r)) {
+	if !h.loginLimiter.allow(httputil.RemoteIP(r)) {
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many login attempts"})
 		return
 	}
@@ -70,8 +76,9 @@ type loginLimiter struct {
 }
 
 type loginLimitEntry struct {
-	tokens int
-	last   time.Time
+	tokens   int
+	last     time.Time
+	lastSeen time.Time
 }
 
 func newLoginLimiter(burst int, refillEvery time.Duration, maxEntries int) *loginLimiter {
@@ -90,10 +97,11 @@ func (l *loginLimiter) allow(key string) bool {
 	now := time.Now()
 	entry, ok := l.entries[key]
 	if !ok {
-		entry = &loginLimitEntry{tokens: l.burst, last: now}
+		entry = &loginLimitEntry{tokens: l.burst, last: now, lastSeen: now}
 		l.entries[key] = entry
 	}
 	l.refill(entry, now)
+	entry.lastSeen = now
 
 	if l.maxEntries > 0 && len(l.entries) > l.maxEntries {
 		l.prune(now, key)
@@ -141,5 +149,23 @@ func (l *loginLimiter) prune(now time.Time, activeKey string) {
 		if len(l.entries) <= l.maxEntries {
 			return
 		}
+	}
+
+	for len(l.entries) > l.maxEntries {
+		var oldestKey string
+		var oldestSeen time.Time
+		for key, entry := range l.entries {
+			if key == activeKey {
+				continue
+			}
+			if oldestKey == "" || entry.lastSeen.Before(oldestSeen) {
+				oldestKey = key
+				oldestSeen = entry.lastSeen
+			}
+		}
+		if oldestKey == "" {
+			return
+		}
+		delete(l.entries, oldestKey)
 	}
 }
