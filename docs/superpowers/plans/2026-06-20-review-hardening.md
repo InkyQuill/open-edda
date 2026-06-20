@@ -1115,7 +1115,7 @@ git commit -m "fix: cap content search candidates"
 **Files:**
 - Modify: Go files changed in Tasks 1-7 when `gofmt` reports formatting differences.
 
-- [ ] **Step 1: Format Go files**
+- [x] **Step 1: Format Go files**
 
 Run:
 
@@ -1125,7 +1125,7 @@ gofmt -w internal/crypto internal/httputil app auth agent project skill main.go
 
 Expected: no output.
 
-- [ ] **Step 2: Run narrow tests that avoid broad frontend work**
+- [x] **Step 2: Run narrow tests that avoid broad frontend work**
 
 Run:
 
@@ -1135,7 +1135,7 @@ go test ./internal/crypto ./internal/httputil ./auth
 
 Expected: PASS.
 
-- [ ] **Step 3: Run backend test suite**
+- [x] **Step 3: Run backend test suite**
 
 Run:
 
@@ -1145,7 +1145,7 @@ go test ./...
 
 Expected: PASS in an environment with SQLite FTS5. If it fails with `no such module: fts5`, record that exact limitation and include the successful narrow package tests in the final report.
 
-- [ ] **Step 4: Inspect remaining diff**
+- [x] **Step 4: Inspect remaining diff**
 
 Run:
 
@@ -1156,7 +1156,7 @@ git diff --stat
 
 Expected: no unstaged formatting churn. Any remaining files should belong to this plan.
 
-- [ ] **Step 5: Commit final verification fixes when files changed**
+- [x] **Step 5: Commit final verification fixes when files changed**
 
 If Task 8 changed formatting or small test fixes, commit them:
 
