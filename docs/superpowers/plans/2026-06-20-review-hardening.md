@@ -445,7 +445,7 @@ git commit -m "feat: encrypt provider API keys at rest"
 - Create: `internal/httputil/json.go`
 - Create: `internal/httputil/json_test.go`
 
-- [ ] **Step 1: Write failing helper tests**
+- [x] **Step 1: Write failing helper tests**
 
 Create `internal/httputil/json_test.go`:
 
@@ -534,7 +534,7 @@ func TestIsRequestTooLargeUnwrapsMaxBytesError(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run:
 
@@ -544,7 +544,7 @@ go test ./internal/httputil
 
 Expected: FAIL because package/functions do not exist.
 
-- [ ] **Step 3: Implement helper package**
+- [x] **Step 3: Implement helper package**
 
 Create `internal/httputil/json.go`:
 
@@ -600,7 +600,7 @@ func RemoteIP(r *http.Request) string {
 }
 ```
 
-- [ ] **Step 4: Run helper tests**
+- [x] **Step 4: Run helper tests**
 
 Run:
 
@@ -610,7 +610,7 @@ go test ./internal/httputil
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add internal/httputil/json.go internal/httputil/json_test.go
