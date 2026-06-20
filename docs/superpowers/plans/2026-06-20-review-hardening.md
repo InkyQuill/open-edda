@@ -631,7 +631,7 @@ git commit -m "feat: add shared HTTP JSON helpers"
 - Modify: `auth/http_test.go`
 - Modify: `project/http_test.go`
 
-- [ ] **Step 1: Add failing oversized JSON tests**
+- [x] **Step 1: Add failing oversized JSON tests**
 
 Add this test to `auth/http_test.go` or create the file if absent:
 
@@ -685,7 +685,7 @@ func TestHTTPCreateProjectRejectsOversizedJSON(t *testing.T) {
 
 If `newTestProjectHTTP` does not expose `POST /projects`, wrap `project.RegisterRoutes` in a `chi.NewRouter()` in the test and serve the request through that router.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run:
 
@@ -695,7 +695,7 @@ go test ./auth ./project -run 'TestLoginRejectsOversizedJSON|TestHTTPCreateProje
 
 Expected: FAIL because handlers return `400` or accept unbounded JSON.
 
-- [ ] **Step 3: Replace local writeJSON wrappers**
+- [x] **Step 3: Replace local writeJSON wrappers**
 
 In each package, import:
 
@@ -713,7 +713,7 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 
 This preserves local call sites and keeps the diff small. Remove `encoding/json` imports from files that no longer need them.
 
-- [ ] **Step 4: Replace local decodeJSON wrappers**
+- [x] **Step 4: Replace local decodeJSON wrappers**
 
 In `project/http.go`, `agent/http.go`, and `skill/http.go`, change `decodeJSON` signatures to:
 
@@ -766,7 +766,7 @@ In `auth/http.go`, decode login with:
 	}
 ```
 
-- [ ] **Step 5: Run HTTP body-limit tests**
+- [x] **Step 5: Run HTTP body-limit tests**
 
 Run:
 
@@ -776,7 +776,7 @@ go test ./internal/httputil ./auth ./project ./agent ./skill -run 'Test.*Oversiz
 
 Expected: PASS unless migration-backed package tests hit FTS5.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add internal/httputil app auth project agent skill
@@ -785,7 +785,7 @@ git commit -m "fix: cap JSON request bodies"
 
 ---
 
-### Task 5: Add Login Rate Limiting
+ Add Login Rate Limiting
 
 **Files:**
 - Modify: `auth/http.go`
