@@ -75,6 +75,7 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 	}
 	projectService := project.NewService(db)
 	agentService := agent.NewService(db, projectService, nil)
+	agentService.SetEncryptionSecret(jwtSecret)
 	skillService := skill.NewService(db)
 	agentService.SetSkillService(skillService)
 
