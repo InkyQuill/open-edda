@@ -990,7 +990,7 @@ git commit -m "chore: remove exported auth secret accessor"
 - Modify: `store/querier.go`
 - Modify: `project/service_test.go` or `store/db_test.go`
 
-- [ ] **Step 1: Write failing cap test**
+- [x] **Step 1: Write failing cap test**
 
 Add a store-level test in `store/db_test.go` because it can assert the generated query result directly:
 
@@ -1051,7 +1051,7 @@ func TestSearchContentCandidatesHasSafetyLimit(t *testing.T) {
 
 Add `fmt` to the `store/db_test.go` imports for the `fmt.Sprintf` calls in this test.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run:
 
@@ -1061,7 +1061,7 @@ go test ./store -run TestSearchContentCandidatesHasSafetyLimit -count=1
 
 Expected: FAIL with `len(items) = 1005, want 1000`, unless local SQLite FTS5 is unavailable.
 
-- [ ] **Step 3: Add SQL limit**
+- [x] **Step 3: Add SQL limit**
 
 Modify `queries/project_core.sql`:
 
@@ -1075,7 +1075,7 @@ ORDER BY rank
 LIMIT 1000;
 ```
 
-- [ ] **Step 4: Regenerate sqlc**
+- [x] **Step 4: Regenerate sqlc**
 
 Run:
 
@@ -1091,7 +1091,7 @@ sqlc generate
 
 Expected: `store/project_core.sql.go` updates the query SQL constant; `store/querier.go` should remain compatible or receive only mechanical generated changes.
 
-- [ ] **Step 5: Run store test**
+- [x] **Step 5: Run store test**
 
 Run:
 
@@ -1101,7 +1101,7 @@ go test ./store -run TestSearchContentCandidatesHasSafetyLimit -count=1
 
 Expected: PASS unless FTS5 is unavailable.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add queries/project_core.sql store/project_core.sql.go store/querier.go store/db_test.go
