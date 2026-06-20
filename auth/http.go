@@ -1,10 +1,10 @@
 package auth
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
+	"git.inkyquill.net/inky/writer/internal/httputil"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -22,7 +22,11 @@ type httpHandler struct {
 
 func (h *httpHandler) login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httputil.DecodeJSON(w, r, &req, httputil.DefaultJSONBodyLimit); err != nil {
+		if httputil.IsRequestTooLarge(err) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "request body too large"})
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
@@ -45,7 +49,5 @@ func (h *httpHandler) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
+	httputil.WriteJSON(w, status, value)
 }
