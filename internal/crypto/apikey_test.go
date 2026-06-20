@@ -1,6 +1,8 @@
 package crypto
 
 import (
+	"encoding/base64"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -54,8 +56,37 @@ func TestDecryptAPIKeyRejectsWrongSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EncryptAPIKey() error = %v", err)
 	}
-	if _, err := DecryptAPIKey(ciphertext, "different-jwt-secret-32-bytes-value"); err == nil {
-		t.Fatal("DecryptAPIKey() error = nil, want authentication failure")
+	if _, err := DecryptAPIKey(ciphertext, "different-jwt-secret-32-bytes-value"); !errors.Is(err, ErrInvalidCiphertext) {
+		t.Fatalf("DecryptAPIKey() error = %v, want ErrInvalidCiphertext", err)
+	}
+}
+
+func TestDecryptAPIKeyRejectsMalformedPrefixedCiphertext(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{
+			name:  "invalid base64",
+			value: encryptedAPIKeyPrefix + "not-base64%%%",
+		},
+		{
+			name:  "truncated nonce",
+			value: encryptedAPIKeyPrefix + base64.StdEncoding.EncodeToString([]byte("short")),
+		},
+		{
+			name:  "empty ciphertext",
+			value: encryptedAPIKeyPrefix,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := DecryptAPIKey(tt.value, "jwt-secret-32-bytes-minimum-value")
+			if !errors.Is(err, ErrInvalidCiphertext) {
+				t.Fatalf("DecryptAPIKey() error = %v, want ErrInvalidCiphertext", err)
+			}
+		})
 	}
 }
 

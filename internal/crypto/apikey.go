@@ -15,7 +15,11 @@ import (
 const (
 	encryptedAPIKeyPrefix = "edda:v1:"
 	encryptionLabel       = "open-edda-api-key-encryption"
-	devTestSecret         = "test-encryption-key-for-edda-dev-only-32bytes"
+
+	// devTestSecret is a dev/test-only fallback for call sites that have not
+	// been wired with configuration yet. Production must call SetEncryptionSecret
+	// with the configured JWT secret before encrypting or decrypting API keys.
+	devTestSecret = "test-encryption-key-for-edda-dev-only-32bytes"
 )
 
 var ErrInvalidCiphertext = errors.New("invalid encrypted API key")
