@@ -19,6 +19,9 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, value any, limit int64) 
 		return err
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		if IsRequestTooLarge(err) {
+			return err
+		}
 		return errors.New("trailing JSON data")
 	}
 	return nil
@@ -27,7 +30,9 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, value any, limit int64) 
 func WriteJSON(w http.ResponseWriter, status int, value any) {
 	body, err := json.Marshal(value)
 	if err != nil {
-		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":"internal server error"}` + "\n"))
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

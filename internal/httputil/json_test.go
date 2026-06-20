@@ -38,6 +38,21 @@ func TestDecodeJSONRejectsTrailingData(t *testing.T) {
 	}
 }
 
+func TestDecodeJSONPreservesOversizedTrailingDataError(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"value":"ok"} `+strings.Repeat(" ", 20)+`{}`))
+	rec := httptest.NewRecorder()
+	var payload struct {
+		Value string `json:"value"`
+	}
+	err := DecodeJSON(rec, req, &payload, 16)
+	if err == nil {
+		t.Fatal("DecodeJSON() error = nil, want size error")
+	}
+	if !IsRequestTooLarge(err) {
+		t.Fatalf("DecodeJSON() error = %v, want request too large", err)
+	}
+}
+
 func TestWriteJSONWritesSuccess(t *testing.T) {
 	rec := httptest.NewRecorder()
 	WriteJSON(rec, http.StatusCreated, map[string]string{"status": "ok"})
@@ -57,6 +72,9 @@ func TestWriteJSONHandlesMarshalFailureBeforeRequestedStatus(t *testing.T) {
 	WriteJSON(rec, http.StatusCreated, map[string]any{"bad": func() {}})
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/json" {
+		t.Fatalf("content type = %q, want application/json", got)
 	}
 	if !strings.Contains(rec.Body.String(), "internal server error") {
 		t.Fatalf("body = %q, want internal server error", rec.Body.String())
