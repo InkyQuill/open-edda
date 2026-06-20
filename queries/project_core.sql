@@ -122,4 +122,5 @@ SELECT content_items.*
 FROM content_search(CAST(sqlc.arg(query) AS TEXT))
 JOIN content_items ON content_items.rowid = content_search.rowid
 WHERE content_items.project_id = sqlc.arg(project_id)
-ORDER BY rank;
+ORDER BY rank
+LIMIT 1000;
