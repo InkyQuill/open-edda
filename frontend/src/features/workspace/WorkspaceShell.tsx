@@ -15,7 +15,7 @@ import { EditorFrame } from "../editor/EditorFrame";
 import { ContextDrawer } from "../notes/ContextDrawer";
 import { ReviewDrawer } from "../review/ReviewDrawer";
 import { Button } from "../../shared/ui/button";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../../shared/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../shared/ui/sheet";
 import type { ContentItem, ContentKind } from "../../types";
 import type { DrawerTab, MobileSheet, WorkspaceMode, WorkspaceState } from "./workspaceSlice";
 import { workspaceActions } from "./workspaceSlice";
@@ -77,6 +77,19 @@ function mobileSheetTitle(sheet: NonNullable<MobileSheet>): string {
       return "Review";
     case "world-notes":
       return "World and notes";
+  }
+}
+
+function mobileSheetDescription(sheet: NonNullable<MobileSheet>): string {
+  switch (sheet) {
+    case "contents":
+      return "Choose or create project content.";
+    case "assistant":
+      return "Review assistant chat and model state.";
+    case "review":
+      return "Inspect reports, checkpoints, activity, and prompt records.";
+    case "world-notes":
+      return "Open story bible entries and project notes.";
   }
 }
 
@@ -240,6 +253,7 @@ export function WorkspaceShell({
           <SheetContent side="bottom" className="max-h-[85dvh] overflow-auto">
             <SheetHeader>
               <SheetTitle>{mobileSheetTitle(workspace.mobileSheet)}</SheetTitle>
+              <SheetDescription>{mobileSheetDescription(workspace.mobileSheet)}</SheetDescription>
             </SheetHeader>
             <div className="min-h-0 px-4 pb-4">{renderMobileSheet(workspace.mobileSheet)}</div>
           </SheetContent>

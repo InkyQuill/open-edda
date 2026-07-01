@@ -140,6 +140,52 @@ describe("editorSlice", () => {
     expect(cleared.actionModal).toBeNull();
   });
 
+  it("preserves action instructions when a modal is temporarily closed and reopened", () => {
+    const selected = editorReducer(
+      initialEditorState,
+      editorActions.setSelection({
+        startByte: 4,
+        endByte: 16,
+        previewText: "selected prose",
+      }),
+    );
+    const modal = editorReducer(
+      selected,
+      editorActions.openActionModal({ kind: "rewrite" }),
+    );
+    const instructed = editorReducer(modal, editorActions.setActionInstructions("make it sharper"));
+    const closed = editorReducer(instructed, editorActions.closeActionModal());
+    const reopened = editorReducer(closed, editorActions.openActionModal({ kind: "rewrite" }));
+
+    expect(reopened.actionModal).toEqual({
+      kind: "rewrite",
+      instructions: "make it sharper",
+    });
+  });
+
+  it("resets action instructions with editor context", () => {
+    const instructed = editorReducer(
+      editorReducer(
+        initialEditorState,
+        editorActions.openActionModal({ kind: "check" }),
+      ),
+      editorActions.setActionInstructions("check continuity"),
+    );
+    const reset = editorReducer(
+      instructed,
+      editorActions.hydrateEditorContext({
+        projectId: "project-1",
+        contentId: "chapter-1",
+        contentKind: "chapter",
+        revision: 3,
+        bodyMarkdown: "Opening text.",
+      }),
+    );
+    const reopened = editorReducer(reset, editorActions.openActionModal({ kind: "check" }));
+
+    expect(reopened.actionModal?.instructions).toBe("");
+  });
+
   it("resets generate instructions with editor context", () => {
     const prompted = editorReducer(
       initialEditorState,

@@ -4,6 +4,10 @@
 .worktrees/
 frontend/dist/
 frontend/node_modules/
+frontend/.playwright/test-results/
+frontend/.playwright/playwright-report/
+frontend/playwright-report/
+frontend/test-results/
 frontend/tsconfig.tsbuildinfo
 web/dist/
 writer
