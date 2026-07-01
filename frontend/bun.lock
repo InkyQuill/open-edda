@@ -11,7 +11,7 @@
         "@codemirror/state": "^6.6.0",
         "@codemirror/view": "^6.43.1",
         "@fontsource-variable/geist": "^5.2.9",
-        "@inky/galley-editor": "^0.9.1",
+        "@inkyquill/galley-editor": "^0.10.0",
         "@lezer/common": "^1.5.2",
         "@lezer/highlight": "^1.2.3",
         "@lezer/markdown": "^1.6.4",
@@ -218,7 +218,7 @@
 
     "@hono/node-server": ["@hono/node-server@1.19.14", "", { "peerDependencies": { "hono": "^4" } }, "sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw=="],
 
-    "@inky/galley-editor": ["@inky/galley-editor@0.9.1", "https://git.inkyquill.net/api/v4/projects/94/packages/npm/@inky/galley-editor/-/@inky/galley-editor-0.9.1.tgz", { "peerDependencies": { "@codemirror/commands": ">=6.10.0", "@codemirror/lang-markdown": ">=6.5.0", "@codemirror/language": ">=6.12.0", "@codemirror/state": ">=6.6.0", "@codemirror/view": ">=6.41.0", "@lezer/highlight": ">=1.2.0", "@lezer/markdown": ">=1.6.0", "react": ">=18", "react-dom": ">=18" } }, "sha1-lngkEvQPRmosOHUoEmbktQyUaPs="],
+    "@inkyquill/galley-editor": ["@inkyquill/galley-editor@0.10.0", "", { "peerDependencies": { "@codemirror/commands": ">=6.10.0", "@codemirror/lang-markdown": ">=6.5.0", "@codemirror/language": ">=6.12.0", "@codemirror/state": ">=6.6.0", "@codemirror/view": ">=6.41.0", "@lezer/highlight": ">=1.2.0", "@lezer/markdown": ">=1.6.0", "react": ">=18", "react-dom": ">=18" } }, "sha512-jGrO6SNJH94Gi1wLHCKwpcO6HEHMJqu5H5jepoYIOkW7m0RIjdJQs7G18MUeDPrfUGk1ZBuILDokKK4wDdjGVQ=="],
 
     "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA=="],
 

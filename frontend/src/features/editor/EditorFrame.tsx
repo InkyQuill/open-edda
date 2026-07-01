@@ -2,7 +2,7 @@ import { ClipboardCheck, FileText, MessageSquarePlus, PenLine, Save } from "luci
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useLocation } from "react-router-dom";
-import { GalleyEditor, type GalleyMode } from "@inky/galley-editor";
+import { GalleyEditor, type GalleyMode } from "@inkyquill/galley-editor";
 
 import type { AppDispatch } from "../../app/store/store";
 import { updateContent } from "../../api";
