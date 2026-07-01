@@ -1,16 +1,19 @@
-import { Activity, AlertCircle, CheckCircle2, FileText, MessageSquareText } from "lucide-react";
+import { Activity, AlertCircle, FileText, GitCompareArrows, MessageSquareText, RotateCcw } from "lucide-react";
 import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 
 import type { AppDispatch, RootState } from "../../app/store/store";
 import type { ActivityEvent, PromptRecord } from "../../agentTypes";
+import type { ContentItem, Revision } from "../../types";
 import { Button } from "../../shared/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../shared/ui/tabs";
 import { reviewActions } from "./reviewSlice";
-import { loadPromptRecords, loadReviewActivity } from "./reviewThunks";
+import { loadContentRevisions, loadPromptRecords, loadReviewActivity, restoreContentRevision } from "./reviewThunks";
 
 type ReviewDrawerProps = {
   projectId: string;
+  content: ContentItem | null;
+  onContentSaved: (item: ContentItem) => void;
 };
 
 function formatDateTime(value: string): string {
@@ -31,6 +34,46 @@ function formatActionKind(value: string): string {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function formatJSON(value: string): string {
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return value || "{}";
+  }
+}
+
+function restoreConflictMessage(error: string | null): string | null {
+  if (!error) return null;
+  if (error.includes("409") || error.toLowerCase().includes("conflict")) {
+    return "Content changed before this checkpoint was restored. Review the latest draft, then try again.";
+  }
+  return error;
+}
+
+function diffLines(current: string, selected: string): Array<{ kind: "same" | "added" | "removed"; text: string }> {
+  const currentLines = current.split("\n");
+  const selectedLines = selected.split("\n");
+  const max = Math.max(currentLines.length, selectedLines.length);
+  const lines: Array<{ kind: "same" | "added" | "removed"; text: string }> = [];
+
+  for (let index = 0; index < max; index += 1) {
+    const currentLine = currentLines[index];
+    const selectedLine = selectedLines[index];
+    if (currentLine === selectedLine) {
+      lines.push({ kind: "same", text: currentLine ?? "" });
+      continue;
+    }
+    if (currentLine !== undefined) {
+      lines.push({ kind: "removed", text: currentLine });
+    }
+    if (selectedLine !== undefined) {
+      lines.push({ kind: "added", text: selectedLine });
+    }
+  }
+
+  return lines;
 }
 
 function ActivityEventItem({ event }: { event: ActivityEvent }) {
@@ -80,25 +123,77 @@ function PromptRecordItem({
   );
 }
 
-export function ReviewDrawer({ projectId }: ReviewDrawerProps) {
+function RevisionItem({
+  revision,
+  selected,
+  currentRevision,
+  onSelect,
+}: {
+  revision: Revision;
+  selected: boolean;
+  currentRevision: number;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="flex w-full flex-col gap-1 rounded-md border border-border bg-background p-3 text-left text-sm hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-pressed:border-primary"
+      aria-pressed={selected}
+      onClick={onSelect}
+    >
+      <span className="flex items-start justify-between gap-3">
+        <span className="font-medium text-foreground">
+          Checkpoint {revision.revisionNumber}
+          {revision.revisionNumber === currentRevision ? " (current)" : ""}
+        </span>
+        <time dateTime={revision.createdAt} className="shrink-0 text-xs text-muted-foreground">
+          {formatDateTime(revision.createdAt)}
+        </time>
+      </span>
+      <span className="text-xs text-muted-foreground">
+        {revision.reason || "No reason recorded"} · {revision.createdBy}
+        {revision.actionKind ? ` · ${formatActionKind(revision.actionKind)}` : ""}
+      </span>
+    </button>
+  );
+}
+
+export function ReviewDrawer({ projectId, content, onContentSaved }: ReviewDrawerProps) {
   const dispatch = useDispatch<AppDispatch>();
   const {
     activityEvents,
     activityStatus,
+    contentId,
     error,
     projectId: reviewProjectId,
     promptRecords,
     promptRecordsStatus,
+    restoreError,
+    restoreStatus,
+    revisions,
+    revisionsStatus,
     selectedPromptRecordId,
+    selectedRevisionNumber,
   } = useSelector((state: RootState) => state.review);
+  const checkResult = useSelector((state: RootState) => state.assistantActions.checkResult);
   const isCurrentProject = reviewProjectId === projectId;
+  const isCurrentContent = isCurrentProject && contentId === content?.id;
   const visibleError = isCurrentProject ? error : null;
   const visibleActivityEvents = isCurrentProject ? activityEvents : [];
   const visiblePromptRecords = isCurrentProject ? promptRecords : [];
+  const visibleRevisions = isCurrentContent ? revisions : [];
+  const visibleRestoreError = isCurrentContent ? restoreConflictMessage(restoreError) : null;
+  const visibleCheckResult = checkResult?.note.contentItemId === content?.id ? checkResult : null;
+  const selectedPromptRecord = visiblePromptRecords.find((record) => record.id === selectedPromptRecordId) ?? null;
+  const selectedRevision =
+    visibleRevisions.find((revision) => revision.revisionNumber === selectedRevisionNumber) ?? visibleRevisions[0] ?? null;
   const loading = activityStatus === "pending" || promptRecordsStatus === "pending";
   const hasActivity = visibleActivityEvents.length > 0;
   const hasPromptRecords = visiblePromptRecords.length > 0;
   const isEmpty = !visibleError && !loading && !hasActivity && !hasPromptRecords;
+  const revisionsLoading = revisionsStatus === "pending";
+  const hasRevisions = visibleRevisions.length > 0;
+  const restorePending = restoreStatus === "pending";
 
   useEffect(() => {
     if (reviewProjectId !== projectId || activityStatus === "idle") {
@@ -111,6 +206,38 @@ export function ReviewDrawer({ projectId }: ReviewDrawerProps) {
       void dispatch(loadPromptRecords({ projectId }));
     }
   }, [dispatch, projectId, promptRecordsStatus, reviewProjectId]);
+
+  useEffect(() => {
+    if (!content) return;
+    if (reviewProjectId !== projectId || contentId !== content.id || revisionsStatus === "idle") {
+      void dispatch(loadContentRevisions({ projectId, contentId: content.id }));
+    }
+  }, [content, contentId, dispatch, projectId, reviewProjectId, revisionsStatus]);
+
+  function handleRestore(): void {
+    if (!content || !selectedRevision || selectedRevision.revisionNumber === content.currentRevision || restorePending) {
+      return;
+    }
+
+    void dispatch(
+      restoreContentRevision({
+        projectId,
+        contentId: content.id,
+        revisionNumber: selectedRevision.revisionNumber,
+        expectedRevision: content.currentRevision,
+      }),
+    )
+      .unwrap()
+      .then((item) => {
+        onContentSaved(item);
+        void dispatch(loadContentRevisions({ projectId, contentId: item.id }));
+      })
+      .catch(() => undefined);
+  }
+
+  const restoreDisabled =
+    !content || !selectedRevision || selectedRevision.revisionNumber === content.currentRevision || restorePending;
+  const diff = content && selectedRevision ? diffLines(content.bodyMarkdown, selectedRevision.bodyMarkdown) : [];
 
   return (
     <aside className="flex h-full flex-col gap-4" aria-label="Review">
@@ -128,27 +255,116 @@ export function ReviewDrawer({ projectId }: ReviewDrawerProps) {
           <TabsTrigger value="activity">Activity</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="reports" className="flex flex-col gap-3">
-          <Button type="button" variant="outline" className="w-full justify-start">
+        <TabsContent value="reports" forceMount className="flex flex-col gap-3">
+          <Button type="button" variant="outline" className="w-full justify-start" disabled>
             <FileText />
             Read report
           </Button>
-          <Button type="button" variant="outline" className="w-full justify-start">
-            <CheckCircle2 />
-            Check draft
-          </Button>
-          <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
-            Report output will appear here.
-          </p>
+          {visibleCheckResult ? (
+            <article className="rounded-md border border-border bg-background p-3">
+              <h3 className="text-sm font-medium text-foreground">{visibleCheckResult.note.title}</h3>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">
+                {visibleCheckResult.assistantMessage.bodyMarkdown}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Attached to bytes {visibleCheckResult.note.selectionStart}-{visibleCheckResult.note.selectionEnd}
+              </p>
+            </article>
+          ) : (
+            <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
+              Run Check from the editor selection toolbar to create a review report for the current content.
+            </p>
+          )}
         </TabsContent>
 
-        <TabsContent value="revisions">
-          <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
-            Revision suggestions will appear here.
-          </p>
+        <TabsContent value="revisions" forceMount className="min-h-0">
+          {!content ? (
+            <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
+              Select content to review checkpoints.
+            </p>
+          ) : (
+            <div className="flex max-h-[calc(100dvh-13rem)] flex-col gap-4 overflow-auto pr-1">
+              <section className="rounded-md border border-border bg-background p-3 text-sm">
+                <p className="font-medium text-foreground">Current checkpoint {content.currentRevision}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{content.title}</p>
+              </section>
+
+              {revisionsLoading ? (
+                <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+                  <Activity className="size-4 animate-pulse" aria-hidden="true" />
+                  Loading checkpoints...
+                </div>
+              ) : null}
+
+              {visibleRestoreError ? (
+                <p
+                  role="alert"
+                  className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+                >
+                  <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+                  {visibleRestoreError}
+                </p>
+              ) : null}
+
+              {!revisionsLoading && !hasRevisions ? (
+                <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
+                  No checkpoints found for this content.
+                </p>
+              ) : null}
+
+              {hasRevisions ? (
+                <section className="flex flex-col gap-2" aria-label="Checkpoints">
+                  {visibleRevisions.map((revision) => (
+                    <RevisionItem
+                      key={revision.id}
+                      revision={revision}
+                      currentRevision={content.currentRevision}
+                      selected={revision.revisionNumber === selectedRevision?.revisionNumber}
+                      onSelect={() => dispatch(reviewActions.setSelectedRevisionNumber(revision.revisionNumber))}
+                    />
+                  ))}
+                </section>
+              ) : null}
+
+              {selectedRevision ? (
+                <section className="flex flex-col gap-3 rounded-md border border-border bg-background p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="flex items-center gap-2 text-sm font-medium text-foreground">
+                      <GitCompareArrows className="size-4" aria-hidden="true" />
+                      Checkpoint {selectedRevision.revisionNumber} diff
+                    </h3>
+                    <Button type="button" size="sm" disabled={restoreDisabled} onClick={handleRestore}>
+                      <RotateCcw data-icon="inline-start" aria-hidden="true" />
+                      {restorePending ? "Restoring..." : "Restore"}
+                    </Button>
+                  </div>
+                  <pre className="max-h-80 overflow-auto rounded-md bg-muted/40 p-3 text-xs leading-5 text-foreground">
+                    {diff.map((line, index) => {
+                      const prefix = line.kind === "added" ? "+ " : line.kind === "removed" ? "- " : "  ";
+                      return (
+                        <code
+                          key={`${index}-${line.kind}`}
+                          className={
+                            line.kind === "added"
+                              ? "block text-emerald-700"
+                              : line.kind === "removed"
+                                ? "block text-destructive"
+                                : "block text-muted-foreground"
+                          }
+                        >
+                          {prefix}
+                          {line.text || " "}
+                        </code>
+                      );
+                    })}
+                  </pre>
+                </section>
+              ) : null}
+            </div>
+          )}
         </TabsContent>
 
-        <TabsContent value="activity" className="min-h-0">
+        <TabsContent value="activity" forceMount className="min-h-0">
           <div className="flex max-h-[calc(100dvh-13rem)] flex-col gap-4 overflow-auto pr-1">
             {loading ? (
               <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
@@ -202,6 +418,26 @@ export function ReviewDrawer({ projectId }: ReviewDrawerProps) {
                       onSelect={() => dispatch(reviewActions.setSelectedPromptRecordId(promptRecord.id))}
                     />
                   ))}
+                </div>
+              </section>
+            ) : null}
+
+            {selectedPromptRecord ? (
+              <section className="flex flex-col gap-2 rounded-md border border-border bg-background p-3" aria-label="Prompt record details">
+                <h3 className="text-sm font-medium text-foreground">Prompt record details</h3>
+                <div className="flex flex-col gap-2">
+                  <details open>
+                    <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Request</summary>
+                    <pre className="mt-2 max-h-52 overflow-auto rounded-md bg-muted/40 p-2 text-xs text-foreground">
+                      {formatJSON(selectedPromptRecord.requestJson)}
+                    </pre>
+                  </details>
+                  <details>
+                    <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Response</summary>
+                    <pre className="mt-2 max-h-52 overflow-auto rounded-md bg-muted/40 p-2 text-xs text-foreground">
+                      {formatJSON(selectedPromptRecord.responseJson)}
+                    </pre>
+                  </details>
                 </div>
               </section>
             ) : null}

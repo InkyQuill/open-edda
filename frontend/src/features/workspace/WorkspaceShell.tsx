@@ -100,7 +100,7 @@ export function WorkspaceShell({
   const activeLeftTab = toContextTab(workspace.activeLeftTab);
   const rightDrawer =
     workspace.mode === "review" || workspace.activeRightTab === "tools" || workspace.activeRightTab === "revisions" ? (
-      <ReviewDrawer projectId={projectId} />
+      <ReviewDrawer projectId={projectId} content={selectedContent} onContentSaved={onContentSaved} />
     ) : (
       <AssistantDrawer projectId={projectId} />
     );
@@ -125,7 +125,9 @@ export function WorkspaceShell({
 
   function renderMobileSheet(sheet: NonNullable<MobileSheet>) {
     if (sheet === "assistant") return <AssistantDrawer projectId={projectId} />;
-    if (sheet === "review") return <ReviewDrawer projectId={projectId} />;
+    if (sheet === "review") {
+      return <ReviewDrawer projectId={projectId} content={selectedContent} onContentSaved={onContentSaved} />;
+    }
     return (
       <ContextDrawer
         activeTab={sheet === "world-notes" ? "world" : "contents"}
