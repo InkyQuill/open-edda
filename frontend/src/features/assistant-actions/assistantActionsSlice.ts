@@ -1,6 +1,8 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 
 import {
+  acceptCandidate,
+  rejectCandidate,
   runContinuation,
   runReadAndCheck,
   runRewrite,
@@ -55,6 +57,15 @@ export interface RunRewriteArgs {
 }
 
 export type RunCheckArgs = RunRewriteArgs;
+
+export interface AcceptAssistantCandidateArgs {
+  projectId: string;
+  candidateId: string;
+  requestKey: string;
+  requestToken: string;
+}
+
+export type RejectAssistantCandidateArgs = AcceptAssistantCandidateArgs;
 
 export const initialAssistantActionsState: AssistantActionState = {
   actionKind: null,
@@ -119,6 +130,18 @@ export const runCheck = createAsyncThunk(
     }),
 );
 
+export const acceptAssistantCandidate = createAsyncThunk(
+  "assistantActions/acceptCandidate",
+  async (args: AcceptAssistantCandidateArgs) =>
+    acceptCandidate(args.projectId, args.candidateId),
+);
+
+export const rejectAssistantCandidate = createAsyncThunk(
+  "assistantActions/rejectCandidate",
+  async (args: RejectAssistantCandidateArgs) =>
+    rejectCandidate(args.projectId, args.candidateId),
+);
+
 function errorMessage(error: { message?: string } | unknown): string {
   if (
     typeof error === "object" &&
@@ -176,6 +199,22 @@ function markRejected(
   state.error = message;
 }
 
+function isRevisionConflictError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("revision") ||
+    normalized.includes("conflict") ||
+    normalized.includes("stale")
+  );
+}
+
+function acceptErrorMessage(message: string): string {
+  if (!isRevisionConflictError(message)) {
+    return message;
+  }
+  return "Content changed before this preview was accepted. Review the latest draft, then run the action again.";
+}
+
 const assistantActionsSlice = createSlice({
   name: "assistantActions",
   initialState: initialAssistantActionsState,
@@ -224,6 +263,38 @@ const assistantActionsSlice = createSlice({
       })
       .addCase(runCheck.rejected, (state, action) => {
         markRejected(state, action.meta.arg, errorMessage(action.error));
+      })
+      .addCase(acceptAssistantCandidate.pending, (state, action) => {
+        if (!matchesRequest(state, action.meta.arg)) return;
+        state.acceptStatus = "running";
+        state.acceptError = null;
+      })
+      .addCase(acceptAssistantCandidate.fulfilled, (state, action) => {
+        if (!matchesRequest(state, action.meta.arg)) return;
+        state.candidate = null;
+        state.acceptStatus = "succeeded";
+        state.acceptError = null;
+      })
+      .addCase(acceptAssistantCandidate.rejected, (state, action) => {
+        if (!matchesRequest(state, action.meta.arg)) return;
+        state.acceptStatus = "failed";
+        state.acceptError = acceptErrorMessage(errorMessage(action.error));
+      })
+      .addCase(rejectAssistantCandidate.pending, (state, action) => {
+        if (!matchesRequest(state, action.meta.arg)) return;
+        state.rejectStatus = "running";
+        state.rejectError = null;
+      })
+      .addCase(rejectAssistantCandidate.fulfilled, (state, action) => {
+        if (!matchesRequest(state, action.meta.arg)) return;
+        state.candidate = null;
+        state.rejectStatus = "succeeded";
+        state.rejectError = null;
+      })
+      .addCase(rejectAssistantCandidate.rejected, (state, action) => {
+        if (!matchesRequest(state, action.meta.arg)) return;
+        state.rejectStatus = "failed";
+        state.rejectError = errorMessage(action.error);
       });
   },
 });

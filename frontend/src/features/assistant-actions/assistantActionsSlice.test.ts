@@ -10,33 +10,47 @@ import type {
   RewriteResult,
 } from "../../agentTypes";
 import {
+  acceptCandidate,
+  rejectCandidate,
   runContinuation,
   runReadAndCheck,
   runRewrite,
 } from "../../agentApi";
 import {
+  acceptAssistantCandidate,
   assistantActionsReducer,
+  type AssistantActionState,
   initialAssistantActionsState,
+  rejectAssistantCandidate,
   runCheck,
   runGenerate,
   runRewriteAction,
 } from "./assistantActionsSlice";
 
 vi.mock("../../agentApi", () => ({
+  acceptCandidate: vi.fn(),
+  rejectCandidate: vi.fn(),
   runContinuation: vi.fn(),
   runRewrite: vi.fn(),
   runReadAndCheck: vi.fn(),
 }));
 
+const acceptCandidateMock = vi.mocked(acceptCandidate);
+const rejectCandidateMock = vi.mocked(rejectCandidate);
 const runContinuationMock = vi.mocked(runContinuation);
 const runRewriteMock = vi.mocked(runRewrite);
 const runReadAndCheckMock = vi.mocked(runReadAndCheck);
 
-function makeStore() {
+function makeStore(preloadedState?: AssistantActionState) {
   return configureStore({
     reducer: {
       assistantActions: assistantActionsReducer,
     },
+    preloadedState: preloadedState
+      ? {
+          assistantActions: preloadedState,
+        }
+      : undefined,
   });
 }
 
@@ -293,5 +307,145 @@ describe("assistantActionsSlice", () => {
     expect(state.error).toBe("provider unavailable");
     expect(state.candidate).toBeNull();
     expect(state.checkResult).toBeNull();
+  });
+
+  it("accepts a candidate and clears the preview while returning accepted content", async () => {
+    const store = makeStore({
+      ...initialAssistantActionsState,
+      candidate,
+      requestKey: "same-key",
+      requestToken: "token-1",
+    });
+    const content = {
+      id: "content-1",
+      projectId: "project-1",
+      kind: "chapter" as const,
+      title: "Chapter 1",
+      slug: "chapter-1",
+      bodyMarkdown: "Accepted text",
+      metadataJson: "{}",
+      currentRevision: 8,
+      sortOrder: 1,
+      createdAt: "2026-07-01T00:00:00Z",
+      updatedAt: "2026-07-01T00:00:00Z",
+    };
+    acceptCandidateMock.mockResolvedValue({ candidate, content });
+    const result = await store.dispatch(
+      acceptAssistantCandidate({
+        projectId: "project-1",
+        candidateId: "candidate-1",
+        requestKey: "same-key",
+        requestToken: "token-1",
+      }),
+    );
+
+    expect(acceptCandidateMock).toHaveBeenCalledWith("project-1", "candidate-1");
+    expect(result.payload).toEqual({ candidate, content });
+    expect(store.getState().assistantActions.candidate).toBeNull();
+    expect(store.getState().assistantActions.acceptStatus).toBe("succeeded");
+  });
+
+  it("keeps the candidate and shows conflict text for stale accept failures", () => {
+    const pendingState = {
+      ...initialAssistantActionsState,
+      candidate,
+      requestKey: "same-key",
+      requestToken: "token-1",
+    };
+
+    const state = assistantActionsReducer(
+      pendingState,
+      acceptAssistantCandidate.rejected(new Error("revision conflict"), "request-1", {
+        projectId: "project-1",
+        candidateId: "candidate-1",
+        requestKey: "same-key",
+        requestToken: "token-1",
+      }),
+    );
+
+    expect(state.candidate).toEqual(candidate);
+    expect(state.acceptStatus).toBe("failed");
+    expect(state.acceptError).toBe(
+      "Content changed before this preview was accepted. Review the latest draft, then run the action again.",
+    );
+  });
+
+  it("keeps the candidate and shows generic accept failures", () => {
+    const pendingState = {
+      ...initialAssistantActionsState,
+      candidate,
+      requestKey: "same-key",
+      requestToken: "token-1",
+    };
+
+    const state = assistantActionsReducer(
+      pendingState,
+      acceptAssistantCandidate.rejected(new Error("provider failed"), "request-1", {
+        projectId: "project-1",
+        candidateId: "candidate-1",
+        requestKey: "same-key",
+        requestToken: "token-1",
+      }),
+    );
+
+    expect(state.candidate).toEqual(candidate);
+    expect(state.acceptStatus).toBe("failed");
+    expect(state.acceptError).toBe("provider failed");
+  });
+
+  it("rejects a candidate and clears the preview", async () => {
+    const store = makeStore({
+      ...initialAssistantActionsState,
+      candidate,
+      requestKey: "same-key",
+      requestToken: "token-1",
+    });
+    rejectCandidateMock.mockResolvedValue({ ...candidate, status: "rejected" });
+
+    await store.dispatch(
+      rejectAssistantCandidate({
+        projectId: "project-1",
+        candidateId: "candidate-1",
+        requestKey: "same-key",
+        requestToken: "token-1",
+      }),
+    );
+
+    expect(rejectCandidateMock).toHaveBeenCalledWith("project-1", "candidate-1");
+    expect(store.getState().assistantActions.candidate).toBeNull();
+    expect(store.getState().assistantActions.rejectStatus).toBe("succeeded");
+  });
+
+  it("ignores stale accept and reject completions", () => {
+    const currentState = {
+      ...initialAssistantActionsState,
+      candidate,
+      requestKey: "new-key",
+      requestToken: "new-token",
+    };
+
+    const accepted = assistantActionsReducer(
+      currentState,
+      acceptAssistantCandidate.fulfilled({ candidate, content: {} as never }, "request-1", {
+        projectId: "project-1",
+        candidateId: "candidate-1",
+        requestKey: "old-key",
+        requestToken: "new-token",
+      }),
+    );
+    const rejected = assistantActionsReducer(
+      currentState,
+      rejectAssistantCandidate.fulfilled({ ...candidate, status: "rejected" }, "request-2", {
+        projectId: "project-1",
+        candidateId: "candidate-1",
+        requestKey: "new-key",
+        requestToken: "old-token",
+      }),
+    );
+
+    expect(accepted.candidate).toEqual(candidate);
+    expect(accepted.acceptStatus).toBe("idle");
+    expect(rejected.candidate).toEqual(candidate);
+    expect(rejected.rejectStatus).toBe("idle");
   });
 });
