@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import type { EditorContentContext } from "./editorSlice";
 import {
+  buildCheckRequest,
   buildGenerateRequest,
+  buildRewriteRequest,
   buildAssistantActionRequestKey,
   validateGenerateAction,
+  validateSelectionAction,
 } from "./assistantActionRequests";
 
 const contentContext: EditorContentContext = {
@@ -77,5 +80,62 @@ describe("assistantActionRequests", () => {
       requestKey: "route-key",
       requestToken: "token-1",
     });
+  });
+
+  it("validates missing selection action prerequisites", () => {
+    expect(
+      validateSelectionAction({
+        contentContext: null,
+        selection: { startByte: 3, endByte: 9 },
+        activeModelVariantId: "model-1",
+      }),
+    ).toBe("Open a chapter or story-bible entry before running this action.");
+    expect(
+      validateSelectionAction({
+        contentContext,
+        selection: { startByte: 3, endByte: 9 },
+        activeModelVariantId: null,
+      }),
+    ).toBe("Choose an active model variant in Settings before running this action.");
+    expect(
+      validateSelectionAction({
+        contentContext,
+        selection: null,
+        activeModelVariantId: "model-1",
+      }),
+    ).toBe("Select text before running this action.");
+    expect(
+      validateSelectionAction({
+        contentContext,
+        selection: { startByte: 9, endByte: 9 },
+        activeModelVariantId: "model-1",
+      }),
+    ).toBe("Select text before running this action.");
+  });
+
+  it("builds rewrite and check thunk args from editor selection", () => {
+    const base = {
+      contentContext,
+      activeModelVariantId: "model-1",
+      selection: { startByte: 3, endByte: 18 },
+      instructions: " focus on tone ",
+      skillIds: ["skill-1"],
+      requestKey: "route-key",
+      requestToken: "token-1",
+    };
+
+    expect(buildRewriteRequest(base)).toEqual({
+      projectId: "project-1",
+      contentId: "content-1",
+      modelVariantId: "model-1",
+      expectedRevision: 7,
+      selectionStartByte: 3,
+      selectionEndByte: 18,
+      instructions: "focus on tone",
+      skillIds: ["skill-1"],
+      requestKey: "route-key",
+      requestToken: "token-1",
+    });
+    expect(buildCheckRequest(base)).toEqual(buildRewriteRequest(base));
   });
 });

@@ -14,12 +14,17 @@ import {
   assistantActions,
   type AssistantActionState,
   rejectAssistantCandidate,
+  runCheck,
   runGenerate,
+  runRewriteAction,
 } from "../assistant-actions/assistantActionsSlice";
 import { AssistantActionPreview } from "./AssistantActionPreview";
 import {
   buildAssistantActionRequestKey,
+  buildCheckRequest,
   buildGenerateRequest,
+  buildRewriteRequest,
+  validateSelectionAction,
   validateGenerateAction,
 } from "./assistantActionRequests";
 import { createGalleyEditorSnapshot, type GalleySelectionSnapshot } from "./editorAdapter";
@@ -243,6 +248,42 @@ export function EditorFrame({
     );
   }
 
+  function handleSelectionActionSubmit(kind: "rewrite" | "check", instructions: string): void {
+    const selectionInput = selection
+      ? { startByte: selection.startByte, endByte: selection.endByte }
+      : null;
+    const validationError = validateSelectionAction({
+      contentContext: contextMatchesContent ? editor.contentContext : null,
+      selection: selectionInput,
+      activeModelVariantId,
+    });
+    if (validationError) {
+      setGenerateStatus(validationError);
+      return;
+    }
+    if (!editor.contentContext || !selectionInput || !activeModelVariantId) return;
+
+    const requestKey = buildAssistantActionRequestKey(location.pathname, editor.contentContext);
+    const requestToken = crypto.randomUUID();
+    const requestInput = {
+      contentContext: editor.contentContext,
+      activeModelVariantId,
+      selection: selectionInput,
+      instructions,
+      skillIds: selectedSkillIds,
+      requestKey,
+      requestToken,
+    };
+
+    setGenerateStatus(null);
+    dispatch(editorActions.closeActionModal());
+    void dispatch(
+      kind === "rewrite"
+        ? runRewriteAction(buildRewriteRequest(requestInput))
+        : runCheck(buildCheckRequest(requestInput)),
+    );
+  }
+
   if (contentLoading) {
     return (
       <article className="workspace-prose-column flex min-h-80 w-full max-w-3xl items-center justify-center rounded-md border border-border bg-background px-6 py-7 text-sm text-muted-foreground shadow-sm">
@@ -340,7 +381,7 @@ export function EditorFrame({
         onReject={handleRejectPreview}
         onDismiss={() => dispatch(assistantActions.clearAssistantActionResult())}
       />
-      <SelectionActionDialog />
+      <SelectionActionDialog onSubmit={handleSelectionActionSubmit} />
     </article>
   );
 }

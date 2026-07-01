@@ -37,7 +37,11 @@ const actionLabels = {
   },
 };
 
-export function SelectionActionDialog() {
+export interface SelectionActionDialogProps {
+  onSubmit?: (kind: "rewrite" | "check", instructions: string) => void;
+}
+
+export function SelectionActionDialog({ onSubmit }: SelectionActionDialogProps) {
   const dispatch = useDispatch();
   const { actionModal, selection } = useSelector((state: SelectionActionRootState) => state.editor);
   const action = actionModal ? actionLabels[actionModal.kind] : null;
@@ -80,7 +84,14 @@ export function SelectionActionDialog() {
             <Button type="button" variant="outline" onClick={() => dispatch(editorActions.closeActionModal())}>
               Cancel
             </Button>
-            <Button type="button" disabled={submitDisabled}>
+            <Button
+              type="button"
+              disabled={submitDisabled}
+              onClick={() => {
+                if (!actionModal || actionModal.kind === "note") return;
+                onSubmit?.(actionModal.kind, actionModal.instructions);
+              }}
+            >
               {selection ? action.submit : "Select text first"}
             </Button>
           </DialogFooter>
