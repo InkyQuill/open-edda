@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"git.inkyquill.net/inky/writer/fileproject"
 )
 
 func TestStatusReportsUninitializedLayout(t *testing.T) {
@@ -69,12 +72,87 @@ func TestStatusWriteIDsCreatesIDMap(t *testing.T) {
 	}
 }
 
+func TestSavePromotesDraftToCanonicalFile(t *testing.T) {
+	root := copyFixture(t, filepath.Join("..", "..", "fileproject", "testdata", "partial"))
+	stable := prepareStableCLIFile(t, root)
+	if _, err := fileproject.WriteDraft(root, fileproject.WriteDraftInput{
+		FileID:       stable.ID,
+		BasePath:     stable.Path,
+		BaseSHA256:   stable.SHA256,
+		BodyMarkdown: "# Chapter 1\n\nPromoted from CLI.\n",
+	}); err != nil {
+		t.Fatalf("WriteDraft error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	if err := run([]string{"save", root, "--id", stable.ID, "--from-draft"}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("save --from-draft error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Saved story/chapter-01.md") {
+		t.Fatalf("save output = %s", stdout.String())
+	}
+	data, err := os.ReadFile(filepath.Join(root, "story", "chapter-01.md"))
+	if err != nil {
+		t.Fatalf("read canonical file: %v", err)
+	}
+	if string(data) != "# Chapter 1\n\nPromoted from CLI.\n" {
+		t.Fatalf("canonical body = %q", string(data))
+	}
+}
+
+func TestSaveBodyFileRejectsStaleExpectedHash(t *testing.T) {
+	root := copyFixture(t, filepath.Join("..", "..", "fileproject", "testdata", "partial"))
+	stable := prepareStableCLIFile(t, root)
+	bodyFile := filepath.Join(t.TempDir(), "body.md")
+	if err := os.WriteFile(bodyFile, []byte("stale overwrite"), 0o644); err != nil {
+		t.Fatalf("write body file: %v", err)
+	}
+
+	err := run(
+		[]string{"save", root, "--id", stable.ID, "--body-file", bodyFile, "--expected-sha256", strings.Repeat("0", 64)},
+		&bytes.Buffer{},
+		&bytes.Buffer{},
+	)
+	if !errors.Is(err, fileproject.ErrFileConflict) {
+		t.Fatalf("save stale error = %v, want ErrFileConflict", err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "story", "chapter-01.md"))
+	if err != nil {
+		t.Fatalf("read canonical file: %v", err)
+	}
+	if strings.Contains(string(data), "stale overwrite") {
+		t.Fatalf("stale save changed canonical file:\n%s", string(data))
+	}
+}
+
 func TestInitRequiresTitle(t *testing.T) {
 	var stderr bytes.Buffer
 	err := run([]string{"init", t.TempDir()}, &bytes.Buffer{}, &stderr)
 	if err == nil || !strings.Contains(err.Error(), "project title is required") {
 		t.Fatalf("init without title error = %v", err)
 	}
+}
+
+func prepareStableCLIFile(t *testing.T, root string) fileproject.StableFile {
+	t.Helper()
+	layout, err := fileproject.Scan(root)
+	if err != nil {
+		t.Fatalf("Scan error = %v", err)
+	}
+	idMap, files, err := fileproject.AssignStableIDs(root, layout)
+	if err != nil {
+		t.Fatalf("AssignStableIDs error = %v", err)
+	}
+	if err := fileproject.WriteIDMap(root, idMap); err != nil {
+		t.Fatalf("WriteIDMap error = %v", err)
+	}
+	for _, file := range files {
+		if file.Path == "story/chapter-01.md" {
+			return file
+		}
+	}
+	t.Fatalf("stable story file not found")
+	return fileproject.StableFile{}
 }
 
 func copyFixture(t *testing.T, source string) string {

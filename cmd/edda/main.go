@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -29,6 +30,8 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runStatus(args[1:], stdout)
 	case "init":
 		return runInit(args[1:], stdout)
+	case "save":
+		return runSave(args[1:], stdout)
 	case "help", "-h", "--help":
 		printUsage(stdout)
 		return nil
@@ -126,10 +129,62 @@ func runInit(args []string, stdout io.Writer) error {
 	return nil
 }
 
+func runSave(args []string, stdout io.Writer) error {
+	flags := flag.NewFlagSet("save", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	fileID := flags.String("id", "", "stable file id")
+	fromDraft := flags.Bool("from-draft", false, "promote .edda/drafts/<id>.md")
+	bodyFile := flags.String("body-file", "", "markdown file to save")
+	expectedSHA256 := flags.String("expected-sha256", "", "expected current saved file hash")
+	root, flagArgs := splitOptionalPath(args)
+	if err := flags.Parse(flagArgs); err != nil {
+		return err
+	}
+	if flags.NArg() > 0 {
+		root = flags.Arg(0)
+	}
+	if *fileID == "" {
+		return fmt.Errorf("save requires --id")
+	}
+	if *fromDraft == (*bodyFile != "") {
+		return fmt.Errorf("save requires exactly one of --from-draft or --body-file")
+	}
+
+	var (
+		saved fileproject.SavedFile
+		err   error
+	)
+	if *fromDraft {
+		saved, err = fileproject.PromoteDraft(root, fileproject.SaveDraftInput{
+			FileID:         *fileID,
+			ExpectedSHA256: *expectedSHA256,
+		})
+	} else {
+		body, readErr := os.ReadFile(*bodyFile)
+		if readErr != nil {
+			return fmt.Errorf("read body file: %w", readErr)
+		}
+		saved, err = fileproject.SaveCanonicalFile(root, fileproject.SaveCanonicalInput{
+			FileID:         *fileID,
+			BodyMarkdown:   string(body),
+			ExpectedSHA256: *expectedSHA256,
+		})
+	}
+	if err != nil {
+		if errors.Is(err, fileproject.ErrFileConflict) {
+			return fmt.Errorf("saved file changed since draft base: %w", err)
+		}
+		return err
+	}
+	fmt.Fprintf(stdout, "Saved %s (%s, %d bytes)\n", saved.Path, saved.SHA256, saved.Size)
+	return nil
+}
+
 func printUsage(output io.Writer) {
 	fmt.Fprintln(output, "Usage:")
 	fmt.Fprintln(output, "  edda status [path] [--write-ids]")
 	fmt.Fprintln(output, "  edda init [path] --title \"Title\" [--id project-id] [--server-url URL]")
+	fmt.Fprintln(output, "  edda save [path] --id file-id (--from-draft | --body-file markdown.md) [--expected-sha256 HASH]")
 }
 
 func splitOptionalPath(args []string) (string, []string) {

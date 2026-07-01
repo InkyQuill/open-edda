@@ -334,10 +334,10 @@ export function EditorFrame({
             }}
           >
             <Save data-icon="inline-start" aria-hidden="true" />
-            {saveStatus === "pending" ? "Saving" : "Save"}
+            {saveStatus === "pending" ? "Saving file" : "Save file"}
           </Button>
-          {dirty ? <span className="text-xs text-muted-foreground">Unsaved changes</span> : null}
-          {saveStatus === "succeeded" ? <span className="text-xs text-muted-foreground">Saved</span> : null}
+          {dirty ? <span className="text-xs text-muted-foreground">Browser draft not saved</span> : null}
+          {saveStatus === "succeeded" ? <span className="text-xs text-muted-foreground">File saved</span> : null}
           {saveStatus === "failed" ? (
             <span role="alert" className="text-xs text-destructive">
               {editor.saveError}
