@@ -143,6 +143,14 @@ type UpdateContentInput struct {
 	SkillID          string
 }
 
+type RestoreRevisionInput struct {
+	ProjectID        string
+	ContentID        string
+	RevisionNumber   int64
+	ExpectedRevision int64
+	Reason           string
+}
+
 type StructuredWriteInput struct {
 	ProjectID         string
 	ContentID         string

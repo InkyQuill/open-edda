@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"git.inkyquill.net/inky/writer/auth"
@@ -50,6 +51,11 @@ type updateContentRequest struct {
 	Reason           string `json:"reason"`
 }
 
+type restoreRevisionRequest struct {
+	ExpectedRevision int64  `json:"expectedRevision"`
+	Reason           string `json:"reason"`
+}
+
 // RegisterRoutes mounts project core routes on an /api router.
 func RegisterRoutes(r chi.Router, service *Service) {
 	if service == nil {
@@ -66,6 +72,7 @@ func RegisterRoutes(r chi.Router, service *Service) {
 	r.Get("/projects/{projectID}/content/{contentID}", h.getContent)
 	r.Put("/projects/{projectID}/content/{contentID}", h.updateContent)
 	r.Get("/projects/{projectID}/content/{contentID}/revisions", h.listRevisions)
+	r.Post("/projects/{projectID}/content/{contentID}/revisions/{revisionNumber}/restore", h.restoreRevision)
 	r.Get("/projects/{projectID}/map", h.projectMap)
 }
 
@@ -255,6 +262,34 @@ func (h httpHandler) listRevisions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, revisions)
+}
+
+func (h httpHandler) restoreRevision(w http.ResponseWriter, r *http.Request) {
+	revisionNumber, err := strconv.ParseInt(chi.URLParam(r, "revisionNumber"), 10, 64)
+	if err != nil || revisionNumber < 1 {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid revision number"})
+		return
+	}
+
+	var input restoreRevisionRequest
+	if err := decodeJSON(r, &input); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+		return
+	}
+
+	item, err := h.service.RestoreRevision(r.Context(), RestoreRevisionInput{
+		ProjectID:        chi.URLParam(r, "projectID"),
+		ContentID:        chi.URLParam(r, "contentID"),
+		RevisionNumber:   revisionNumber,
+		ExpectedRevision: input.ExpectedRevision,
+		Reason:           input.Reason,
+	})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, item)
 }
 
 func (h httpHandler) projectMap(w http.ResponseWriter, r *http.Request) {

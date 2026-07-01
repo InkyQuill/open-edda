@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createContent, type CreateContentInput } from "./api";
+import { createContent, listRevisions, restoreRevision, type CreateContentInput } from "./api";
 
 class MemoryStorage implements Storage {
   readonly #items = new Map<string, string>();
@@ -102,5 +102,54 @@ describe("api createContent", () => {
         body: JSON.stringify(input),
       }),
     );
+  });
+
+  it("lists revisions from the encoded content revisions endpoint", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => [],
+    } as Response);
+
+    await listRevisions("project/with space", "content/with space");
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/project%2Fwith%20space/content/content%2Fwith%20space/revisions",
+      expect.any(Object),
+    );
+  });
+
+  it("posts restore requests to the encoded revision restore endpoint", async () => {
+    const input = {
+      expectedRevision: 4,
+      reason: "restore checkpoint 2",
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: "content/with space",
+        projectId: "project/with space",
+        kind: "chapter",
+        title: "Opening",
+        slug: "opening",
+        bodyMarkdown: "Earlier body",
+        metadataJson: "{}",
+        sortOrder: 1,
+        currentRevision: 5,
+      }),
+    } as Response);
+
+    await restoreRevision("project/with space", "content/with space", 2, input);
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/project%2Fwith%20space/content/content%2Fwith%20space/revisions/2/restore",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    );
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect((init.headers as Headers).get("Content-Type")).toBe("application/json");
   });
 });

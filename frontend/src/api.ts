@@ -1,5 +1,5 @@
 import { getToken } from "./authApi";
-import type { ContentItem, ContentKind, StoryProject } from "./types";
+import type { ContentItem, ContentKind, Revision, StoryProject } from "./types";
 
 async function authFetch(path: string, init?: RequestInit): Promise<Response> {
   const token = getToken();
@@ -104,6 +104,43 @@ export async function updateContent(
   );
   if (!response.ok) {
     throw new Error(`update content failed: ${response.status}`);
+  }
+  return response.json() as Promise<ContentItem>;
+}
+
+export async function listRevisions(projectId: string, contentId: string, signal?: AbortSignal): Promise<Revision[]> {
+  const response = await authFetch(
+    `/api/projects/${encodeURIComponent(projectId)}/content/${encodeURIComponent(contentId)}/revisions`,
+    { signal },
+  );
+  if (!response.ok) {
+    throw new Error(`list revisions failed: ${response.status}`);
+  }
+  return response.json() as Promise<Revision[]>;
+}
+
+export type RestoreRevisionInput = {
+  expectedRevision: number;
+  reason: string;
+};
+
+export async function restoreRevision(
+  projectId: string,
+  contentId: string,
+  revisionNumber: number,
+  input: RestoreRevisionInput,
+  signal?: AbortSignal,
+): Promise<ContentItem> {
+  const response = await authFetch(
+    `/api/projects/${encodeURIComponent(projectId)}/content/${encodeURIComponent(contentId)}/revisions/${encodeURIComponent(String(revisionNumber))}/restore`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+      signal,
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`restore revision failed: ${response.status}`);
   }
   return response.json() as Promise<ContentItem>;
 }

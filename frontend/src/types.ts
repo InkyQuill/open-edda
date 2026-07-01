@@ -18,3 +18,18 @@ export type ContentItem = {
   sortOrder: number;
   currentRevision: number;
 };
+
+export type Revision = {
+  id: string;
+  contentItemId: string;
+  revisionNumber: number;
+  bodyMarkdown: string;
+  metadataJson: string;
+  reason: string;
+  createdBy: string;
+  createdAt: string;
+  agentSessionId?: string;
+  actionKind?: string;
+  modelVariantId?: string;
+  skillId?: string;
+};

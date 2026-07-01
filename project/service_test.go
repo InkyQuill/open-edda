@@ -395,6 +395,86 @@ func TestStructuredWriteExpectedRevisionMustMatchFetchedRevision(t *testing.T) {
 	assertRevisionCount(t, ctx, db, chapter.ID, 1)
 }
 
+func TestRestoreRevisionCreatesNewRestoreCheckpoint(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	chapter := createStructuredWriteContent(t, ctx, service, KindChapter, "Opening", "The lantern burned blue.", `{"status":"draft"}`)
+	updated, err := service.UpdateContent(ctx, UpdateContentInput{
+		ProjectID:        "project-1",
+		ContentID:        chapter.ID,
+		ExpectedRevision: 1,
+		BodyMarkdown:     "The lantern burned green.",
+		MetadataJSON:     `{"status":"revised"}`,
+		Reason:           "manual revision",
+		CreatedBy:        "author",
+	})
+	if err != nil {
+		t.Fatalf("UpdateContent() error = %v", err)
+	}
+
+	restored, err := service.RestoreRevision(ctx, RestoreRevisionInput{
+		ProjectID:        "project-1",
+		ContentID:        chapter.ID,
+		RevisionNumber:   1,
+		ExpectedRevision: updated.CurrentRevision,
+		Reason:           "restore opening image",
+	})
+	if err != nil {
+		t.Fatalf("RestoreRevision() error = %v", err)
+	}
+
+	if restored.BodyMarkdown != "The lantern burned blue." {
+		t.Fatalf("restored body = %q", restored.BodyMarkdown)
+	}
+	if restored.MetadataJSON != `{"status":"draft"}` {
+		t.Fatalf("restored metadata = %q", restored.MetadataJSON)
+	}
+	if restored.CurrentRevision != 3 {
+		t.Fatalf("restored revision = %d, want 3", restored.CurrentRevision)
+	}
+	assertLatestRevision(t, ctx, db, chapter.ID, revisionAssertion{
+		RevisionNumber: 3,
+		BodyMarkdown:   "The lantern burned blue.",
+		Reason:         "restore opening image",
+		CreatedBy:      "restore",
+	})
+}
+
+func TestRestoreRevisionRejectsStaleExpectedRevision(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	chapter := createStructuredWriteContent(t, ctx, service, KindChapter, "Opening", "The lantern burned blue.", `{}`)
+	if _, err := service.UpdateContent(ctx, UpdateContentInput{
+		ProjectID:        "project-1",
+		ContentID:        chapter.ID,
+		ExpectedRevision: 1,
+		BodyMarkdown:     "The lantern burned green.",
+		MetadataJSON:     "{}",
+		Reason:           "manual revision",
+		CreatedBy:        "author",
+	}); err != nil {
+		t.Fatalf("UpdateContent() error = %v", err)
+	}
+
+	_, err := service.RestoreRevision(ctx, RestoreRevisionInput{
+		ProjectID:        "project-1",
+		ContentID:        chapter.ID,
+		RevisionNumber:   1,
+		ExpectedRevision: 1,
+		Reason:           "stale restore",
+	})
+
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("RestoreRevision() error = %v, want ErrConflict", err)
+	}
+	assertContentUnchanged(t, ctx, service, chapter.ID, "The lantern burned green.", 2)
+	assertRevisionCount(t, ctx, db, chapter.ID, 2)
+}
+
 func TestUpdateEntrySectionBodyUpdatesSectionAndRecordsActivity(t *testing.T) {
 	db := openMigratedTestDB(t)
 	service := NewService(db)
