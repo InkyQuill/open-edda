@@ -12,7 +12,7 @@ The workspace must support different author workflows. Some authors primarily dr
 - Prose line length should stay comfortable. The editor text column should be centered and constrained to roughly 700-800px on desktop and tablet, including Assistant mode.
 - AI actions that act on the editor must be local to the editor. They must not depend on a side panel that may be hidden on mobile.
 - Generate is a frequent action and gets its own persistent composer under the editor.
-- Chat, worldbuilding/context lookup, notes, revisions, and model/settings surfaces are panels around the editor, not replacements for the editor.
+- Chat, worldbuilding/context lookup, notes, checkpoint/history review, and model/settings surfaces are panels around the editor, not replacements for the editor.
 - Mobile is editor-first. Panels become drawers or sheets over the editor.
 
 ## Routing
@@ -84,7 +84,7 @@ Editor-local actions:
 - Mobile selected text exposes those actions in a sticky toolbar.
 - `Generate` is separate from selection actions and lives in a persistent composer below the editor.
 - The Generate composer contains an instruction input and an AI icon/button.
-- Generate runs at the current cursor or selected insertion point and uses the current content revision.
+- Generate runs at the current cursor or selected insertion point and uses the current saved file version or current implementation revision token.
 - Rewrite and Check open a modal on desktop and bottom sheet on mobile before running.
 - Rewrite/Check modal or sheet shows:
   - action title,
@@ -193,8 +193,8 @@ Route state takes precedence for `projectId` and `contentId`. Persisted selected
 
 - Auth or API failures should show recoverable route-level states.
 - The editor should remain usable when provider/model configuration is missing; only AI actions should be disabled.
-- Generate, Rewrite, and Check should validate cursor/selection and revision before submit.
-- Revision conflicts should surface near the editor and offer a clear next step such as reload current text or review conflict.
+- Generate, Rewrite, and Check should validate cursor/selection and current saved version before submit.
+- Save/version conflicts should surface near the editor and offer a clear next step such as reload current text, compare versions, or review conflict.
 - Missing selection should disable selection-scoped actions and explain why.
 - Mobile sheets must preserve typed instructions while temporarily closed.
 
@@ -219,7 +219,7 @@ Required coverage:
   - mobile Draft mode with sheets,
   - deep link to `/projects/:projectId/content/:contentKind/:contentId`.
 
-Backend integration tests remain in Go. Milestone 4 may add backend endpoints only where required for daily writing polish, such as revision restore or attached note workflows.
+Backend integration tests remain in Go. Milestone 4 may add backend endpoints only where required for daily writing polish, such as history/restore or attached note workflows.
 
 ## Implementation Scope Guidance
 
@@ -228,8 +228,8 @@ Milestone 4 should be implemented in stages:
 1. Routed workspace foundation: add routing, Redux store, Tailwind v4, shadcn/ui setup, vertical-slice structure, workspace shell, editor frame, Generate composer, selection action bubble, mobile toolbar, and Rewrite/Check modal shell.
 2. Behavior parity and data slices: move existing assistant, model settings, skill, activity, prompt-record, and script-runtime visibility from the old monolithic frontend into routed vertical slices.
 3. Editor adapter: integrate Galley Editor or a staged editor adapter behind `EditorFrame`, with mutation-safe cursor and UTF-8 byte selection APIs.
-4. Assistant actions: wire Generate, Rewrite, Check, preview, accept/reject, and revision-safe conflict handling from the editor-local controls.
-5. Review surfaces: add review-mode drawer surfaces for chat/tools-first analysis, revisions, diffs, restore, attached notes, activity, and prompt records.
+4. Assistant actions: wire Generate, Rewrite, Check, preview, accept/reject, and version-safe conflict handling from the editor-local controls.
+5. Review surfaces: add review-mode drawer surfaces for chat/tools-first analysis, checkpoints/history, diffs, restore, attached notes, activity, and prompt records.
 6. Mobile and browser smoke hardening: add focused component tests and browser smoke coverage for desktop Assistant/Draft/Review and mobile sheet workflows.
 
 Avoid unrelated redesign work. Visual polish beyond clear layout, spacing, accessibility, and shadcn/Tailwind consistency should wait until the structural workspace is stable.

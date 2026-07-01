@@ -1,3 +1,7 @@
-# Database as the Project Source of Truth
+# Project Folder as the Story Source of Truth
 
-Open Edda stores each story project's authoritative text, story bible material, versions, diffs, chat history, and agent activity in the database. Story text, story bible entries, writing briefs, and project notes remain Markdown-based content inside the database so they can be edited with a Markdown editor and exported cleanly to Markdown files. Markdown import and export are first-class interoperability paths for local TUI agent editing and backups, but Markdown files are not the canonical storage model because the product needs structured retrieval, version history, permissions, and auditability that would be fragile if every feature had to round-trip through filesystem semantics.
+Open Edda treats an Edda project folder as the authoritative home for story prose, story bible material, writing briefs, project notes, local skills, and other author-owned Markdown files. The service reads and writes one defined project layout, so an author can work in the web app or in normal editors on their computers without turning Open Edda into a git client.
+
+SQLite remains part of the architecture, but it is not the canonical store for author prose. It stores indexes, search rows, project maps, prompt records, activity, session state, assistant caches, script runtime records, and mirrors of checkpoint metadata. If the database is lost, Open Edda should be able to rebuild project content and checkpoint history from the folder plus `.edda/` metadata. Data that only exists in operational tables may be lost unless a later ADR explicitly persists it into `.edda/`.
+
+This supersedes the earlier database-source-of-truth assumption. Existing database-backed project APIs can remain as implementation scaffolding while the file-first migration proceeds, but new product docs should describe the Edda project folder and `.edda/` metadata as the durable project model.
