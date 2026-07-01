@@ -12,7 +12,7 @@ This roadmap tracks product milestones separately from implementation plans. Det
 | 3.5 | Elysium Skill Library Rewrite | Implemented | `docs/superpowers/plans/2026-06-14-writer-skill-library-rewrite.md` |
 | 3.6 | Skill Script Runtime | Implemented | `docs/superpowers/plans/2026-06-14-open-edda-skill-script-runtime.md` |
 | 4 | Daily Writing Polish | In progress | See phase tracker below |
-| 5 | File-First Projects And Checkpoints | Designed | `docs/superpowers/specs/2026-07-01-file-first-checkpoints-design.md` |
+| 5 | File-First Projects And Checkpoints | In Progress | `docs/superpowers/specs/2026-07-01-file-first-checkpoints-design.md` |
 | Later | Collaboration | Deferred | Needs specs after single-author file-first workflow is stable |
 
 ## Milestone 1: Project Core
@@ -150,6 +150,18 @@ Acceptance target:
 - `edda get`, `edda status`, `edda save`, `edda send`, `edda take`, `edda history`, `edda diff`, and `edda restore` cover the main local workflow.
 - Checkpoints provide project-wide history, comparison, restore, recovery, and sync without exposing git branches, staging, rebases, or remote-management concepts.
 - Conflicts preserve base/local/server versions and resolve back into normal saved files.
+
+### Milestone 5 Phase Tracker
+
+| Phase | Scope | Status | Plan |
+| --- | --- | --- | --- |
+| 1 | File-first layout foundation: scan the `alchemist`-style Edda folder structure, read/write `.edda/project.json`, and add `edda init/status` CLI skeleton | Implemented | `docs/superpowers/plans/2026-07-01-milestone-5-layout-foundation.md` |
+| 2 | File index and stable IDs: rebuild SQLite index rows from files, hash saved content, and preserve IDs across renames via `.edda/ids.json` | Planned | Create after Phase 1 is implemented |
+| 3 | Draft/save model: separate browser/server draft autosaves from canonical file writes and update web Save semantics | Planned | Create after Phase 2 is implemented |
+| 4 | Linear checkpoints: create, list, diff, and restore project-wide snapshots using `.edda/checkpoints/` | Planned | Create after Phase 3 is implemented |
+| 5 | CLI sync workflow: implement `edda get`, `send`, `take`, server connection metadata, pending upload state, and retry behavior | Planned | Create after Phase 4 is implemented |
+| 6 | Conflict preservation and resolution: detect divergent saved file edits, preserve base/local/server versions, and resolve back to normal files | Planned | Create after Phase 5 is implemented |
+| 7 | Agent/write migration: move structured writes and review surfaces from database revisions toward saved file hashes and checkpoints | Planned | Create after Phase 6 is implemented |
 
 ## Later: Collaboration
 
