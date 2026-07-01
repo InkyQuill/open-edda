@@ -35,10 +35,6 @@ func NewService(db *sql.DB, secret string) *Service {
 	return &Service{db: db, queries: store.New(db), secret: secret}
 }
 
-func (s *Service) Secret() string {
-	return s.secret
-}
-
 func (s *Service) Register(ctx context.Context, email, password string) (AuthResponse, error) {
 	email, err := validateEmail(email)
 	if err != nil {

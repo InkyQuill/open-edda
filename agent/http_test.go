@@ -20,6 +20,7 @@ func TestProviderConfigHTTPEndpoints(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()
 	service := NewService(db, project.NewService(db), nil)
+	service.SetEncryptionSecret(testEncryptionSecret)
 	handler := newTestAgentHTTP(service)
 
 	provider := postJSON[ProviderConfig](t, handler, "/api/provider-configs", `{
@@ -77,8 +78,11 @@ func TestProviderConfigHTTPEndpoints(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT api_key_encrypted FROM provider_configs WHERE id = ?`, provider.ID).Scan(&storedKey); err != nil {
 		t.Fatalf("read stored API key: %v", err)
 	}
-	if storedKey != "rotated-key" {
-		t.Fatalf("stored key = %q, want rotated-key", storedKey)
+	if storedKey == "rotated-key" {
+		t.Fatal("stored API key is plaintext")
+	}
+	if !strings.HasPrefix(storedKey, "edda:v1:") {
+		t.Fatalf("stored API key = %q, want encrypted edda:v1 prefix", storedKey)
 	}
 }
 
@@ -408,6 +412,7 @@ func TestQuickActionHTTPValidationErrorsReturnBadRequest(t *testing.T) {
 func TestProviderAndModelHTTPValidationAndConflicts(t *testing.T) {
 	db := openMigratedTestDB(t)
 	service := NewService(db, project.NewService(db), nil)
+	service.SetEncryptionSecret(testEncryptionSecret)
 	handler := newTestAgentHTTP(service)
 
 	badProviderRequests := []string{

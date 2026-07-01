@@ -44,14 +44,26 @@ type ScriptRef struct {
 
 type EnvelopeInputs struct {
 	ContentIDs    []string          `json:"contentIds,omitempty"`
+	ContentItems  []ContentInput    `json:"contentItems,omitempty"`
 	EntrySections []EntrySectionRef `json:"entrySections,omitempty"`
 	Assets        []AssetInput      `json:"assets,omitempty"`
 	Arguments     map[string]any    `json:"arguments,omitempty"`
 }
 
+type ContentInput struct {
+	ID              string `json:"id"`
+	Kind            string `json:"kind"`
+	Title           string `json:"title"`
+	BodyMarkdown    string `json:"bodyMarkdown"`
+	MetadataJSON    string `json:"metadataJson,omitempty"`
+	CurrentRevision int64  `json:"currentRevision"`
+	Truncated       bool   `json:"truncated,omitempty"`
+}
+
 type EntrySectionRef struct {
-	ContentID string `json:"contentId"`
-	Heading   string `json:"heading"`
+	ContentID    string `json:"contentId"`
+	Heading      string `json:"heading"`
+	BodyMarkdown string `json:"bodyMarkdown,omitempty"`
 }
 
 type AssetInput struct {

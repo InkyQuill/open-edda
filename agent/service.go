@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	edcrypto "git.inkyquill.net/inky/writer/internal/crypto"
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/skill"
 	"git.inkyquill.net/inky/writer/store"
@@ -22,11 +23,12 @@ const maxToolRounds = 4
 var ErrInvalidInput = errors.New("invalid input")
 
 type Service struct {
-	db             *sql.DB
-	queries        *store.Queries
-	projectService *project.Service
-	provider       Provider
-	skillService   SkillProvider
+	db               *sql.DB
+	queries          *store.Queries
+	projectService   *project.Service
+	provider         Provider
+	skillService     SkillProvider
+	encryptionSecret string
 }
 
 type SkillProvider interface {
@@ -50,6 +52,10 @@ func NewService(db *sql.DB, projectService *project.Service, provider Provider) 
 
 func (s *Service) SetSkillService(service SkillProvider) {
 	s.skillService = service
+}
+
+func (s *Service) SetEncryptionSecret(encryptionSecret string) {
+	s.encryptionSecret = encryptionSecret
 }
 
 func (s *Service) validateSelectedSkillIDs(ctx context.Context, projectID string, skillIDs []string) error {
@@ -304,13 +310,16 @@ func (s *Service) CreateProviderConfig(ctx context.Context, input CreateProvider
 		UpdatedAt: now,
 	}
 
-	// Encryption is handled in the later auth/security milestone.
+	encryptedAPIKey, err := edcrypto.EncryptAPIKey(input.APIKey, s.encryptionSecret)
+	if err != nil {
+		return ProviderConfig{}, fmt.Errorf("encrypt provider API key: %w", err)
+	}
 	if err := s.queries.CreateProviderConfig(ctx, store.CreateProviderConfigParams{
 		ID:              provider.ID,
 		AuthorID:        provider.AuthorID,
 		Name:            provider.Name,
 		BaseUrl:         provider.BaseURL,
-		ApiKeyEncrypted: input.APIKey,
+		ApiKeyEncrypted: encryptedAPIKey,
 		CreatedAt:       provider.CreatedAt,
 		UpdatedAt:       provider.UpdatedAt,
 	}); err != nil {
@@ -351,9 +360,13 @@ func (s *Service) UpdateProviderConfig(ctx context.Context, input UpdateProvider
 	if _, err := s.GetProviderConfig(ctx, input.AuthorID, input.ProviderID); err != nil {
 		return ProviderConfig{}, err
 	}
+	encryptedAPIKey, err := edcrypto.EncryptAPIKey(input.APIKey, s.encryptionSecret)
+	if err != nil {
+		return ProviderConfig{}, fmt.Errorf("encrypt provider API key: %w", err)
+	}
 	if err := s.queries.UpdateProviderConfig(ctx, store.UpdateProviderConfigParams{
 		BaseUrl:         input.BaseURL,
-		ApiKeyEncrypted: input.APIKey,
+		ApiKeyEncrypted: encryptedAPIKey,
 		UpdatedAt:       nowString(),
 		ID:              input.ProviderID,
 		AuthorID:        input.AuthorID,
@@ -544,7 +557,10 @@ func (s *Service) RunChatTurn(ctx context.Context, input ChatTurnInput) (ChatTur
 	if err != nil {
 		return ChatTurnResult{}, fmt.Errorf("get provider config for project model: %w", err)
 	}
-	provider := s.completionProvider(providerConfig, modelVariantFromStore(model))
+	provider, err := s.completionProvider(providerConfig, modelVariantFromStore(model))
+	if err != nil {
+		return ChatTurnResult{}, err
+	}
 	profile, err := s.GetPromptProfile(ctx, input.ProjectID)
 	if err != nil {
 		return ChatTurnResult{}, err
@@ -1148,7 +1164,10 @@ func (s *Service) runQuickActionCompletion(ctx context.Context, input quickActio
 		return "", Session{}, fmt.Errorf("get provider config for project model: %w", err)
 	}
 	modelVariant := modelVariantFromStore(model)
-	provider := s.completionProvider(providerConfig, modelVariant)
+	provider, err := s.completionProvider(providerConfig, modelVariant)
+	if err != nil {
+		return "", Session{}, err
+	}
 	if _, err := s.projectService.GetContent(ctx, input.ProjectID, input.ContentID); err != nil {
 		return "", Session{}, err
 	}
@@ -1255,11 +1274,15 @@ func (s *Service) completeQuickActionWithTools(ctx context.Context, provider Pro
 	return CompletionResponse{}, fmt.Errorf("tool call rounds exceeded %d", maxToolRounds)
 }
 
-func (s *Service) completionProvider(providerConfig store.ProviderConfig, model ModelVariant) Provider {
+func (s *Service) completionProvider(providerConfig store.ProviderConfig, model ModelVariant) (Provider, error) {
 	if s.provider != nil {
-		return s.provider
+		return s.provider, nil
 	}
-	return NewOpenAICompatibleClient(providerConfig.BaseUrl, providerConfig.ApiKeyEncrypted, model)
+	apiKey, err := edcrypto.DecryptAPIKey(providerConfig.ApiKeyEncrypted, s.encryptionSecret)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt provider API key: %w", err)
+	}
+	return NewOpenAICompatibleClient(providerConfig.BaseUrl, apiKey, model), nil
 }
 
 func (s *Service) validateContinuationTarget(ctx context.Context, input ContinuationInput) error {
