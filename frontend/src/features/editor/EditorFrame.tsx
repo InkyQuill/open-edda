@@ -1,14 +1,27 @@
 import { ClipboardCheck, FileText, MessageSquarePlus, PenLine, Save } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useLocation } from "react-router-dom";
 import { GalleyEditor, type GalleyMode } from "@inky/galley-editor";
 
+import type { AppDispatch } from "../../app/store/store";
 import { updateContent } from "../../api";
 import { Button } from "../../shared/ui/button";
 import type { ContentItem } from "../../types";
 import type { WorkspaceMode } from "../workspace/workspaceSlice";
-import { assistantActions } from "../assistant-actions/assistantActionsSlice";
+import {
+  acceptAssistantCandidate,
+  assistantActions,
+  type AssistantActionState,
+  rejectAssistantCandidate,
+  runGenerate,
+} from "../assistant-actions/assistantActionsSlice";
 import { AssistantActionPreview } from "./AssistantActionPreview";
+import {
+  buildAssistantActionRequestKey,
+  buildGenerateRequest,
+  validateGenerateAction,
+} from "./assistantActionRequests";
 import { createGalleyEditorSnapshot, type GalleySelectionSnapshot } from "./editorAdapter";
 import { GenerateComposer } from "./GenerateComposer";
 import { SelectionActionDialog } from "./SelectionActionDialog";
@@ -24,7 +37,14 @@ export type EditorFrameProps = {
 };
 
 type EditorFrameRootState = {
+  assistantActions: AssistantActionState;
   editor: EditorState;
+  modelSettings: {
+    activeModelVariantId: string | null;
+  };
+  skills: {
+    selectedSkillIds: string[];
+  };
 };
 
 const actionButtons: Array<{
@@ -76,8 +96,14 @@ export function EditorFrame({
   contentError = null,
   onContentSaved,
 }: EditorFrameProps) {
-  const dispatch = useDispatch();
+  const dispatch = useDispatch<AppDispatch>();
+  const location = useLocation();
+  const assistantActionState = useSelector((state: EditorFrameRootState) => state.assistantActions);
   const editor = useSelector((state: EditorFrameRootState) => state.editor);
+  const activeModelVariantId = useSelector(
+    (state: EditorFrameRootState) => state.modelSettings.activeModelVariantId,
+  );
+  const selectedSkillIds = useSelector((state: EditorFrameRootState) => state.skills.selectedSkillIds);
   const [generateStatus, setGenerateStatus] = useState<string | null>(null);
   const contextMatchesContent =
     editor.contentContext?.projectId === projectId && editor.contentContext.contentId === content?.id;
@@ -95,8 +121,10 @@ export function EditorFrame({
   useEffect(() => {
     if (!content) {
       dispatch(editorActions.resetEditorContext());
+      dispatch(assistantActions.clearAssistantActionResult());
       return;
     }
+    dispatch(assistantActions.clearAssistantActionResult());
     dispatch(
       editorActions.hydrateEditorContext({
         projectId,
@@ -139,15 +167,80 @@ export function EditorFrame({
   }
 
   function handleGenerate(): void {
-    if (!content || !contextMatchesContent || !editor.contentContext) {
-      setGenerateStatus("Select content before generating.");
+    const validationError = validateGenerateAction({
+      contentContext: contextMatchesContent ? editor.contentContext : null,
+      cursorByte: editor.cursorByte,
+      activeModelVariantId,
+    });
+    if (validationError) {
+      setGenerateStatus(validationError);
       return;
     }
-    if (editor.cursorByte === null) {
-      setGenerateStatus("Place the cursor in the draft before generating.");
+    if (!editor.contentContext || editor.cursorByte === null || !activeModelVariantId) return;
+
+    const requestKey = buildAssistantActionRequestKey(location.pathname, editor.contentContext);
+    const requestToken = crypto.randomUUID();
+    setGenerateStatus(null);
+    void dispatch(
+      runGenerate(
+        buildGenerateRequest({
+          contentContext: editor.contentContext,
+          activeModelVariantId,
+          cursorByte: editor.cursorByte,
+          instructions: editor.generateInstructions,
+          skillIds: selectedSkillIds,
+          requestKey,
+          requestToken,
+        }),
+      ),
+    );
+  }
+
+  async function handleAcceptPreview(): Promise<void> {
+    if (
+      !assistantActionState.candidate ||
+      !assistantActionState.requestKey ||
+      !assistantActionState.requestToken
+    ) {
       return;
     }
-    setGenerateStatus(`Generate is ready for revision ${editor.contentContext.revision} at byte ${editor.cursorByte}.`);
+
+    const result = await dispatch(
+      acceptAssistantCandidate({
+        projectId: assistantActionState.candidate.projectId,
+        candidateId: assistantActionState.candidate.id,
+        requestKey: assistantActionState.requestKey,
+        requestToken: assistantActionState.requestToken,
+      }),
+    );
+
+    if (!acceptAssistantCandidate.fulfilled.match(result)) return;
+    dispatch(
+      editorActions.saveSucceeded({
+        revision: result.payload.content.currentRevision,
+        bodyMarkdown: result.payload.content.bodyMarkdown,
+      }),
+    );
+    onContentSaved(result.payload.content);
+  }
+
+  function handleRejectPreview(): void {
+    if (
+      !assistantActionState.candidate ||
+      !assistantActionState.requestKey ||
+      !assistantActionState.requestToken
+    ) {
+      return;
+    }
+
+    void dispatch(
+      rejectAssistantCandidate({
+        projectId: assistantActionState.candidate.projectId,
+        candidateId: assistantActionState.candidate.id,
+        requestKey: assistantActionState.requestKey,
+        requestToken: assistantActionState.requestToken,
+      }),
+    );
   }
 
   if (contentLoading) {
@@ -241,8 +334,10 @@ export function EditorFrame({
       <GenerateComposer disabled={generateDisabled} helperText={generateHelperText} onGenerate={handleGenerate} />
       {generateStatus ? <p className="text-sm text-muted-foreground">{generateStatus}</p> : null}
       <AssistantActionPreview
-        onAccept={() => undefined}
-        onReject={() => undefined}
+        onAccept={() => {
+          void handleAcceptPreview();
+        }}
+        onReject={handleRejectPreview}
         onDismiss={() => dispatch(assistantActions.clearAssistantActionResult())}
       />
       <SelectionActionDialog />
