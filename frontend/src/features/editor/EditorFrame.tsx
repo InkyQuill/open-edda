@@ -7,6 +7,8 @@ import { updateContent } from "../../api";
 import { Button } from "../../shared/ui/button";
 import type { ContentItem } from "../../types";
 import type { WorkspaceMode } from "../workspace/workspaceSlice";
+import { assistantActions } from "../assistant-actions/assistantActionsSlice";
+import { AssistantActionPreview } from "./AssistantActionPreview";
 import { createGalleyEditorSnapshot, type GalleySelectionSnapshot } from "./editorAdapter";
 import { GenerateComposer } from "./GenerateComposer";
 import { SelectionActionDialog } from "./SelectionActionDialog";
@@ -238,6 +240,11 @@ export function EditorFrame({
 
       <GenerateComposer disabled={generateDisabled} helperText={generateHelperText} onGenerate={handleGenerate} />
       {generateStatus ? <p className="text-sm text-muted-foreground">{generateStatus}</p> : null}
+      <AssistantActionPreview
+        onAccept={() => undefined}
+        onReject={() => undefined}
+        onDismiss={() => dispatch(assistantActions.clearAssistantActionResult())}
+      />
       <SelectionActionDialog />
     </article>
   );
