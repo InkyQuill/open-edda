@@ -1,6 +1,6 @@
 # Open Edda
 
-Open Edda is a self-hosted writing workspace for long-form fiction projects. It keeps story text, worldbuilding, writing briefs, project notes, revisions, agent activity, prompt records, skills, and script-run artifacts in a local SQLite-backed service with a browser UI.
+Open Edda is a self-hosted writing workspace for long-form fiction projects. Its target model is file-first: story text, storyline/planning material, characters, worldbuilding, drafts, project guidance, and project-local skills live as ordinary Markdown files in one defined Edda project layout, while SQLite backs indexes, search, assistant context, prompt records, activity, settings, and other operational data for the browser UI.
 
 The project is currently pre-v1. Milestones 1-3.6 are implemented, and Milestone 4 daily-writing polish is in progress.
 
@@ -122,11 +122,11 @@ docs/        Roadmap, specs, implementation plans, skill library docs
 Open Edda supports:
 
 - Authenticated local author workflow.
-- Story projects with chapters, story bible entries, writing briefs, project notes, attached notes, entry sections, relations, and revisions.
-- Elysium-style Markdown import/export.
+- Story projects with chapters, story bible entries, writing briefs, project notes, attached notes, entry sections, relations, and current legacy per-item revisions.
+- Edda-layout Markdown import/export, moving toward file-first project folders and `.edda/` metadata. Elysium is treated as an older conversion source, not the target structure.
 - OpenAI-compatible provider/model configuration.
 - Agent sessions for chat, continuation, rewrite, and read/check flows.
-- Structured agent tools for project map, content search/read, revisions, writes, selected skills, and skill scripts.
+- Structured agent tools for project map, content search/read, legacy revisions, writes, selected skills, and skill scripts.
 - Skill import, browsing, session selection, and built-in fiction-writing skills.
 - Audited skill script runtime with admin approval, safe input envelopes, reviewable outputs, and run history.
 - Routed writing workspace with desktop drawers and mobile sheets for editor, assistant, and review surfaces. System settings for providers, models, skills, and script runtime administration are planned as the next Milestone 4 IA correction.
@@ -136,4 +136,4 @@ See [docs/agent-tools.md](docs/agent-tools.md) for the current agent tool catalo
 
 ## Notes
 
-This is designed for self-hosted/local use first. Multi-user collaboration, sync tooling, and broader deployment hardening are deferred until the single-author workflow is stable.
+This is designed for self-hosted/local use first. Multi-user collaboration and broader deployment hardening are deferred until the single-author file-first workflow, lightweight checkpoints, and local/server mobility are stable.

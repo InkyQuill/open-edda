@@ -4,11 +4,11 @@
 
 Open Edda should support a writer who mostly works in ordinary Markdown files across several computers, while still offering the web editor, AI assistants, search, history, and recovery. The goal is not to turn Open Edda into a git client. The goal is a simple writing workflow: open or fetch a project, edit files, save current work, create named checkpoints, sync with the server, compare changes, and recover earlier versions when needed.
 
-This design supersedes the earlier database-source-of-truth model for story content. The story folder becomes canonical. SQLite remains important, but as a rebuildable index, cache, and operational store.
+This design supersedes the earlier database-source-of-truth model for story content. The Edda project folder becomes canonical. SQLite remains important, but as a rebuildable index, cache, and operational store.
 
 ## Goals
 
-- Treat ordinary project folders as first-class Open Edda projects.
+- Treat Edda project folders as first-class Open Edda projects.
 - Keep story prose, characters, worldbuilding, planning, drafts, and other author material as normal files.
 - Allow projects to start either in the web app/server or as a local folder.
 - Preserve a comfortable web editing workflow with draft autosave and explicit Save.
@@ -24,11 +24,11 @@ This design supersedes the earlier database-source-of-truth model for story cont
 - Multi-author collaborative editing.
 - Keystroke-level sync between devices.
 - Making every Open Edda feature work without any database at runtime.
-- Forcing existing projects into the Elysium folder layout.
+- Supporting arbitrary user folder structures without conversion into the Edda layout.
 
 ## Source Of Truth
 
-The story folder is canonical. Edda opens a folder such as `/writing/alchemist`, reads Markdown files in place, and writes normal Markdown files when the user saves in the web UI or local CLI workflow.
+The Edda project folder is canonical. Edda opens a folder such as `/writing/alchemist`, reads Markdown files in place, and writes normal Markdown files when the user saves in the web UI or local CLI workflow.
 
 SQLite stores derived and operational data:
 
@@ -46,26 +46,42 @@ If the database is deleted, Edda can rescan the folder and recover the project c
 
 ## Folder Layout
 
-Human-authored content remains ordinary files:
+Human-authored content remains ordinary files in one defined layout. The target structure follows the stronger `alchemist` project shape:
 
 ```text
-story/
-characters/
-worldbuilding/
-storyline/
-drafts/
 AGENTS.md
 BOOTSTRAP.md
+.agents/
+  skills/
+story/
+  _index.md
+  chapter-01.md
+characters/
+  _index.md
+  Protagonist.md
+worldbuilding/
+  _index.md
+  culture/
+  magic/
+  monsters/
+  places/
+storyline/
+  _index.md
+  chapter-01-plan.md
+  vol-01-plan.md
+drafts/
+  chapter-01-draft.md
 ```
 
-Edda does not require the Elysium layout. Instead, a folder profile tells Edda how to classify files. For the `alchemist` project, a profile could map:
+This is the structure Edda is comfortable with. Existing projects can be imported, moved, renamed, or manually refined into this layout before Edda treats them as fully managed projects. The core mapping is:
 
 - `story/` to prose,
 - `characters/` to character notes,
 - `worldbuilding/**` to lore,
 - `storyline/` to planning,
 - `drafts/` to draft material,
-- other Markdown files to project notes or project guidance.
+- top-level guidance files to project instructions and writing guidance,
+- `.agents/skills/` to project-local skill source material.
 
 Edda-owned metadata lives in `.edda/`:
 
@@ -79,7 +95,7 @@ Edda-owned metadata lives in `.edda/`:
   conflicts/
 ```
 
-- `.edda/project.json` stores the folder profile, project title, server link, and schema version.
+- `.edda/project.json` stores the project title, server link, schema version, and layout version.
 - `.edda/ids.json` maps stable Edda item IDs to file paths so renames can be tracked without treating every rename as delete plus add.
 - `.edda/state.local.json` stores last-seen hashes, device identity, sync cursors, and pending upload state. It is device-local and should be ignored by cloud-drive sync and checkpoint capture.
 - `.edda/drafts/` stores web-editor autosaves that have not been saved into canonical files.
@@ -142,7 +158,7 @@ There are no branches and no merge vocabulary in the main workflow.
 
 ## Backend Components
 
-- **Folder profile service:** reads `.edda/project.json`, discovers Markdown files, and classifies them.
+- **Layout service:** reads `.edda/project.json`, validates the Edda project layout, discovers Markdown files, and classifies them by path.
 - **File indexer:** hashes saved files, updates SQLite rows, and detects added, changed, renamed, and deleted files.
 - **Draft service:** stores autosaved web edits separately from canonical files until Save.
 - **Checkpoint service:** creates named project-wide snapshots, records manifests, supports diff/history/restore, and tracks upload state.
@@ -173,7 +189,7 @@ For a document-changing assistant action:
 4. Accepted or direct-applied changes update the draft or saved file according to the active UI action.
 5. Checkpoint history records the result only when the user creates a checkpoint.
 
-This keeps revision safety without making every text edit a database revision.
+This keeps version safety without making every text edit a database revision.
 
 ## Documentation Migration
 
@@ -181,10 +197,10 @@ The existing docs should be updated so the project has one coherent model:
 
 - Replace `docs/adr/0001-database-source-of-truth.md` with a file-first source-of-truth ADR.
 - Add a new ADR for Edda linear checkpoints instead of git.
-- Update `docs/superpowers/specs/2026-06-13-writer-vision-design.md` to describe file-first projects, `.edda/`, drafts, saves, checkpoints, and CLI/server mobility.
+- Update `docs/superpowers/specs/2026-06-13-writer-vision-design.md` to describe the Edda layout, `.edda/`, drafts, saves, checkpoints, and CLI/server mobility.
 - Update `docs/superpowers/specs/2026-06-14-milestone-4-daily-writing-polish-design.md` so editor conflict and revision language matches the draft/save/checkpoint model.
 - Update `README.md` so it no longer says story text is durably kept in SQLite.
-- Reframe `docs/adr/0008-elysium-layout-for-markdown-interoperability.md` as one supported folder profile/import convention, not the central project model.
+- Reframe `docs/adr/0008-elysium-layout-for-markdown-interoperability.md` around the `alchemist`-style Edda project layout. Elysium is a conversion source, not the target.
 - Review ADRs 0002, 0003, 0007, and 0011 for wording that assumes database-owned revisions. Their core decisions still stand.
 - Treat completed implementation plans as historical records. Do not rewrite them as if they are still future plans; create a migration implementation plan that supersedes their database-first assumptions.
 
@@ -192,7 +208,7 @@ The existing docs should be updated so the project has one coherent model:
 
 Tests should prioritize data safety:
 
-- Scan real folder layouts without forcing Elysium paths.
+- Import or refine source folders into the Edda layout, then scan that layout reliably.
 - Round-trip Markdown files without content drift.
 - Rebuild SQLite project indexes from folder state.
 - Preserve stable IDs across renames.
