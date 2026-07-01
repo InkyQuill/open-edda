@@ -32,6 +32,14 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runInit(args[1:], stdout)
 	case "save":
 		return runSave(args[1:], stdout)
+	case "checkpoint":
+		return runCheckpoint(args[1:], stdout)
+	case "history":
+		return runHistory(args[1:], stdout)
+	case "diff":
+		return runDiff(args[1:], stdout)
+	case "restore":
+		return runRestore(args[1:], stdout)
 	case "help", "-h", "--help":
 		printUsage(stdout)
 		return nil
@@ -180,11 +188,113 @@ func runSave(args []string, stdout io.Writer) error {
 	return nil
 }
 
+func runCheckpoint(args []string, stdout io.Writer) error {
+	flags := flag.NewFlagSet("checkpoint", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	message := flags.String("message", "", "checkpoint message")
+	root, flagArgs := splitOptionalPath(args)
+	if err := flags.Parse(flagArgs); err != nil {
+		return err
+	}
+	if flags.NArg() > 0 {
+		root = flags.Arg(0)
+	}
+	checkpoint, err := fileproject.CreateCheckpoint(root, fileproject.CreateCheckpointInput{Message: *message})
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "Checkpoint %s (%d files)\n", checkpoint.ID, len(checkpoint.Files))
+	return nil
+}
+
+func runHistory(args []string, stdout io.Writer) error {
+	root, flagArgs := splitOptionalPath(args)
+	flags := flag.NewFlagSet("history", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	if err := flags.Parse(flagArgs); err != nil {
+		return err
+	}
+	if flags.NArg() > 0 {
+		root = flags.Arg(0)
+	}
+	checkpoints, err := fileproject.ListCheckpoints(root)
+	if err != nil {
+		return err
+	}
+	if len(checkpoints) == 0 {
+		fmt.Fprintln(stdout, "No checkpoints.")
+		return nil
+	}
+	for _, checkpoint := range checkpoints {
+		if checkpoint.Message == "" {
+			fmt.Fprintf(stdout, "%s %s (%d files)\n", checkpoint.ID, checkpoint.CreatedAt.Format("2006-01-02T15:04:05Z"), len(checkpoint.Files))
+		} else {
+			fmt.Fprintf(stdout, "%s %s %q (%d files)\n", checkpoint.ID, checkpoint.CreatedAt.Format("2006-01-02T15:04:05Z"), checkpoint.Message, len(checkpoint.Files))
+		}
+	}
+	return nil
+}
+
+func runDiff(args []string, stdout io.Writer) error {
+	flags := flag.NewFlagSet("diff", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	from := flags.String("from", "", "source checkpoint id")
+	to := flags.String("to", "", "target checkpoint id")
+	root, flagArgs := splitOptionalPath(args)
+	if err := flags.Parse(flagArgs); err != nil {
+		return err
+	}
+	if flags.NArg() > 0 {
+		root = flags.Arg(0)
+	}
+	if *from == "" {
+		return fmt.Errorf("diff requires --from")
+	}
+	entries, err := fileproject.DiffCheckpoint(root, *from, *to)
+	if err != nil {
+		return err
+	}
+	if len(entries) == 0 {
+		fmt.Fprintln(stdout, "No changes.")
+		return nil
+	}
+	for _, entry := range entries {
+		fmt.Fprintf(stdout, "%s %s\n", entry.Status, entry.Path)
+	}
+	return nil
+}
+
+func runRestore(args []string, stdout io.Writer) error {
+	flags := flag.NewFlagSet("restore", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	checkpointID := flags.String("checkpoint", "", "checkpoint id")
+	root, flagArgs := splitOptionalPath(args)
+	if err := flags.Parse(flagArgs); err != nil {
+		return err
+	}
+	if flags.NArg() > 0 {
+		root = flags.Arg(0)
+	}
+	if *checkpointID == "" {
+		return fmt.Errorf("restore requires --checkpoint")
+	}
+	checkpoint, err := fileproject.RestoreCheckpoint(root, *checkpointID)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "Restored %s (%d files)\n", checkpoint.ID, len(checkpoint.Files))
+	return nil
+}
+
 func printUsage(output io.Writer) {
 	fmt.Fprintln(output, "Usage:")
 	fmt.Fprintln(output, "  edda status [path] [--write-ids]")
 	fmt.Fprintln(output, "  edda init [path] --title \"Title\" [--id project-id] [--server-url URL]")
 	fmt.Fprintln(output, "  edda save [path] --id file-id (--from-draft | --body-file markdown.md) [--expected-sha256 HASH]")
+	fmt.Fprintln(output, "  edda checkpoint [path] [--message \"Message\"]")
+	fmt.Fprintln(output, "  edda history [path]")
+	fmt.Fprintln(output, "  edda diff [path] --from checkpoint-id [--to checkpoint-id]")
+	fmt.Fprintln(output, "  edda restore [path] --checkpoint checkpoint-id")
 }
 
 func splitOptionalPath(args []string) (string, []string) {

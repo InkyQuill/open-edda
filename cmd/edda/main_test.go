@@ -125,6 +125,53 @@ func TestSaveBodyFileRejectsStaleExpectedHash(t *testing.T) {
 	}
 }
 
+func TestCheckpointHistoryDiffAndRestoreWorkflow(t *testing.T) {
+	root := copyFixture(t, filepath.Join("..", "..", "fileproject", "testdata", "partial"))
+	var checkpointOut bytes.Buffer
+	if err := run([]string{"checkpoint", root, "--message", "base"}, &checkpointOut, &bytes.Buffer{}); err != nil {
+		t.Fatalf("checkpoint error = %v", err)
+	}
+	fields := strings.Fields(checkpointOut.String())
+	if len(fields) < 2 || fields[0] != "Checkpoint" {
+		t.Fatalf("checkpoint output = %s", checkpointOut.String())
+	}
+	checkpointID := fields[1]
+
+	var historyOut bytes.Buffer
+	if err := run([]string{"history", root}, &historyOut, &bytes.Buffer{}); err != nil {
+		t.Fatalf("history error = %v", err)
+	}
+	if !strings.Contains(historyOut.String(), checkpointID) || !strings.Contains(historyOut.String(), "base") {
+		t.Fatalf("history output = %s", historyOut.String())
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "story", "chapter-01.md"), []byte("# Chapter 1\n\nChanged for diff.\n"), 0o644); err != nil {
+		t.Fatalf("write changed file: %v", err)
+	}
+	var diffOut bytes.Buffer
+	if err := run([]string{"diff", root, "--from", checkpointID}, &diffOut, &bytes.Buffer{}); err != nil {
+		t.Fatalf("diff error = %v", err)
+	}
+	if !strings.Contains(diffOut.String(), "modified story/chapter-01.md") {
+		t.Fatalf("diff output = %s", diffOut.String())
+	}
+
+	var restoreOut bytes.Buffer
+	if err := run([]string{"restore", root, "--checkpoint", checkpointID}, &restoreOut, &bytes.Buffer{}); err != nil {
+		t.Fatalf("restore error = %v", err)
+	}
+	if !strings.Contains(restoreOut.String(), checkpointID) {
+		t.Fatalf("restore output = %s", restoreOut.String())
+	}
+	body, err := os.ReadFile(filepath.Join(root, "story", "chapter-01.md"))
+	if err != nil {
+		t.Fatalf("read restored file: %v", err)
+	}
+	if strings.Contains(string(body), "Changed for diff") {
+		t.Fatalf("restore did not roll back file:\n%s", string(body))
+	}
+}
+
 func TestInitRequiresTitle(t *testing.T) {
 	var stderr bytes.Buffer
 	err := run([]string{"init", t.TempDir()}, &bytes.Buffer{}, &stderr)
