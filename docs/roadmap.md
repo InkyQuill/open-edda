@@ -134,7 +134,7 @@ Detailed design context lives in `docs/superpowers/specs/2026-06-14-milestone-4-
 | 2 | Behavior parity and data slices: move old monolithic assistant/settings/skills/activity behavior into routed vertical slices | Implemented | `docs/superpowers/plans/2026-06-14-milestone-4-behavior-parity.md` |
 | 3 | Editor adapter: replace read-only textarea assumptions with an editor boundary prepared for Galley integration and mutation-safe cursor/selection APIs | Implemented | `docs/superpowers/plans/2026-06-17-milestone-4-editor-adapter.md` |
 | 3.5 | Information architecture correction: move provider/model/skill administration to settings, make assistant drawer chat-only, add project/content creation controls, and redesign the projects page | Implemented | `docs/superpowers/plans/2026-06-17-milestone-4-system-settings-and-ia.md` |
-| 4 | Assistant actions: wire Generate, Rewrite, Check, preview, accept/reject, and version-safe conflict handling from the editor-local controls | Planned | `docs/superpowers/plans/2026-06-17-milestone-4-assistant-actions.md` |
+| 4 | Assistant actions: wire Generate, Rewrite, Check, preview, accept/reject, and version-safe conflict handling from the editor-local controls | Implemented | `docs/superpowers/plans/2026-06-17-milestone-4-assistant-actions.md` |
 | 5 | Review surfaces: checkpoints/history, diff/restore, attached notes, activity, prompt records, and review-oriented drawer workflows | Planned | Create after Phase 4 is implemented |
 | 6 | Mobile and browser smoke hardening: sheet behavior, persistence, responsive ergonomics, and Playwright/browser coverage | Planned | Create after Phase 5 is implemented |
 
