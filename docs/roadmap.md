@@ -156,7 +156,7 @@ Acceptance target:
 | Phase | Scope | Status | Plan |
 | --- | --- | --- | --- |
 | 1 | File-first layout foundation: scan the `alchemist`-style Edda folder structure, read/write `.edda/project.json`, and add `edda init/status` CLI skeleton | Implemented | `docs/superpowers/plans/2026-07-01-milestone-5-layout-foundation.md` |
-| 2 | File index and stable IDs: rebuild SQLite index rows from files, hash saved content, and preserve IDs across renames via `.edda/ids.json` | Planned | Create after Phase 1 is implemented |
+| 2 | File index and stable IDs: rebuild SQLite index rows from files, hash saved content, and preserve IDs across renames via `.edda/ids.json` | Implemented | `docs/superpowers/plans/2026-07-01-milestone-5-file-index.md` |
 | 3 | Draft/save model: separate browser/server draft autosaves from canonical file writes and update web Save semantics | Planned | Create after Phase 2 is implemented |
 | 4 | Linear checkpoints: create, list, diff, and restore project-wide snapshots using `.edda/checkpoints/` | Planned | Create after Phase 3 is implemented |
 | 5 | CLI sync workflow: implement `edda get`, `send`, `take`, server connection metadata, pending upload state, and retry behavior | Planned | Create after Phase 4 is implemented |

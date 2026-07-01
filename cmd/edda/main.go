@@ -41,6 +41,7 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 func runStatus(args []string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("status", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
+	writeIDs := flags.Bool("write-ids", false, "write .edda/ids.json")
 	root, flagArgs := splitOptionalPath(args)
 	if err := flags.Parse(flagArgs); err != nil {
 		return err
@@ -52,6 +53,16 @@ func runStatus(args []string, stdout io.Writer) error {
 	layout, err := fileproject.Scan(root)
 	if err != nil {
 		return err
+	}
+	if *writeIDs {
+		idMap, files, err := fileproject.AssignStableIDs(root, layout)
+		if err != nil {
+			return err
+		}
+		if err := fileproject.WriteIDMap(root, idMap); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "Updated .edda/ids.json for %d files.\n", len(files))
 	}
 
 	if layout.Metadata != nil {
@@ -117,7 +128,7 @@ func runInit(args []string, stdout io.Writer) error {
 
 func printUsage(output io.Writer) {
 	fmt.Fprintln(output, "Usage:")
-	fmt.Fprintln(output, "  edda status [path]")
+	fmt.Fprintln(output, "  edda status [path] [--write-ids]")
 	fmt.Fprintln(output, "  edda init [path] --title \"Title\" [--id project-id] [--server-url URL]")
 }
 

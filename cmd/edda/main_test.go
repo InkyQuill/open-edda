@@ -54,6 +54,21 @@ func TestInitCreatesMetadataAndStatusReadsIt(t *testing.T) {
 	}
 }
 
+func TestStatusWriteIDsCreatesIDMap(t *testing.T) {
+	root := copyFixture(t, filepath.Join("..", "..", "fileproject", "testdata", "partial"))
+
+	var stdout bytes.Buffer
+	if err := run([]string{"status", root, "--write-ids"}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("status --write-ids error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Updated .edda/ids.json for 1 files.") {
+		t.Fatalf("status --write-ids output = %s", stdout.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, ".edda", "ids.json")); err != nil {
+		t.Fatalf("ids.json not created: %v", err)
+	}
+}
+
 func TestInitRequiresTitle(t *testing.T) {
 	var stderr bytes.Buffer
 	err := run([]string{"init", t.TempDir()}, &bytes.Buffer{}, &stderr)
