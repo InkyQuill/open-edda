@@ -531,6 +531,41 @@ func (q *Queries) ListRevisions(ctx context.Context, arg ListRevisionsParams) ([
 	return items, nil
 }
 
+const getRevisionByNumber = `-- name: GetRevisionByNumber :one
+SELECT revisions.id, revisions.content_item_id, revisions.revision_number, revisions.body_markdown, revisions.metadata_json, revisions.reason, revisions.created_by, revisions.created_at, revisions.agent_session_id, revisions.action_kind, revisions.model_variant_id, revisions.skill_id
+FROM revisions
+JOIN content_items ON content_items.id = revisions.content_item_id
+WHERE revisions.content_item_id = ?1
+  AND content_items.project_id = ?2
+  AND revisions.revision_number = ?3
+`
+
+type GetRevisionByNumberParams struct {
+	ContentItemID  string `json:"content_item_id"`
+	ProjectID      string `json:"project_id"`
+	RevisionNumber int64  `json:"revision_number"`
+}
+
+func (q *Queries) GetRevisionByNumber(ctx context.Context, arg GetRevisionByNumberParams) (Revision, error) {
+	row := q.db.QueryRowContext(ctx, getRevisionByNumber, arg.ContentItemID, arg.ProjectID, arg.RevisionNumber)
+	var i Revision
+	err := row.Scan(
+		&i.ID,
+		&i.ContentItemID,
+		&i.RevisionNumber,
+		&i.BodyMarkdown,
+		&i.MetadataJson,
+		&i.Reason,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.AgentSessionID,
+		&i.ActionKind,
+		&i.ModelVariantID,
+		&i.SkillID,
+	)
+	return i, err
+}
+
 const listStoryProjects = `-- name: ListStoryProjects :many
 SELECT id, author_id, title, slug, language, created_at, updated_at FROM story_projects
 WHERE author_id = ?

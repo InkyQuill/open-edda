@@ -9,6 +9,7 @@ import {
   loadProjectWorkspaceState,
   saveProjectWorkspaceState,
 } from "./workspacePersistence";
+import { selectWorkspaceProjectState } from "./workspaceSelectors";
 
 class MemoryStorage implements Storage {
   readonly #items = new Map<string, string>();
@@ -52,6 +53,11 @@ describe("workspaceSlice", () => {
 
     expect(review.rightDrawerOpen).toBe(true);
     expect(review.activeRightTab).toBe("tools");
+
+    const assistant = workspaceReducer(review, workspaceActions.setMode("assistant"));
+
+    expect(assistant.rightDrawerOpen).toBe(true);
+    expect(assistant.activeRightTab).toBe("chat");
   });
 
   it("clamps drawer widths", () => {
@@ -67,6 +73,13 @@ describe("workspaceSlice", () => {
   it("opens only authoring mobile sheets", () => {
     const state = workspaceReducer(initialWorkspaceState, workspaceActions.setMobileSheet("assistant"));
     expect(state.mobileSheet).toBe("assistant");
+  });
+
+  it("closes mobile sheets back to the editor", () => {
+    const open = workspaceReducer(initialWorkspaceState, workspaceActions.setMobileSheet("review"));
+    const closed = workspaceReducer(open, workspaceActions.setMobileSheet(null));
+
+    expect(closed.mobileSheet).toBeNull();
   });
 
   it("review mode opens the review tools drawer", () => {
@@ -98,6 +111,22 @@ describe("workspaceSlice", () => {
     expect(projectB.fallbackContentId).toBeNull();
   });
 
+  it("preserves the current transient mobile sheet while hydrating project state", () => {
+    const mobileOpen = workspaceReducer(initialWorkspaceState, workspaceActions.setMobileSheet("assistant"));
+
+    const hydrated = workspaceReducer(
+      mobileOpen,
+      workspaceActions.hydrateProjectState({
+        mode: "review",
+        rightDrawerOpen: true,
+        activeRightTab: "tools",
+      }),
+    );
+
+    expect(hydrated.mode).toBe("review");
+    expect(hydrated.mobileSheet).toBe("assistant");
+  });
+
   it("clears fallback content when content kind changes", () => {
     const state = workspaceReducer(
       { ...initialWorkspaceState, fallbackContentId: "chapter-1" },
@@ -127,6 +156,28 @@ describe("workspaceSlice", () => {
     expect(loadProjectWorkspaceState("project-1", storage)).toEqual(
       projectState,
     );
+  });
+
+  it("selects persisted project workspace state without transient mobile sheet", () => {
+    const state = {
+      workspace: {
+        ...initialWorkspaceState,
+        mode: "review" as const,
+        mobileSheet: "assistant" as const,
+      },
+    };
+
+    expect(selectWorkspaceProjectState(state)).toEqual({
+      mode: "review",
+      leftDrawerOpen: initialWorkspaceState.leftDrawerOpen,
+      rightDrawerOpen: initialWorkspaceState.rightDrawerOpen,
+      leftDrawerWidth: initialWorkspaceState.leftDrawerWidth,
+      rightDrawerWidth: initialWorkspaceState.rightDrawerWidth,
+      activeLeftTab: initialWorkspaceState.activeLeftTab,
+      activeRightTab: initialWorkspaceState.activeRightTab,
+      lastContentKind: initialWorkspaceState.lastContentKind,
+      fallbackContentId: initialWorkspaceState.fallbackContentId,
+    });
   });
 
   it("drops invalid project workspace persistence fields", () => {

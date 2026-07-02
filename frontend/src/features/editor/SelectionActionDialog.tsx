@@ -37,11 +37,17 @@ const actionLabels = {
   },
 };
 
-export function SelectionActionDialog() {
+export interface SelectionActionDialogProps {
+  error?: string | null;
+  submitting?: boolean;
+  onSubmit?: (kind: "rewrite" | "check", instructions: string) => void;
+}
+
+export function SelectionActionDialog({ error = null, submitting = false, onSubmit }: SelectionActionDialogProps) {
   const dispatch = useDispatch();
   const { actionModal, selection } = useSelector((state: SelectionActionRootState) => state.editor);
   const action = actionModal ? actionLabels[actionModal.kind] : null;
-  const submitDisabled = !selection || actionModal?.kind === "note";
+  const submitDisabled = submitting || !selection || actionModal?.kind === "note";
 
   return (
     <Dialog
@@ -74,13 +80,25 @@ export function SelectionActionDialog() {
               placeholder={action.placeholder}
               className="min-h-28 resize-y bg-background"
             />
+            {error ? (
+              <p className="text-sm text-destructive" role="alert">
+                {error}
+              </p>
+            ) : null}
           </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => dispatch(editorActions.closeActionModal())}>
               Cancel
             </Button>
-            <Button type="button" disabled={submitDisabled}>
+            <Button
+              type="button"
+              disabled={submitDisabled}
+              onClick={() => {
+                if (!actionModal || actionModal.kind === "note" || submitting) return;
+                onSubmit?.(actionModal.kind, actionModal.instructions);
+              }}
+            >
               {selection ? action.submit : "Select text first"}
             </Button>
           </DialogFooter>

@@ -8,7 +8,7 @@ Open Edda has real OpenAI-compatible function tools for chat sessions and quick-
 
 Quick actions use a read/context subset declared by `agent.QuickActionToolDefinitions`. Continuation, Rewrite, and Read and Check can call tools such as `project_map`, `search_content`, `read_chapter`, `read_story_bible_entry`, `read_entry_section`, `list_revisions`, `skill`, and `skill_script` before producing the final action output. Direct write tools are intentionally excluded from quick-action generation so preview/direct-apply semantics remain controlled by the action pipeline.
 
-There is no tool named `read_file`, `read_skill`, or `read_project_file`. Skill loading is exposed as the `skill` tool. Project content reads are exposed through content-oriented tools such as `read_content`, `read_chapter`, `read_story_bible_entry`, and `read_entry_section`.
+There is no tool named `read_file`, `read_skill`, or `read_project_file` yet. Skill loading is exposed as the `skill` tool. Project content reads are currently exposed through content-oriented tools such as `read_content`, `read_chapter`, `read_story_bible_entry`, and `read_entry_section`. Under the file-first architecture, those content tools should resolve through the project folder index and saved file hashes rather than treating database rows as canonical prose.
 
 ## Tool Catalog
 
@@ -185,7 +185,7 @@ Structured write tools require:
 - `generatedMarkdown`
 - `reason`
 
-This keeps writes revision-aware. If content changed since the model read it, project-service revision checks can reject the write rather than silently overwriting newer author work.
+This keeps writes version-aware. If content changed since the model read it, project-service checks can reject the write rather than silently overwriting newer author work. During the file-first migration, `expectedRevision` should evolve toward an expected saved file hash or equivalent file-backed version token.
 
 Write activity metadata records target content, operation kind, session, action kind, model variant, and revision movement when available.
 
@@ -201,7 +201,7 @@ When acting as an Open Edda chat or quick-action agent:
 4. Use `read_skill_file` for listed reference, template, or data files only when the loaded skill says that extra file is relevant.
 5. Use `skill_script` only for selected skills with enabled runtime helpers.
 6. Treat script results as proposals, reports, drafts, or generated data. Do not assume they changed project content.
-7. In chat, use write tools only when the user asked for an applied change and you have the current revision.
+7. In chat, use write tools only when the user asked for an applied change and you have the current revision or saved file version token.
 8. Include a clear `reason` for every write.
 
 When running a quick action, inspect whatever project context is needed before final output. Do not try to directly apply edits through write tools; quick-action writes happen after final output through the action pipeline.
@@ -221,6 +221,6 @@ When running a quick action, inspect whatever project context is needed before f
 
 ## Known Gaps
 
-- There are no file-system tools for agents. The project source of truth is the database, so reads are content-oriented rather than file-oriented.
+- There are no general project file-system tools for agents yet. Reads are content-oriented, but the product source of truth is now the project folder plus `.edda/` metadata; the content tools need a file-index-backed implementation.
 - `skill` loads by ID only. The model sees skill IDs in the available/selected skill prompt sources; there is no model-facing `read_skill_by_name`.
 - Tool errors currently fail the chat turn instead of returning a model-visible tool error that the model can recover from.

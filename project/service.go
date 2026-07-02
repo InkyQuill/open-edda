@@ -475,6 +475,81 @@ func (s *Service) UpdateContent(ctx context.Context, input UpdateContentInput) (
 	return updated, nil
 }
 
+func (s *Service) RestoreRevision(ctx context.Context, input RestoreRevisionInput) (ContentItem, error) {
+	var restored ContentItem
+	createdBy, err := createdBy(input.CreatedBy)
+	if err != nil {
+		return ContentItem{}, err
+	}
+	if err := s.inTx(ctx, func(queries *store.Queries) error {
+		item, err := queries.GetContentItem(ctx, store.GetContentItemParams{
+			ID:        input.ContentID,
+			ProjectID: input.ProjectID,
+		})
+		if err != nil {
+			return fmt.Errorf("get content item: %w", err)
+		}
+		if item.CurrentRevision != input.ExpectedRevision {
+			return ErrConflict
+		}
+
+		target, err := queries.GetRevisionByNumber(ctx, store.GetRevisionByNumberParams{
+			ContentItemID:  input.ContentID,
+			ProjectID:      input.ProjectID,
+			RevisionNumber: input.RevisionNumber,
+		})
+		if err != nil {
+			return fmt.Errorf("get revision: %w", err)
+		}
+
+		nextRevision := input.ExpectedRevision + 1
+		now := nowString()
+		affected, err := queries.UpdateContentItemBody(ctx, store.UpdateContentItemBodyParams{
+			BodyMarkdown:     target.BodyMarkdown,
+			MetadataJson:     target.MetadataJson,
+			NextRevision:     nextRevision,
+			UpdatedAt:        now,
+			ID:               input.ContentID,
+			ProjectID:        input.ProjectID,
+			ExpectedRevision: input.ExpectedRevision,
+		})
+		if err != nil {
+			return fmt.Errorf("update content item: %w", err)
+		}
+		if affected == 0 {
+			return ErrConflict
+		}
+
+		reason := emptyDefault(input.Reason, fmt.Sprintf("restore revision %d", input.RevisionNumber))
+		if err := queries.CreateRevision(ctx, store.CreateRevisionParams{
+			ID:             newID("revision"),
+			ContentItemID:  input.ContentID,
+			RevisionNumber: nextRevision,
+			BodyMarkdown:   target.BodyMarkdown,
+			MetadataJson:   target.MetadataJson,
+			Reason:         reason,
+			CreatedBy:      createdBy,
+			CreatedAt:      now,
+			AgentSessionID: sql.NullString{},
+			ActionKind:     "",
+			ModelVariantID: sql.NullString{},
+			SkillID:        "",
+		}); err != nil {
+			return fmt.Errorf("create revision: %w", err)
+		}
+
+		item.BodyMarkdown = target.BodyMarkdown
+		item.MetadataJson = target.MetadataJson
+		item.CurrentRevision = nextRevision
+		restored = contentItemFromStore(item)
+		return nil
+	}); err != nil {
+		return ContentItem{}, err
+	}
+
+	return restored, nil
+}
+
 func (s *Service) AppendToContent(ctx context.Context, input StructuredWriteInput) (ContentItem, error) {
 	return s.structuredWriteContent(ctx, input, func(item store.ContentItem) (string, error) {
 		return item.BodyMarkdown + input.GeneratedMarkdown, nil
