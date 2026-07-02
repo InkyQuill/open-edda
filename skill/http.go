@@ -3,7 +3,6 @@ package skill
 import (
 	"bytes"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"git.inkyquill.net/inky/writer/internal/httputil"
 	"git.inkyquill.net/inky/writer/project"
 	"github.com/go-chi/chi/v5"
 )
@@ -93,8 +93,8 @@ func (h httpHandler) importLocalSkill(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Directory string `json:"directory"`
 	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeMalformedJSON(w, err)
 		return
 	}
 	if req.Directory == "" {
@@ -185,8 +185,8 @@ func (h httpHandler) listSessionSkills(w http.ResponseWriter, r *http.Request) {
 
 func (h httpHandler) selectSessionSkills(w http.ResponseWriter, r *http.Request) {
 	var input selectSessionSkillsRequest
-	if err := decodeJSON(r, &input); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeMalformedJSON(w, err)
 		return
 	}
 
@@ -213,8 +213,8 @@ func (h httpHandler) listScriptAudits(w http.ResponseWriter, r *http.Request) {
 
 func (h httpHandler) updateScriptApproval(w http.ResponseWriter, r *http.Request) {
 	var input updateScriptApprovalRequest
-	if err := decodeJSON(r, &input); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeMalformedJSON(w, err)
 		return
 	}
 
@@ -271,15 +271,8 @@ func limitFromQuery(r *http.Request) int64 {
 	return value
 }
 
-func decodeJSON(r *http.Request, value any) error {
-	decoder := json.NewDecoder(r.Body)
-	if err := decoder.Decode(value); err != nil {
-		return err
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return errors.New("trailing JSON data")
-	}
-	return nil
+func decodeJSON(w http.ResponseWriter, r *http.Request, value any) error {
+	return httputil.DecodeJSON(w, r, value, httputil.DefaultJSONBodyLimit)
 }
 
 type errorResponse struct {
@@ -299,8 +292,14 @@ func writeError(w http.ResponseWriter, err error) {
 	}
 }
 
+func writeMalformedJSON(w http.ResponseWriter, err error) {
+	if httputil.IsRequestTooLarge(err) {
+		writeJSON(w, http.StatusRequestEntityTooLarge, errorResponse{Error: "request body too large"})
+		return
+	}
+	writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+}
+
 func writeJSON(w http.ResponseWriter, status int, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
+	httputil.WriteJSON(w, status, value)
 }

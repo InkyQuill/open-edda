@@ -17,6 +17,7 @@ func TestBuildDependenciesRequiresAuthForProjectRoutes(t *testing.T) {
 	t.Setenv("OPEN_EDDA_DB_PATH", filepath.Join(t.TempDir(), "edda.db"))
 	t.Setenv("OPEN_EDDA_MIGRATIONS_PATH", "migrations")
 	t.Setenv("OPEN_EDDA_JWT_SECRET", "test-secret-32-bytes-minimum-value")
+	t.Setenv("OPEN_EDDA_API_KEY_ENCRYPTION_SECRET", "test-api-key-encryption-secret-32")
 	t.Setenv("OPEN_EDDA_BOOTSTRAP_EMAIL", "test@writersmoke.invalid")
 	t.Setenv("OPEN_EDDA_BOOTSTRAP_PASSWORD", "test1234")
 	staticPath := t.TempDir()
@@ -79,6 +80,7 @@ func TestBuildDependenciesBootstrapsSingleUserFromEnv(t *testing.T) {
 	t.Setenv("OPEN_EDDA_DB_PATH", filepath.Join(t.TempDir(), "edda.db"))
 	t.Setenv("OPEN_EDDA_MIGRATIONS_PATH", "migrations")
 	t.Setenv("OPEN_EDDA_JWT_SECRET", "test-secret-32-bytes-minimum-value")
+	t.Setenv("OPEN_EDDA_API_KEY_ENCRYPTION_SECRET", "test-api-key-encryption-secret-32")
 	t.Setenv("OPEN_EDDA_BOOTSTRAP_EMAIL", "solo@writersmoke.invalid")
 	t.Setenv("OPEN_EDDA_BOOTSTRAP_PASSWORD", "solo-password")
 	staticPath := t.TempDir()
@@ -119,6 +121,7 @@ func TestPublicRegistrationRouteIsDisabled(t *testing.T) {
 	t.Setenv("OPEN_EDDA_DB_PATH", filepath.Join(t.TempDir(), "edda.db"))
 	t.Setenv("OPEN_EDDA_MIGRATIONS_PATH", "migrations")
 	t.Setenv("OPEN_EDDA_JWT_SECRET", "test-secret-32-bytes-minimum-value")
+	t.Setenv("OPEN_EDDA_API_KEY_ENCRYPTION_SECRET", "test-api-key-encryption-secret-32")
 	staticPath := t.TempDir()
 	if err := os.WriteFile(filepath.Join(staticPath, "index.html"), []byte("<!doctype html><html></html>"), 0o644); err != nil {
 		t.Fatalf("write static index: %v", err)
@@ -148,6 +151,7 @@ func TestBuildDependenciesRejectsCrossAuthorProjectAccess(t *testing.T) {
 	t.Setenv("OPEN_EDDA_DB_PATH", filepath.Join(t.TempDir(), "edda.db"))
 	t.Setenv("OPEN_EDDA_MIGRATIONS_PATH", "migrations")
 	t.Setenv("OPEN_EDDA_JWT_SECRET", "test-secret-32-bytes-minimum-value")
+	t.Setenv("OPEN_EDDA_API_KEY_ENCRYPTION_SECRET", "test-api-key-encryption-secret-32")
 	staticPath := t.TempDir()
 	if err := os.WriteFile(filepath.Join(staticPath, "index.html"), []byte("<!doctype html><html></html>"), 0o644); err != nil {
 		t.Fatalf("write static index: %v", err)
@@ -200,6 +204,7 @@ func TestBuildDependenciesRejectsWrongPassword(t *testing.T) {
 	t.Setenv("OPEN_EDDA_DB_PATH", filepath.Join(t.TempDir(), "edda.db"))
 	t.Setenv("OPEN_EDDA_MIGRATIONS_PATH", "migrations")
 	t.Setenv("OPEN_EDDA_JWT_SECRET", "test-secret-32-bytes-minimum-value")
+	t.Setenv("OPEN_EDDA_API_KEY_ENCRYPTION_SECRET", "test-api-key-encryption-secret-32")
 	t.Setenv("OPEN_EDDA_BOOTSTRAP_EMAIL", "test2@writersmoke.invalid")
 	t.Setenv("OPEN_EDDA_BOOTSTRAP_PASSWORD", "test1234")
 	staticPath := t.TempDir()
@@ -253,6 +258,7 @@ func TestBuildDependenciesRequiresFrontendBuild(t *testing.T) {
 	t.Setenv("OPEN_EDDA_DB_PATH", filepath.Join(t.TempDir(), "edda.db"))
 	t.Setenv("OPEN_EDDA_MIGRATIONS_PATH", "migrations")
 	t.Setenv("OPEN_EDDA_JWT_SECRET", "test-secret-32-bytes-minimum-value")
+	t.Setenv("OPEN_EDDA_API_KEY_ENCRYPTION_SECRET", "test-api-key-encryption-secret-32")
 	t.Setenv("OPEN_EDDA_STATIC_PATH", t.TempDir())
 
 	deps, cleanup, err := buildDependencies()
@@ -275,5 +281,27 @@ func TestBuildDependenciesRequiresJWTSecret(t *testing.T) {
 	if err == nil {
 		cleanup()
 		t.Fatalf("buildDependencies() error = nil, deps = %#v", deps)
+	}
+}
+
+func TestAPIKeyEncryptionSecretRequiresDedicatedEnv(t *testing.T) {
+	t.Setenv("OPEN_EDDA_API_KEY_ENCRYPTION_SECRET", "")
+	t.Setenv("WRITER_API_KEY_ENCRYPTION_SECRET", "")
+
+	secret, err := apiKeyEncryptionSecret()
+	if err == nil {
+		t.Fatalf("apiKeyEncryptionSecret() error = nil, secret = %q", secret)
+	}
+}
+
+func TestAPIKeyEncryptionSecretAcceptsConfiguredSecret(t *testing.T) {
+	t.Setenv("OPEN_EDDA_API_KEY_ENCRYPTION_SECRET", "test-api-key-encryption-secret-32")
+
+	secret, err := apiKeyEncryptionSecret()
+	if err != nil {
+		t.Fatalf("apiKeyEncryptionSecret() error = %v", err)
+	}
+	if secret != "test-api-key-encryption-secret-32" {
+		t.Fatalf("secret = %q, want configured secret", secret)
 	}
 }
