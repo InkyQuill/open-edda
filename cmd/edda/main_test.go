@@ -172,6 +172,114 @@ func TestCheckpointHistoryDiffAndRestoreWorkflow(t *testing.T) {
 	}
 }
 
+func TestGetInitializesConnectedProjectAndSyncState(t *testing.T) {
+	root := t.TempDir()
+
+	var stdout bytes.Buffer
+	if err := run(
+		[]string{"get", "--title", "Alchemy Draft", "--id", "project-1", "https://edda.example/projects/project-1", root},
+		&stdout,
+		&bytes.Buffer{},
+	); err != nil {
+		t.Fatalf("get error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Connected Alchemy Draft (project-1)") {
+		t.Fatalf("get output = %s", stdout.String())
+	}
+	metadata, err := fileproject.ReadMetadata(root)
+	if err != nil {
+		t.Fatalf("ReadMetadata error = %v", err)
+	}
+	if metadata.ServerURL != "https://edda.example/projects/project-1" {
+		t.Fatalf("server URL = %q", metadata.ServerURL)
+	}
+	if _, err := fileproject.ReadSyncState(root); err != nil {
+		t.Fatalf("ReadSyncState error = %v", err)
+	}
+}
+
+func TestSaveCheckpointSendAndTakeWorkflow(t *testing.T) {
+	root := copyFixture(t, filepath.Join("..", "..", "fileproject", "testdata", "partial"))
+	if _, err := fileproject.InitMetadata(root, fileproject.InitMetadataInput{
+		ID:        "project-1",
+		Title:     "Alchemy Draft",
+		ServerURL: "https://edda.example/projects/project-1",
+	}); err != nil {
+		t.Fatalf("InitMetadata error = %v", err)
+	}
+
+	var saveOut bytes.Buffer
+	if err := run([]string{"save", root, "Chapter", "polish"}, &saveOut, &bytes.Buffer{}); err != nil {
+		t.Fatalf("save checkpoint error = %v", err)
+	}
+	if !strings.Contains(saveOut.String(), "upload pending") {
+		t.Fatalf("save output = %s", saveOut.String())
+	}
+	state, err := fileproject.ReadSyncState(root)
+	if err != nil {
+		t.Fatalf("ReadSyncState after save error = %v", err)
+	}
+	if state.PendingUpload == nil {
+		t.Fatalf("pending upload is nil")
+	}
+	checkpointID := state.PendingUpload.CheckpointID
+
+	var sendOut bytes.Buffer
+	if err := run([]string{"send", root}, &sendOut, &bytes.Buffer{}); err != nil {
+		t.Fatalf("send error = %v", err)
+	}
+	if !strings.Contains(sendOut.String(), checkpointID) {
+		t.Fatalf("send output = %s", sendOut.String())
+	}
+	state, err = fileproject.ReadSyncState(root)
+	if err != nil {
+		t.Fatalf("ReadSyncState after send error = %v", err)
+	}
+	if state.PendingUpload != nil || state.LastSentCheckpointID != checkpointID {
+		t.Fatalf("sync state after send = %#v", state)
+	}
+
+	var takeOut bytes.Buffer
+	if err := run([]string{"take", root}, &takeOut, &bytes.Buffer{}); err != nil {
+		t.Fatalf("take error = %v", err)
+	}
+	if !strings.Contains(takeOut.String(), "Checked https://edda.example/projects/project-1") {
+		t.Fatalf("take output = %s", takeOut.String())
+	}
+	state, err = fileproject.ReadSyncState(root)
+	if err != nil {
+		t.Fatalf("ReadSyncState after take error = %v", err)
+	}
+	if state.LastTakeAt == nil {
+		t.Fatalf("last take cursor not recorded")
+	}
+}
+
+func TestSendRequiresServerURLAndRecordsRetryFailure(t *testing.T) {
+	root := copyFixture(t, filepath.Join("..", "..", "fileproject", "testdata", "partial"))
+	if _, err := fileproject.InitMetadata(root, fileproject.InitMetadataInput{
+		ID:    "project-1",
+		Title: "Alchemy Draft",
+	}); err != nil {
+		t.Fatalf("InitMetadata error = %v", err)
+	}
+	if err := run([]string{"save", root, "Offline checkpoint"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("save checkpoint error = %v", err)
+	}
+
+	err := run([]string{"send", root}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "server URL is not configured") {
+		t.Fatalf("send without server error = %v", err)
+	}
+	state, readErr := fileproject.ReadSyncState(root)
+	if readErr != nil {
+		t.Fatalf("ReadSyncState error = %v", readErr)
+	}
+	if state.PendingUpload == nil || state.PendingUpload.Attempts != 1 || state.PendingUpload.LastError == "" {
+		t.Fatalf("pending upload after failed send = %#v", state.PendingUpload)
+	}
+}
+
 func TestInitRequiresTitle(t *testing.T) {
 	var stderr bytes.Buffer
 	err := run([]string{"init", t.TempDir()}, &bytes.Buffer{}, &stderr)
