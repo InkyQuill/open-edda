@@ -160,7 +160,7 @@ Acceptance target:
 | 3 | Draft/save model: separate browser/server draft autosaves from canonical file writes and update web Save semantics | Implemented | `docs/superpowers/plans/2026-07-01-milestone-5-draft-save-model.md` |
 | 4 | Linear checkpoints: create, list, diff, and restore project-wide snapshots using `.edda/checkpoints/` | Implemented | `docs/superpowers/plans/2026-07-01-milestone-5-checkpoints.md` |
 | 5 | CLI sync workflow: implement `edda get`, `send`, `take`, server connection metadata, pending upload state, and retry behavior | Implemented | `docs/superpowers/plans/2026-07-01-milestone-5-sync-workflow.md` |
-| 6 | Conflict preservation and resolution: detect divergent saved file edits, preserve base/local/server versions, and resolve back to normal files | Planned | Create after Phase 5 is implemented |
+| 6 | Conflict preservation and resolution: detect divergent saved file edits, preserve base/local/server versions, and resolve back to normal files | Implemented | `docs/superpowers/plans/2026-07-01-milestone-5-conflicts.md` |
 | 7 | Agent/write migration: move structured writes and review surfaces from database revisions toward saved file hashes and checkpoints | Planned | Create after Phase 6 is implemented |
 
 ## Later: Collaboration

@@ -46,6 +46,10 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runDiff(args[1:], stdout)
 	case "restore":
 		return runRestore(args[1:], stdout)
+	case "conflicts":
+		return runConflicts(args[1:], stdout)
+	case "resolve":
+		return runResolve(args[1:], stdout)
 	case "help", "-h", "--help":
 		printUsage(stdout)
 		return nil
@@ -332,6 +336,69 @@ func runTake(args []string, stdout io.Writer) error {
 	return nil
 }
 
+func runConflicts(args []string, stdout io.Writer) error {
+	root, flagArgs := splitOptionalPath(args)
+	flags := flag.NewFlagSet("conflicts", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	if err := flags.Parse(flagArgs); err != nil {
+		return err
+	}
+	if flags.NArg() > 0 {
+		root = flags.Arg(0)
+	}
+	conflicts, err := fileproject.ListConflicts(root)
+	if err != nil {
+		return err
+	}
+	if len(conflicts) == 0 {
+		fmt.Fprintln(stdout, "No conflicts.")
+		return nil
+	}
+	for _, conflict := range conflicts {
+		fmt.Fprintf(stdout, "%s %s\n", conflict.FileID, conflict.Path)
+	}
+	return nil
+}
+
+func runResolve(args []string, stdout io.Writer) error {
+	flags := flag.NewFlagSet("resolve", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	fileID := flags.String("id", "", "stable file id")
+	use := flags.String("use", "", "conflict version to use: local or server")
+	bodyFile := flags.String("body-file", "", "resolved markdown file")
+	root, flagArgs := splitOptionalPath(args)
+	if err := flags.Parse(flagArgs); err != nil {
+		return err
+	}
+	if flags.NArg() > 0 {
+		root = flags.Arg(0)
+	}
+	if *fileID == "" {
+		return fmt.Errorf("resolve requires --id")
+	}
+	if *bodyFile != "" && *use != "" {
+		return fmt.Errorf("resolve requires only one of --use or --body-file")
+	}
+	var body string
+	if *bodyFile != "" {
+		data, err := os.ReadFile(*bodyFile)
+		if err != nil {
+			return fmt.Errorf("read body file: %w", err)
+		}
+		body = string(data)
+	}
+	record, saved, err := fileproject.ResolveConflict(root, fileproject.ResolveConflictInput{
+		FileID:       *fileID,
+		Use:          fileproject.ConflictVersion(*use),
+		BodyMarkdown: body,
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "Resolved %s to %s (%s)\n", record.FileID, saved.Path, saved.SHA256)
+	return nil
+}
+
 func runHistory(args []string, stdout io.Writer) error {
 	root, flagArgs := splitOptionalPath(args)
 	flags := flag.NewFlagSet("history", flag.ContinueOnError)
@@ -424,6 +491,8 @@ func printUsage(output io.Writer) {
 	fmt.Fprintln(output, "  edda history [path]")
 	fmt.Fprintln(output, "  edda diff [path] --from checkpoint-id [--to checkpoint-id]")
 	fmt.Fprintln(output, "  edda restore [path] --checkpoint checkpoint-id")
+	fmt.Fprintln(output, "  edda conflicts [path]")
+	fmt.Fprintln(output, "  edda resolve [path] --id file-id (--use local|server | --body-file markdown.md)")
 }
 
 func splitOptionalPath(args []string) (string, []string) {

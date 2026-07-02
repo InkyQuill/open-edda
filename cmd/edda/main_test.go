@@ -280,6 +280,43 @@ func TestSendRequiresServerURLAndRecordsRetryFailure(t *testing.T) {
 	}
 }
 
+func TestConflictsAndResolveWorkflow(t *testing.T) {
+	root := copyFixture(t, filepath.Join("..", "..", "fileproject", "testdata", "partial"))
+	stable := prepareStableCLIFile(t, root)
+	if _, err := fileproject.PreserveConflict(root, fileproject.PreserveConflictInput{
+		FileID:         stable.ID,
+		Path:           stable.Path,
+		BaseMarkdown:   "base",
+		LocalMarkdown:  "# Chapter 1\n\nLocal.\n",
+		ServerMarkdown: "# Chapter 1\n\nServer.\n",
+	}); err != nil {
+		t.Fatalf("PreserveConflict error = %v", err)
+	}
+
+	var conflictsOut bytes.Buffer
+	if err := run([]string{"conflicts", root}, &conflictsOut, &bytes.Buffer{}); err != nil {
+		t.Fatalf("conflicts error = %v", err)
+	}
+	if !strings.Contains(conflictsOut.String(), stable.ID) || !strings.Contains(conflictsOut.String(), stable.Path) {
+		t.Fatalf("conflicts output = %s", conflictsOut.String())
+	}
+
+	var resolveOut bytes.Buffer
+	if err := run([]string{"resolve", root, "--id", stable.ID, "--use", "server"}, &resolveOut, &bytes.Buffer{}); err != nil {
+		t.Fatalf("resolve error = %v", err)
+	}
+	if !strings.Contains(resolveOut.String(), "Resolved "+stable.ID) {
+		t.Fatalf("resolve output = %s", resolveOut.String())
+	}
+	body, err := os.ReadFile(filepath.Join(root, "story", "chapter-01.md"))
+	if err != nil {
+		t.Fatalf("read resolved file: %v", err)
+	}
+	if string(body) != "# Chapter 1\n\nServer.\n" {
+		t.Fatalf("resolved body = %q", string(body))
+	}
+}
+
 func TestInitRequiresTitle(t *testing.T) {
 	var stderr bytes.Buffer
 	err := run([]string{"init", t.TempDir()}, &bytes.Buffer{}, &stderr)
