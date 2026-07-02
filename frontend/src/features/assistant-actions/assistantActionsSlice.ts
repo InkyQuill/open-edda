@@ -100,34 +100,27 @@ export const runGenerate = createAsyncThunk(
     }),
 );
 
+function selectionActionRequest(args: RunRewriteArgs) {
+  return {
+    contentId: args.contentId,
+    modelVariantId: args.modelVariantId,
+    expectedRevision: args.expectedRevision,
+    selectionStart: args.selectionStartByte,
+    selectionEnd: args.selectionEndByte,
+    guidance: args.instructions,
+    skillIds: args.skillIds,
+    applyMode: "preview" as const,
+  };
+}
+
 export const runRewriteAction = createAsyncThunk(
   "assistantActions/runRewrite",
-  async (args: RunRewriteArgs) =>
-    runRewrite(args.projectId, {
-      contentId: args.contentId,
-      modelVariantId: args.modelVariantId,
-      expectedRevision: args.expectedRevision,
-      selectionStart: args.selectionStartByte,
-      selectionEnd: args.selectionEndByte,
-      guidance: args.instructions,
-      skillIds: args.skillIds,
-      applyMode: "preview",
-    }),
+  async (args: RunRewriteArgs) => runRewrite(args.projectId, selectionActionRequest(args)),
 );
 
 export const runCheck = createAsyncThunk(
   "assistantActions/runCheck",
-  async (args: RunCheckArgs) =>
-    runReadAndCheck(args.projectId, {
-      contentId: args.contentId,
-      modelVariantId: args.modelVariantId,
-      expectedRevision: args.expectedRevision,
-      selectionStart: args.selectionStartByte,
-      selectionEnd: args.selectionEndByte,
-      guidance: args.instructions,
-      skillIds: args.skillIds,
-      applyMode: "preview",
-    }),
+  async (args: RunCheckArgs) => runReadAndCheck(args.projectId, selectionActionRequest(args)),
 );
 
 export const acceptAssistantCandidate = createAsyncThunk(
@@ -142,7 +135,7 @@ export const rejectAssistantCandidate = createAsyncThunk(
     rejectCandidate(args.projectId, args.candidateId),
 );
 
-function errorMessage(error: { message?: string } | unknown): string {
+function errorMessage(error: unknown): string {
   if (
     typeof error === "object" &&
     error !== null &&
@@ -199,17 +192,25 @@ function markRejected(
   state.error = message;
 }
 
-function isRevisionConflictError(message: string): boolean {
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes("revision") ||
-    normalized.includes("conflict") ||
-    normalized.includes("stale")
-  );
+function errorCode(error: { code?: string } | unknown): string | null {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    error.code.trim()
+  ) {
+    return error.code;
+  }
+  return null;
 }
 
-function acceptErrorMessage(message: string): string {
-  if (!isRevisionConflictError(message)) {
+function isRevisionConflictError(code: string | null): boolean {
+  return code === "HTTP_409";
+}
+
+function acceptErrorMessage(message: string, code: string | null): string {
+  if (!isRevisionConflictError(code)) {
     return message;
   }
   return "Content changed before this preview was accepted. Review the latest draft, then run the action again.";
@@ -278,7 +279,7 @@ const assistantActionsSlice = createSlice({
       .addCase(acceptAssistantCandidate.rejected, (state, action) => {
         if (!matchesRequest(state, action.meta.arg)) return;
         state.acceptStatus = "failed";
-        state.acceptError = acceptErrorMessage(errorMessage(action.error));
+        state.acceptError = acceptErrorMessage(errorMessage(action.error), errorCode(action.error));
       })
       .addCase(rejectAssistantCandidate.pending, (state, action) => {
         if (!matchesRequest(state, action.meta.arg)) return;

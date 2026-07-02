@@ -1,11 +1,8 @@
 import { useSelector } from "react-redux";
 
+import type { RootState } from "../../app/store/store";
 import { Button } from "../../shared/ui/button";
 import type { AssistantActionState } from "../assistant-actions/assistantActionsSlice";
-
-type AssistantActionPreviewRootState = {
-  assistantActions: AssistantActionState;
-};
 
 export interface AssistantActionPreviewProps {
   onAccept: () => void;
@@ -32,9 +29,10 @@ export function AssistantActionPreview({
   onDismiss,
 }: AssistantActionPreviewProps) {
   const actionState = useSelector(
-    (state: AssistantActionPreviewRootState) => state.assistantActions,
+    (state: RootState) => state.assistantActions,
   );
   const label = actionLabel(actionState.actionKind);
+  const previewActionRunning = actionState.acceptStatus === "running" || actionState.rejectStatus === "running";
 
   if (actionState.status === "idle") {
     return null;
@@ -44,6 +42,8 @@ export function AssistantActionPreview({
     return (
       <section
         aria-busy="true"
+        aria-live="polite"
+        role="status"
         className="rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground"
       >
         Running {label.toLowerCase()}...
@@ -66,7 +66,7 @@ export function AssistantActionPreview({
 
   if (actionState.checkResult) {
     return (
-      <section className="rounded-md border border-border bg-background p-4">
+      <section className="rounded-md border border-border bg-background p-4" aria-live="polite" role="status">
         <h3 className="text-sm font-medium text-foreground">Check result</h3>
         <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">
           {actionState.checkResult.assistantMessage.bodyMarkdown}
@@ -82,7 +82,7 @@ export function AssistantActionPreview({
 
   if (actionState.candidate) {
     return (
-      <section className="rounded-md border border-border bg-background p-4">
+      <section className="rounded-md border border-border bg-background p-4" aria-live="polite" role="status">
         <h3 className="text-sm font-medium text-foreground">{label} preview</h3>
         <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">
           {actionState.candidate.generatedMarkdown}
@@ -101,7 +101,7 @@ export function AssistantActionPreview({
           <Button
             type="button"
             size="sm"
-            disabled={actionState.acceptStatus === "running"}
+            disabled={previewActionRunning}
             onClick={onAccept}
           >
             Accept preview
@@ -110,7 +110,7 @@ export function AssistantActionPreview({
             type="button"
             variant="outline"
             size="sm"
-            disabled={actionState.rejectStatus === "running"}
+            disabled={previewActionRunning}
             onClick={onReject}
           >
             Reject preview

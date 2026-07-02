@@ -2,7 +2,7 @@ import { configureStore } from "@reduxjs/toolkit";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Provider } from "react-redux";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { assistantReducer, initialAssistantState } from "../assistant/assistantSlice";
 import {
@@ -17,7 +17,11 @@ import { initialSettingsState, settingsReducer } from "../settings/settingsSlice
 import { initialSkillsState, skillsReducer } from "../skills/skillsSlice";
 import type { ContentItem } from "../../types";
 import { initialWorkspaceState, workspaceReducer, type WorkspaceState } from "./workspaceSlice";
-import { WorkspaceShell } from "./WorkspaceShell";
+import { mobileSheetDescription, WorkspaceShell } from "./WorkspaceShell";
+
+vi.mock("@inkyquill/galley-editor", () => ({
+  GalleyEditor: () => <div>Editor surface</div>,
+}));
 
 const content: ContentItem = {
   id: "content-1",
@@ -126,6 +130,12 @@ describe("WorkspaceShell", () => {
     expect(html).toContain("Assistant");
     expect(html).toContain("Review");
     expect(html).toContain("World/Notes");
+  });
+
+  it("renders the active mobile sheet description", () => {
+    expect(mobileSheetDescription("review")).toBe(
+      "Inspect reports, checkpoints, activity, and prompt records.",
+    );
   });
 
   it("renders editor and review empty states when no content is selected", () => {

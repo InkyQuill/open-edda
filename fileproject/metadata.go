@@ -43,6 +43,12 @@ func ReadMetadata(root string) (ProjectMetadata, error) {
 	if err := json.Unmarshal(data, &metadata); err != nil {
 		return ProjectMetadata{}, fmt.Errorf("parse project metadata: %w", err)
 	}
+	if metadata.SchemaVersion != CurrentSchemaVersion {
+		return ProjectMetadata{}, fmt.Errorf("unsupported project metadata schema version %d", metadata.SchemaVersion)
+	}
+	if metadata.LayoutVersion != CurrentLayoutVersion {
+		return ProjectMetadata{}, fmt.Errorf("unsupported project layout version %d", metadata.LayoutVersion)
+	}
 	if metadata.ID == "" {
 		return ProjectMetadata{}, fmt.Errorf("project metadata id is required")
 	}
@@ -78,12 +84,18 @@ func InitMetadata(root string, input InitMetadataInput) (ProjectMetadata, error)
 	if err := os.MkdirAll(eddaDir, 0o755); err != nil {
 		return ProjectMetadata{}, fmt.Errorf("create .edda directory: %w", err)
 	}
+	path := filepath.Join(eddaDir, "project.json")
+	if _, err := os.Stat(path); err == nil {
+		return ProjectMetadata{}, fmt.Errorf("project metadata already exists")
+	} else if !os.IsNotExist(err) {
+		return ProjectMetadata{}, fmt.Errorf("stat project metadata: %w", err)
+	}
 	data, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
 		return ProjectMetadata{}, fmt.Errorf("marshal project metadata: %w", err)
 	}
 	data = append(data, '\n')
-	if err := os.WriteFile(filepath.Join(eddaDir, "project.json"), data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return ProjectMetadata{}, fmt.Errorf("write project metadata: %w", err)
 	}
 	return metadata, nil

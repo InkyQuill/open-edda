@@ -24,6 +24,7 @@ describe("assistantActionRequests", () => {
         contentContext: null,
         cursorByte: 12,
         activeModelVariantId: "model-1",
+        dirty: false,
       }),
     ).toBe("Open a chapter or story-bible entry before generating.");
     expect(
@@ -31,6 +32,7 @@ describe("assistantActionRequests", () => {
         contentContext,
         cursorByte: 12,
         activeModelVariantId: null,
+        dirty: false,
       }),
     ).toBe("Choose an active model variant in Settings before generating.");
     expect(
@@ -38,6 +40,7 @@ describe("assistantActionRequests", () => {
         contentContext,
         cursorByte: null,
         activeModelVariantId: "model-1",
+        dirty: false,
       }),
     ).toBe("Place the cursor where generated text should be inserted.");
   });
@@ -48,8 +51,28 @@ describe("assistantActionRequests", () => {
         contentContext,
         cursorByte: 12,
         activeModelVariantId: "model-1",
+        dirty: false,
       }),
     ).toBeNull();
+  });
+
+  it("blocks assistant actions while the editor draft is unsaved", () => {
+    expect(
+      validateGenerateAction({
+        contentContext,
+        cursorByte: 12,
+        activeModelVariantId: "model-1",
+        dirty: true,
+      }),
+    ).toBe("Save the current draft before generating.");
+    expect(
+      validateSelectionAction({
+        contentContext,
+        selection: { startByte: 3, endByte: 9 },
+        activeModelVariantId: "model-1",
+        dirty: true,
+      }),
+    ).toBe("Save the current draft before running this action.");
   });
 
   it("builds stable request keys from route and content revision", () => {
@@ -88,6 +111,7 @@ describe("assistantActionRequests", () => {
         contentContext: null,
         selection: { startByte: 3, endByte: 9 },
         activeModelVariantId: "model-1",
+        dirty: false,
       }),
     ).toBe("Open a chapter or story-bible entry before running this action.");
     expect(
@@ -95,6 +119,7 @@ describe("assistantActionRequests", () => {
         contentContext,
         selection: { startByte: 3, endByte: 9 },
         activeModelVariantId: null,
+        dirty: false,
       }),
     ).toBe("Choose an active model variant in Settings before running this action.");
     expect(
@@ -102,6 +127,7 @@ describe("assistantActionRequests", () => {
         contentContext,
         selection: null,
         activeModelVariantId: "model-1",
+        dirty: false,
       }),
     ).toBe("Select text before running this action.");
     expect(
@@ -109,6 +135,7 @@ describe("assistantActionRequests", () => {
         contentContext,
         selection: { startByte: 9, endByte: 9 },
         activeModelVariantId: "model-1",
+        dirty: false,
       }),
     ).toBe("Select text before running this action.");
   });

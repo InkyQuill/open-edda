@@ -66,6 +66,20 @@ func TestScanWarnsForPartialLayout(t *testing.T) {
 	}
 }
 
+func TestScanRequiresRootLevelRecommendedIndex(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, root, "story/chapter-01.md", "# Chapter\n")
+	mustWrite(t, root, "story/arc/_index.md", "# Nested index\n")
+
+	layout, err := Scan(root)
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if !hasWarning(layout, "missing_index", "story/_index.md") {
+		t.Fatalf("warnings missing story root index warning: %#v", layout.Warnings)
+	}
+}
+
 func TestScanIgnoresOperationalNoise(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, root, "story/_index.md", "# Story\n")
@@ -89,6 +103,7 @@ func TestScanIgnoresOperationalNoise(t *testing.T) {
 
 func TestInitAndReadMetadata(t *testing.T) {
 	root := t.TempDir()
+	mustWrite(t, root, "story/chapter-01.md", "# Chapter\n")
 	metadata, err := InitMetadata(root, InitMetadataInput{
 		ID:    "project-1",
 		Title: "Alchemy Draft",

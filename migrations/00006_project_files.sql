@@ -5,7 +5,7 @@ CREATE TABLE project_files (
   id TEXT NOT NULL,
   project_id TEXT NOT NULL REFERENCES story_projects(id) ON DELETE CASCADE,
   relative_path TEXT NOT NULL,
-  kind TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('story', 'character', 'worldbuilding', 'storyline', 'draft', 'guidance', 'skill')),
   title TEXT NOT NULL,
   sha256 TEXT NOT NULL,
   bytes INTEGER NOT NULL,

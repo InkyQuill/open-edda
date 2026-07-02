@@ -8,15 +8,18 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
+	"syscall"
 	"time"
 )
 
 type SyncState struct {
-	SchemaVersion        int            `json:"schemaVersion"`
-	DeviceID             string         `json:"deviceId"`
-	LastSentCheckpointID string         `json:"lastSentCheckpointId,omitempty"`
-	LastTakeAt           *time.Time     `json:"lastTakeAt,omitempty"`
-	PendingUpload        *PendingUpload `json:"pendingUpload,omitempty"`
+	SchemaVersion        int             `json:"schemaVersion"`
+	DeviceID             string          `json:"deviceId"`
+	LastSentCheckpointID string          `json:"lastSentCheckpointId,omitempty"`
+	LastTakeAt           *time.Time      `json:"lastTakeAt,omitempty"`
+	PendingUpload        *PendingUpload  `json:"pendingUpload,omitempty"`
+	PendingUploads       []PendingUpload `json:"pendingUploads,omitempty"`
 }
 
 type PendingUpload struct {
@@ -25,6 +28,8 @@ type PendingUpload struct {
 	LastError    string     `json:"lastError,omitempty"`
 	UpdatedAt    *time.Time `json:"updatedAt,omitempty"`
 }
+
+var syncStateMu sync.Mutex
 
 func ReadSyncState(root string) (SyncState, error) {
 	data, err := os.ReadFile(syncStatePath(root))
@@ -41,6 +46,7 @@ func ReadSyncState(root string) (SyncState, error) {
 	if state.DeviceID == "" {
 		return SyncState{}, fmt.Errorf("sync state device id is required")
 	}
+	normalizePendingUploads(&state)
 	return state, nil
 }
 
@@ -77,6 +83,7 @@ func WriteSyncState(root string, state SyncState) error {
 		}
 		state.DeviceID = deviceID
 	}
+	normalizePendingUploads(&state)
 	if err := os.MkdirAll(filepath.Join(root, ".edda"), 0o755); err != nil {
 		return fmt.Errorf("create .edda directory: %w", err)
 	}
@@ -85,23 +92,53 @@ func WriteSyncState(root string, state SyncState) error {
 		return fmt.Errorf("marshal sync state: %w", err)
 	}
 	data = append(data, '\n')
-	if err := os.WriteFile(syncStatePath(root), data, 0o644); err != nil {
+	target := syncStatePath(root)
+	tmp, err := os.CreateTemp(filepath.Dir(target), "state-*.json")
+	if err != nil {
+		return fmt.Errorf("create temporary sync state: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write temporary sync state: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("sync temporary sync state: %w", err)
+	}
+	if err := tmp.Chmod(0o644); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("chmod temporary sync state: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temporary sync state: %w", err)
+	}
+	if err := os.Rename(tmpPath, target); err != nil {
 		return fmt.Errorf("write sync state: %w", err)
 	}
 	return nil
 }
 
 func RecordPendingUpload(root string, checkpointID string) (SyncState, error) {
+	syncStateMu.Lock()
+	defer syncStateMu.Unlock()
+	unlock, err := lockSyncStateFile(root)
+	if err != nil {
+		return SyncState{}, err
+	}
+	defer unlock()
 	state, err := EnsureSyncState(root)
 	if err != nil {
 		return SyncState{}, err
 	}
 	now := time.Now().UTC()
-	state.PendingUpload = &PendingUpload{
+	state.PendingUploads = append(state.PendingUploads, PendingUpload{
 		CheckpointID: checkpointID,
 		Attempts:     0,
 		UpdatedAt:    &now,
-	}
+	})
+	normalizePendingUploads(&state)
 	if err := WriteSyncState(root, state); err != nil {
 		return SyncState{}, err
 	}
@@ -109,16 +146,25 @@ func RecordPendingUpload(root string, checkpointID string) (SyncState, error) {
 }
 
 func CompletePendingUpload(root string) (SyncState, error) {
+	syncStateMu.Lock()
+	defer syncStateMu.Unlock()
+	unlock, err := lockSyncStateFile(root)
+	if err != nil {
+		return SyncState{}, err
+	}
+	defer unlock()
 	state, err := EnsureSyncState(root)
 	if err != nil {
 		return SyncState{}, err
 	}
-	if state.PendingUpload == nil {
+	if len(state.PendingUploads) == 0 {
 		return state, nil
 	}
-	state.PendingUpload.Attempts++
-	state.LastSentCheckpointID = state.PendingUpload.CheckpointID
+	state.PendingUploads[0].Attempts++
+	state.LastSentCheckpointID = state.PendingUploads[0].CheckpointID
+	state.PendingUploads = state.PendingUploads[1:]
 	state.PendingUpload = nil
+	normalizePendingUploads(&state)
 	if err := WriteSyncState(root, state); err != nil {
 		return SyncState{}, err
 	}
@@ -126,17 +172,25 @@ func CompletePendingUpload(root string) (SyncState, error) {
 }
 
 func RecordPendingUploadFailure(root string, message string) (SyncState, error) {
+	syncStateMu.Lock()
+	defer syncStateMu.Unlock()
+	unlock, err := lockSyncStateFile(root)
+	if err != nil {
+		return SyncState{}, err
+	}
+	defer unlock()
 	state, err := EnsureSyncState(root)
 	if err != nil {
 		return SyncState{}, err
 	}
-	if state.PendingUpload == nil {
+	if len(state.PendingUploads) == 0 {
 		return state, nil
 	}
 	now := time.Now().UTC()
-	state.PendingUpload.Attempts++
-	state.PendingUpload.LastError = message
-	state.PendingUpload.UpdatedAt = &now
+	state.PendingUploads[0].Attempts++
+	state.PendingUploads[0].LastError = message
+	state.PendingUploads[0].UpdatedAt = &now
+	normalizePendingUploads(&state)
 	if err := WriteSyncState(root, state); err != nil {
 		return SyncState{}, err
 	}
@@ -144,6 +198,13 @@ func RecordPendingUploadFailure(root string, message string) (SyncState, error) 
 }
 
 func RecordTake(root string) (SyncState, error) {
+	syncStateMu.Lock()
+	defer syncStateMu.Unlock()
+	unlock, err := lockSyncStateFile(root)
+	if err != nil {
+		return SyncState{}, err
+	}
+	defer unlock()
 	state, err := EnsureSyncState(root)
 	if err != nil {
 		return SyncState{}, err
@@ -158,6 +219,36 @@ func RecordTake(root string) (SyncState, error) {
 
 func syncStatePath(root string) string {
 	return filepath.Join(root, ".edda", "state.local.json")
+}
+
+func lockSyncStateFile(root string) (func(), error) {
+	eddaDir := filepath.Join(root, ".edda")
+	if err := os.MkdirAll(eddaDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create .edda directory: %w", err)
+	}
+	file, err := os.OpenFile(filepath.Join(eddaDir, "state.local.lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("open sync state lock: %w", err)
+	}
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
+		_ = file.Close()
+		return nil, fmt.Errorf("lock sync state: %w", err)
+	}
+	return func() {
+		_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+		_ = file.Close()
+	}, nil
+}
+
+func normalizePendingUploads(state *SyncState) {
+	if len(state.PendingUploads) == 0 && state.PendingUpload != nil {
+		state.PendingUploads = []PendingUpload{*state.PendingUpload}
+	}
+	if len(state.PendingUploads) == 0 {
+		state.PendingUpload = nil
+		return
+	}
+	state.PendingUpload = &state.PendingUploads[0]
 }
 
 func randomDeviceID() (string, error) {

@@ -24,7 +24,8 @@ Preserve divergent saved-file edits in `.edda/conflicts/` and provide a local re
 
 3. Add CLI commands.
    - `edda conflicts [path]` lists preserved conflicts.
-   - `edda resolve [path] --id FILE_ID (--use local|server|--body-file file.md)` resolves one conflict.
+   - `edda resolve [path] --id FILE_ID --use local|server` resolves one conflict from a preserved version.
+   - `edda resolve [path] --id FILE_ID --body-file file.md` resolves one conflict from explicit Markdown.
 
 4. Add tests.
    - Preserve writes all three versions and metadata.

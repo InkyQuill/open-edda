@@ -80,6 +80,12 @@ const checkResult: ReadAndCheckResult = {
 };
 
 describe("AssistantActionPreview", () => {
+  it("renders nothing while idle", () => {
+    const html = renderPreview(initialAssistantActionsState);
+
+    expect(html).toBe("");
+  });
+
   it("renders candidate text with accept and reject controls", () => {
     const html = renderPreview({
       ...initialAssistantActionsState,
@@ -117,5 +123,18 @@ describe("AssistantActionPreview", () => {
 
     expect(html).toContain("aria-busy=\"true\"");
     expect(html).toContain("Running generate");
+  });
+
+  it("renders failed actions with dismiss control", () => {
+    const html = renderPreview({
+      ...initialAssistantActionsState,
+      actionKind: "rewrite",
+      status: "failed",
+      error: "Action failed",
+    });
+
+    expect(html).toContain("role=\"alert\"");
+    expect(html).toContain("Action failed");
+    expect(html).toContain("Dismiss");
   });
 });

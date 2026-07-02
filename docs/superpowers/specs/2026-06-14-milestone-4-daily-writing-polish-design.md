@@ -84,7 +84,7 @@ Editor-local actions:
 - Mobile selected text exposes those actions in a sticky toolbar.
 - `Generate` is separate from selection actions and lives in a persistent composer below the editor.
 - The Generate composer contains an instruction input and an AI icon/button.
-- Generate runs at the current cursor or selected insertion point and uses the current saved file version or current implementation revision token.
+- Generate runs at the current cursor or selected insertion point and validates that the current draft is saved before submitting the request.
 - Rewrite and Check open a modal on desktop and bottom sheet on mobile before running.
 - Rewrite/Check modal or sheet shows:
   - action title,

@@ -8,7 +8,7 @@ This phase does not replace database-backed editing yet. It establishes the layo
 
 ## Source Context
 
-The target layout is the stronger `alchemist` shape referenced in the file-first spec and verified from `/Users/inkyquill/Yandex.Disk-dark13th.localized/writing/alchemist`:
+The target layout is the stronger `alchemist` shape referenced in the file-first spec and verified from a repository-relative fixture or neutral sample path:
 
 - top-level guidance files: `AGENTS.md`, `BOOTSTRAP.md`
 - content roots: `story/`, `characters/`, `worldbuilding/`, `storyline/`, `drafts/`
@@ -41,7 +41,7 @@ Create a new Go package, `fileproject`, with typed layout scanning.
   - `.edda/drafts/**`,
   - unresolved `.edda/conflicts/**`.
 - Return warnings for missing recommended roots or missing root `_index.md` files, but do not fail if a smaller project has not filled every root yet.
-- Fail only when the root is not a directory or required layout identity cannot be established later by `.edda/project.json`.
+- Fail when the root is not a directory or the scan cannot identify an Edda-shaped layout from recommended roots, guidance files, or project-local skills; `.edda/project.json` supplies metadata but does not make an arbitrary folder valid.
 
 ## Task 2: Add `.edda/project.json` Metadata Types
 

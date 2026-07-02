@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCreateCheckpointSnapshotsStableFilesAndIgnoresOperationalDrafts(t *testing.T) {
@@ -92,6 +93,37 @@ func TestRestoreCheckpointRollsBackFilesAndIDs(t *testing.T) {
 	}
 }
 
+func TestRestoreCheckpointValidatesSnapshotsBeforeMutatingTree(t *testing.T) {
+	root := copyFileProjectFixture(t, filepath.Join("testdata", "partial"))
+	checkpoint, err := CreateCheckpoint(root, CreateCheckpointInput{Message: "base"})
+	if err != nil {
+		t.Fatalf("CreateCheckpoint error = %v", err)
+	}
+	if err := os.Remove(filepath.Join(root, ".edda", "checkpoints", checkpoint.ID, "files", "story", "chapter-01.md")); err != nil {
+		t.Fatalf("remove checkpoint snapshot: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "story", "chapter-01.md"), []byte("# Chapter 1\n\nChanged.\n"), 0o644); err != nil {
+		t.Fatalf("write changed file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "story", "extra.md"), []byte("# Extra\n"), 0o644); err != nil {
+		t.Fatalf("write extra file: %v", err)
+	}
+
+	if _, err := RestoreCheckpoint(root, checkpoint.ID); err == nil {
+		t.Fatalf("RestoreCheckpoint succeeded with missing snapshot")
+	}
+	body, err := os.ReadFile(filepath.Join(root, "story", "chapter-01.md"))
+	if err != nil {
+		t.Fatalf("read changed file: %v", err)
+	}
+	if !strings.Contains(string(body), "Changed") {
+		t.Fatalf("restore mutated target before validation:\n%s", string(body))
+	}
+	if _, err := os.Stat(filepath.Join(root, "story", "extra.md")); err != nil {
+		t.Fatalf("restore removed extra file before validation: %v", err)
+	}
+}
+
 func TestListCheckpointsSortsByCreation(t *testing.T) {
 	root := copyFileProjectFixture(t, filepath.Join("testdata", "partial"))
 	first, err := CreateCheckpoint(root, CreateCheckpointInput{Message: "first"})
@@ -101,6 +133,14 @@ func TestListCheckpointsSortsByCreation(t *testing.T) {
 	second, err := CreateCheckpoint(root, CreateCheckpointInput{Message: "second"})
 	if err != nil {
 		t.Fatalf("second checkpoint error = %v", err)
+	}
+	first.CreatedAt = time.Unix(1, 0).UTC()
+	second.CreatedAt = time.Unix(2, 0).UTC()
+	if err := writeCheckpointManifest(root, first); err != nil {
+		t.Fatalf("rewrite first checkpoint manifest: %v", err)
+	}
+	if err := writeCheckpointManifest(root, second); err != nil {
+		t.Fatalf("rewrite second checkpoint manifest: %v", err)
 	}
 
 	checkpoints, err := ListCheckpoints(root)
@@ -112,5 +152,24 @@ func TestListCheckpointsSortsByCreation(t *testing.T) {
 	}
 	if checkpoints[0].ID != first.ID || checkpoints[1].ID != second.ID {
 		t.Fatalf("checkpoint order = %#v", checkpoints)
+	}
+}
+
+func TestListCheckpointsSkipsPartialDirectories(t *testing.T) {
+	root := copyFileProjectFixture(t, filepath.Join("testdata", "partial"))
+	checkpoint, err := CreateCheckpoint(root, CreateCheckpointInput{Message: "base"})
+	if err != nil {
+		t.Fatalf("CreateCheckpoint error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".edda", "checkpoints", "checkpoint-20260702T000000Z-partial"), 0o755); err != nil {
+		t.Fatalf("create partial checkpoint: %v", err)
+	}
+
+	checkpoints, err := ListCheckpoints(root)
+	if err != nil {
+		t.Fatalf("ListCheckpoints error = %v", err)
+	}
+	if len(checkpoints) != 1 || checkpoints[0].ID != checkpoint.ID {
+		t.Fatalf("checkpoints = %#v", checkpoints)
 	}
 }

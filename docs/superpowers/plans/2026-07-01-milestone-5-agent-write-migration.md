@@ -24,7 +24,8 @@ Move structured write and review primitives toward file-backed saved hashes and 
 
 3. Add CLI inspection surfaces.
    - `edda files [path]` lists stable file IDs, paths, kinds, and saved hashes for agent/tool use.
-   - `edda history [path] --id FILE_ID` filters checkpoint history to one file.
+   - `edda history [path]` lists project checkpoint history.
+   - `edda history [path] --id FILE_ID` lists file-scoped checkpoint history for one stable file.
 
 4. Update assistant/review wording where the web UI still uses database revisions.
    - Avoid presenting database revisions as the final file-first model.

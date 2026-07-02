@@ -20,8 +20,8 @@ Add rebuildable project-wide checkpoints under `.edda/checkpoints/` so file-firs
 
 2. Add checkpoint list, diff, and restore helpers.
    - List checkpoints in creation order.
-   - Diff two checkpoints or checkpoint-to-working-tree by comparing stable file IDs and hashes.
-   - Restore a checkpoint by replacing canonical files from the checkpoint snapshot and refreshing `.edda/ids.json`.
+   - Diff two checkpoints or checkpoint-to-working-tree by comparing stable manifest fields for each file ID, including path, kind, title, hash, and size, while ignoring timestamp-only snapshot metadata.
+   - Restore a checkpoint by replacing canonical files from the checkpoint snapshot and writing the stable ID map captured in the checkpoint manifest; callers that maintain SQLite state should rebuild `project_files` after restore.
 
 3. Add CLI workflow.
    - `edda history [path]` lists checkpoints.
@@ -32,7 +32,7 @@ Add rebuildable project-wide checkpoints under `.edda/checkpoints/` so file-firs
 4. Add focused tests.
    - Checkpoint creation snapshots canonical files and ignores `.edda/drafts`.
    - Diff reports working-tree changes.
-   - Restore rolls files back and refreshes stable IDs.
+   - Restore rolls files back and preserves the checkpoint's stable ID mapping.
    - CLI tests cover checkpoint/history/diff/restore happy paths.
 
 5. Update roadmap and verify.

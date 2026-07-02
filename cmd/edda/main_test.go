@@ -22,6 +22,7 @@ func TestStatusReportsUninitializedLayout(t *testing.T) {
 	output := stdout.String()
 	for _, want := range []string{
 		"Project: uninitialized Edda folder",
+		"Stable IDs: missing",
 		"story: 2",
 		"character: 2",
 		"worldbuilding: 3",
@@ -57,18 +58,26 @@ func TestInitCreatesMetadataAndStatusReadsIt(t *testing.T) {
 	}
 }
 
-func TestStatusWriteIDsCreatesIDMap(t *testing.T) {
+func TestIDSyncCreatesIDMap(t *testing.T) {
 	root := copyFixture(t, filepath.Join("..", "..", "fileproject", "testdata", "partial"))
 
 	var stdout bytes.Buffer
-	if err := run([]string{"status", root, "--write-ids"}, &stdout, &bytes.Buffer{}); err != nil {
-		t.Fatalf("status --write-ids error = %v", err)
+	if err := run([]string{"ids", "sync", root}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("ids sync error = %v", err)
 	}
 	if !strings.Contains(stdout.String(), "Updated .edda/ids.json for 1 files.") {
-		t.Fatalf("status --write-ids output = %s", stdout.String())
+		t.Fatalf("ids sync output = %s", stdout.String())
 	}
 	if _, err := os.Stat(filepath.Join(root, ".edda", "ids.json")); err != nil {
 		t.Fatalf("ids.json not created: %v", err)
+	}
+
+	var statusOut bytes.Buffer
+	if err := run([]string{"status", root}, &statusOut, &bytes.Buffer{}); err != nil {
+		t.Fatalf("status error = %v", err)
+	}
+	if !strings.Contains(statusOut.String(), "Stable IDs: present") {
+		t.Fatalf("status output = %s", statusOut.String())
 	}
 }
 
@@ -198,6 +207,32 @@ func TestGetInitializesConnectedProjectAndSyncState(t *testing.T) {
 	}
 }
 
+func TestGetPreservesExistingMetadata(t *testing.T) {
+	root := t.TempDir()
+	if _, err := fileproject.InitMetadata(root, fileproject.InitMetadataInput{
+		ID:        "project-1",
+		Title:     "Existing Draft",
+		ServerURL: "https://old.example/projects/project-1",
+	}); err != nil {
+		t.Fatalf("InitMetadata error = %v", err)
+	}
+
+	if err := run(
+		[]string{"get", "--title", "New Draft", "--id", "project-2", "https://new.example/projects/project-2", root},
+		&bytes.Buffer{},
+		&bytes.Buffer{},
+	); err != nil {
+		t.Fatalf("get existing project error = %v", err)
+	}
+	metadata, err := fileproject.ReadMetadata(root)
+	if err != nil {
+		t.Fatalf("ReadMetadata error = %v", err)
+	}
+	if metadata.ID != "project-1" || metadata.Title != "Existing Draft" || metadata.ServerURL != "https://old.example/projects/project-1" {
+		t.Fatalf("metadata was overwritten: %#v", metadata)
+	}
+}
+
 func TestSaveCheckpointSendAndTakeWorkflow(t *testing.T) {
 	root := copyFixture(t, filepath.Join("..", "..", "fileproject", "testdata", "partial"))
 	if _, err := fileproject.InitMetadata(root, fileproject.InitMetadataInput{
@@ -252,6 +287,65 @@ func TestSaveCheckpointSendAndTakeWorkflow(t *testing.T) {
 	}
 	if state.LastTakeAt == nil {
 		t.Fatalf("last take cursor not recorded")
+	}
+}
+
+func TestSaveCheckpointTreatsBareTextAsMessage(t *testing.T) {
+	root := copyFixture(t, filepath.Join("..", "..", "fileproject", "testdata", "partial"))
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get cwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir root: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(previous); err != nil {
+			t.Fatalf("restore cwd: %v", err)
+		}
+	})
+
+	var stdout bytes.Buffer
+	if err := run([]string{"save", "Chapter", "polish"}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("save checkpoint error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "upload pending") {
+		t.Fatalf("save output = %s", stdout.String())
+	}
+	checkpoints, err := fileproject.ListCheckpoints(root)
+	if err != nil {
+		t.Fatalf("ListCheckpoints error = %v", err)
+	}
+	if len(checkpoints) != 1 || checkpoints[0].Message != "Chapter polish" {
+		t.Fatalf("checkpoints = %#v", checkpoints)
+	}
+}
+
+func TestSaveCheckpointTreatsSingleBareArgAsMessage(t *testing.T) {
+	root := copyFixture(t, filepath.Join("..", "..", "fileproject", "testdata", "partial"))
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get cwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir root: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(previous); err != nil {
+			t.Fatalf("restore cwd: %v", err)
+		}
+	})
+
+	var stdout bytes.Buffer
+	if err := run([]string{"save", "Quick note"}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("save checkpoint error = %v", err)
+	}
+	checkpoints, err := fileproject.ListCheckpoints(root)
+	if err != nil {
+		t.Fatalf("ListCheckpoints error = %v", err)
+	}
+	if len(checkpoints) != 1 || checkpoints[0].Message != "Quick note" {
+		t.Fatalf("checkpoints = %#v", checkpoints)
 	}
 }
 
@@ -314,6 +408,21 @@ func TestConflictsAndResolveWorkflow(t *testing.T) {
 	}
 	if string(body) != "# Chapter 1\n\nServer.\n" {
 		t.Fatalf("resolved body = %q", string(body))
+	}
+}
+
+func TestResolveRequiresOneResolutionSource(t *testing.T) {
+	root := copyFixture(t, filepath.Join("..", "..", "fileproject", "testdata", "partial"))
+	stable := prepareStableCLIFile(t, root)
+
+	err := run([]string{"resolve", root, "--id", stable.ID}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "exactly one of --use or --body-file") {
+		t.Fatalf("resolve without source error = %v", err)
+	}
+
+	err = run([]string{"resolve", root, "--id", stable.ID, "--use", "local", "--body-file", filepath.Join(root, "story", "chapter-01.md")}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "exactly one of --use or --body-file") {
+		t.Fatalf("resolve with two sources error = %v", err)
 	}
 }
 

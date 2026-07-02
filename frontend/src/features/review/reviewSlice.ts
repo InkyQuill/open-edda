@@ -23,7 +23,9 @@ export type ReviewState = {
   selectedPromptRecordId: string | null;
   selectedRevisionNumber: number | null;
   error: string | null;
+  revisionsError: string | null;
   restoreError: string | null;
+  restoreErrorCode: string | null;
 };
 
 export const initialReviewState: ReviewState = {
@@ -43,11 +45,17 @@ export const initialReviewState: ReviewState = {
   selectedPromptRecordId: null,
   selectedRevisionNumber: null,
   error: null,
+  revisionsError: null,
   restoreError: null,
+  restoreErrorCode: null,
 };
 
 function readableError(action: { error: { message?: string } }): string {
   return action.error.message ?? "Could not load review data";
+}
+
+function errorCode(action: { error: { code?: string } }): string | null {
+  return action.error.code ?? null;
 }
 
 function clearProjectScopedReviewState(state: ReviewState) {
@@ -66,7 +74,9 @@ function clearContentScopedReviewState(state: ReviewState) {
   state.revisionsRequestId = null;
   state.restoreRequestId = null;
   state.selectedRevisionNumber = null;
+  state.revisionsError = null;
   state.restoreError = null;
+  state.restoreErrorCode = null;
 }
 
 const reviewSlice = createSlice({
@@ -151,7 +161,9 @@ const reviewSlice = createSlice({
         state.contentId = action.meta.arg.contentId;
         state.revisionsStatus = "pending";
         state.revisionsRequestId = action.meta.requestId;
+        state.revisionsError = null;
         state.restoreError = null;
+        state.restoreErrorCode = null;
       })
       .addCase(loadContentRevisions.fulfilled, (state, action) => {
         if (
@@ -164,8 +176,9 @@ const reviewSlice = createSlice({
         state.revisions = action.payload;
         state.revisionsStatus = "succeeded";
         state.revisionsRequestId = null;
+        state.revisionsError = null;
         if (
-          state.selectedRevisionNumber &&
+          state.selectedRevisionNumber !== null &&
           !action.payload.some((revision) => revision.revisionNumber === state.selectedRevisionNumber)
         ) {
           state.selectedRevisionNumber = null;
@@ -181,7 +194,7 @@ const reviewSlice = createSlice({
         }
         state.revisionsStatus = "failed";
         state.revisionsRequestId = null;
-        state.restoreError = readableError(action);
+        state.revisionsError = readableError(action);
       })
       .addCase(restoreContentRevision.pending, (state, action) => {
         if (state.projectId !== action.meta.arg.projectId) {
@@ -195,6 +208,7 @@ const reviewSlice = createSlice({
         state.restoreStatus = "pending";
         state.restoreRequestId = action.meta.requestId;
         state.restoreError = null;
+        state.restoreErrorCode = null;
       })
       .addCase(restoreContentRevision.fulfilled, (state, action) => {
         if (
@@ -207,6 +221,7 @@ const reviewSlice = createSlice({
         state.restoreStatus = "succeeded";
         state.restoreRequestId = null;
         state.restoreError = null;
+        state.restoreErrorCode = null;
         state.selectedRevisionNumber = action.payload.currentRevision;
       })
       .addCase(restoreContentRevision.rejected, (state, action) => {
@@ -220,6 +235,7 @@ const reviewSlice = createSlice({
         state.restoreStatus = "failed";
         state.restoreRequestId = null;
         state.restoreError = readableError(action);
+        state.restoreErrorCode = errorCode(action);
       });
   },
 });

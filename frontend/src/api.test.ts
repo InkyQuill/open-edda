@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createContent, listRevisions, restoreRevision, type CreateContentInput } from "./api";
+import { ApiError, apiError, createContent, listRevisions, restoreRevision, type CreateContentInput } from "./api";
 
 class MemoryStorage implements Storage {
   readonly #items = new Map<string, string>();
@@ -151,5 +151,72 @@ describe("api createContent", () => {
     );
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect((init.headers as Headers).get("Content-Type")).toBe("application/json");
+  });
+
+  it("includes server failure details when listing revisions fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("content missing", { status: 404 }));
+
+    await expect(listRevisions("project-1", "content-1")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 404,
+      code: "HTTP_404",
+      message: "list revisions failed: 404: content missing",
+    } satisfies Partial<ApiError>);
+  });
+
+  it("includes server failure details when restoring a revision fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ error: "expected revision conflict" }), { status: 409 }));
+
+    await expect(restoreRevision("project-1", "content-1", 2, { expectedRevision: 4, reason: "restore" })).rejects.toMatchObject({
+      name: "ApiError",
+      status: 409,
+      code: "HTTP_409",
+      message: "restore revision failed: 409: expected revision conflict",
+    } satisfies Partial<ApiError>);
+  });
+
+  it("parses JSON error bodies in apiError", async () => {
+    const error = await apiError("restore revision", new Response(JSON.stringify({ error: "conflict" }), { status: 409 }));
+
+    expect(error).toMatchObject({
+      code: "HTTP_409",
+      message: "restore revision failed: 409: conflict",
+    } satisfies Partial<ApiError>);
+  });
+
+  it("falls back to raw JSON bodies without an error field", async () => {
+    const error = await apiError("list revisions", new Response(JSON.stringify({ message: "missing" }), { status: 404 }));
+
+    expect(error.message).toBe('list revisions failed: 404: {"message":"missing"}');
+  });
+
+  it("uses plain text error bodies in apiError", async () => {
+    const error = await apiError("list revisions", new Response("plain failure", { status: 500 }));
+
+    expect(error.message).toBe("list revisions failed: 500: plain failure");
+  });
+
+  it("truncates long plain text error bodies in apiError", async () => {
+    const error = await apiError("list revisions", new Response("x".repeat(320), { status: 500 }));
+
+    expect(error.message).toBe(`list revisions failed: 500: ${"x".repeat(300)}...`);
+  });
+
+  it("stores status code and response body on direct ApiError instances", () => {
+    const error = new ApiError("restore revision", 409, JSON.stringify({ error: "conflict" }));
+
+    expect(error).toMatchObject({
+      name: "ApiError",
+      status: 409,
+      code: "HTTP_409",
+      body: JSON.stringify({ error: "conflict" }),
+      message: "restore revision failed: 409: conflict",
+    } satisfies Partial<ApiError>);
+  });
+
+  it("omits details for empty error bodies in apiError", async () => {
+    const error = await apiError("list revisions", new Response("", { status: 502 }));
+
+    expect(error.message).toBe("list revisions failed: 502");
   });
 });

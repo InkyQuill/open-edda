@@ -122,8 +122,8 @@ The CLI should use writing-oriented language:
 
 - `edda get URL` downloads or connects a server project into a local Edda folder.
 - `edda status` shows unsaved drafts, changed files, pending uploads, and conflicts in plain language.
-- `edda save "Note"` creates a named checkpoint from the current saved folder state and immediately pushes that checkpoint plus file changes to the server.
-- `edda send` retries or completes pending uploads if `edda save` could not push because the user was offline, the server was unavailable, or the operation was interrupted.
+- `edda save "Note"` creates a named checkpoint from the current saved folder state and records it in the local pending upload queue.
+- `edda send` retries or completes queued pending uploads when a server URL exists.
 - `edda take` downloads saved server changes and checkpoint metadata.
 - `edda history` lists checkpoints.
 - `edda diff` shows changes since the last checkpoint or between two checkpoints.
@@ -149,6 +149,9 @@ Conflict handling is linear and writer-facing.
 
 - If only one side changed a file since the last shared state, Edda applies it automatically.
 - If both local and server changed the same file, Edda preserves both versions and marks the file conflicted.
+- If one side renames a file while the other edits it, Edda preserves the edited content and records the rename as part of the conflict so the writer chooses the final path.
+- If one side deletes a file while the other edits it, Edda keeps the edited version as a conflict candidate instead of silently deleting it.
+- If both sides delete the same file, Edda accepts the deletion without creating a conflict.
 - Edda stores or exposes base, local, and server versions for comparison.
 - The UI and CLI should say what happened in plain language, such as "This file changed both here and on the server."
 - Resolution produces a normal saved file.

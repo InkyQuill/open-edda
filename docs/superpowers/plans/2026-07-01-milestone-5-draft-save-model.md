@@ -21,7 +21,7 @@ Separate ephemeral editor drafts from canonical saved project files. Browser edi
 2. Add canonical file save helpers in `fileproject`.
    - Resolve a stable file ID through `.edda/ids.json`.
    - Reject stale saves when the caller's expected saved hash does not match the current file hash.
-   - Write markdown atomically enough for local project files, refresh `.edda/ids.json`, and return the new hash/bytes.
+   - Write markdown atomically enough for local project files and return the new hash/bytes without rewriting the stable ID map for unrelated files.
 
 3. Add a CLI surface for local workflow.
    - `edda save <path> --id <file-id> --from-draft` promotes `.edda/drafts/{fileID}.md` to the canonical file.

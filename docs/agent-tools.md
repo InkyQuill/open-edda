@@ -221,6 +221,6 @@ When running a quick action, inspect whatever project context is needed before f
 
 ## Known Gaps
 
-- There are no file-system tools for agents yet. Reads are content-oriented, but the product source of truth is now the project folder plus `.edda/` metadata; the content tools need a file-index-backed implementation.
+- There are no general project file-system tools for agents yet. Reads are content-oriented, but the product source of truth is now the project folder plus `.edda/` metadata; the content tools need a file-index-backed implementation.
 - `skill` loads by ID only. The model sees skill IDs in the available/selected skill prompt sources; there is no model-facing `read_skill_by_name`.
 - Tool errors currently fail the chat turn instead of returning a model-visible tool error that the model can recover from.

@@ -12,7 +12,7 @@ This roadmap tracks product milestones separately from implementation plans. Det
 | 3.5 | Elysium Skill Library Rewrite | Implemented | `docs/superpowers/plans/2026-06-14-writer-skill-library-rewrite.md` |
 | 3.6 | Skill Script Runtime | Implemented | `docs/superpowers/plans/2026-06-14-open-edda-skill-script-runtime.md` |
 | 4 | Daily Writing Polish | In progress | See phase tracker below |
-| 5 | File-First Projects And Checkpoints | Implemented | `docs/superpowers/specs/2026-07-01-file-first-checkpoints-design.md` |
+| 5 | File-First Projects And Checkpoints | Implemented | See phase tracker below |
 | Later | Collaboration | Deferred | Needs specs after single-author file-first workflow is stable |
 
 ## Milestone 1: Project Core
@@ -78,7 +78,7 @@ The rewrite should make these skills first-class Open Edda skills instead of ter
 - Audit every bundled script for destructive behavior, filesystem assumptions, runtime requirements, and whether it remains useful through Open Edda's service-prepared script inputs.
 - Defer any skill whose core value depends on running scripts until the Skill Script Runtime exists.
 - Keep a script-bearing skill in Milestone 3.5 only when the script is an optional accelerator and the skill can provide clear value through Edda-native agent instructions, data, templates, or references without executing the script.
-- Keep scripts only when they are safe, useful, and can be made runnable through Open Edda's future script runtime.
+- Keep scripts only when they are safe, useful, and can be made runnable through Open Edda's Skill Script Runtime.
 - Decide which skills should ship with Open Edda as default authoring aids, which should be optional, and which should be archived.
 
 ### Skill Library Decisions
@@ -97,7 +97,7 @@ The high-level policy is:
 - A rewritten skill library under a Open Edda-compatible source folder.
 - A manifest documenting default, optional, and archived skills.
 - Tests or fixture imports proving every rewritten skill imports through Milestone 3 Skill Core.
-- A short compatibility note for each script-heavy skill explaining whether the script was removed, retained for the future script runtime, converted to data/template/reference material, or deferred until service-backed script adapters exist.
+- A short compatibility note for each script-heavy skill explaining whether the script was removed, retained for the Skill Script Runtime, converted to data/template/reference material, or deferred until Skill Script Runtime scaffolding exists.
 - Skill browser disclosure for script-bearing skills, including whether script support is deferred and whether the skill still works through Edda-native agent guidance.
 
 ## Milestone 3.6: Skill Script Runtime
@@ -113,6 +113,8 @@ Acceptance target:
 - Skills with missing or disabled script support degrade clearly in the agent session instead of asking the author to run terminal commands.
 
 ## Milestone 4: Daily Writing Polish
+
+Status: Implemented.
 
 Editor ergonomics, mobile-friendly layouts, system settings, project/content creation flows, side-panel Attached Notes, better diff/restore UI, export polish, provider disclosure polish, and assistant chat UX.
 
@@ -147,7 +149,7 @@ Acceptance target:
 - A writer can start from the web app or from a local folder that already follows, or is converted into, the `alchemist`-style Edda layout.
 - Story prose, storyline/planning material, characters, worldbuilding, drafts, project guidance, and project-local skills are ordinary files in the defined layout.
 - SQLite indexes and caches project data, but project content and checkpoint history can be rebuilt from the folder plus `.edda/`.
-- `edda get`, `edda status`, `edda save`, `edda send`, `edda take`, `edda history`, `edda diff`, and `edda restore` cover the main local workflow.
+- `edda get`, `edda status`, `edda save`, `edda send`, `edda take`, `edda checkpoint`, `edda history`, `edda diff`, and `edda restore` cover the main local workflow.
 - Checkpoints provide project-wide history, comparison, restore, recovery, and sync without exposing git branches, staging, rebases, or remote-management concepts.
 - Conflicts preserve base/local/server versions and resolve back into normal saved files.
 

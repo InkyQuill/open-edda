@@ -420,6 +420,7 @@ func TestRestoreRevisionCreatesNewRestoreCheckpoint(t *testing.T) {
 		RevisionNumber:   1,
 		ExpectedRevision: updated.CurrentRevision,
 		Reason:           "restore opening image",
+		CreatedBy:        "author",
 	})
 	if err != nil {
 		t.Fatalf("RestoreRevision() error = %v", err)
@@ -438,8 +439,30 @@ func TestRestoreRevisionCreatesNewRestoreCheckpoint(t *testing.T) {
 		RevisionNumber: 3,
 		BodyMarkdown:   "The lantern burned blue.",
 		Reason:         "restore opening image",
-		CreatedBy:      "restore",
+		CreatedBy:      "author",
 	})
+}
+
+func TestRestoreRevisionReturnsNotFoundForMissingRevision(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	ctx := context.Background()
+
+	chapter := createStructuredWriteContent(t, ctx, service, KindChapter, "Opening", "The lantern burned blue.", `{}`)
+
+	_, err := service.RestoreRevision(ctx, RestoreRevisionInput{
+		ProjectID:        "project-1",
+		ContentID:        chapter.ID,
+		RevisionNumber:   99,
+		ExpectedRevision: chapter.CurrentRevision,
+		Reason:           "missing restore",
+		CreatedBy:        "author",
+	})
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("RestoreRevision() error = %v, want sql.ErrNoRows", err)
+	}
+	assertContentUnchanged(t, ctx, service, chapter.ID, "The lantern burned blue.", 1)
+	assertRevisionCount(t, ctx, db, chapter.ID, 1)
 }
 
 func TestRestoreRevisionRejectsStaleExpectedRevision(t *testing.T) {

@@ -8,15 +8,20 @@ export interface GenerateValidationInput {
   contentContext: EditorContentContext | null;
   cursorByte: number | null;
   activeModelVariantId: string | null;
+  dirty: boolean;
 }
 
 export function validateGenerateAction({
   contentContext,
   cursorByte,
   activeModelVariantId,
+  dirty,
 }: GenerateValidationInput): string | null {
   if (!contentContext) {
     return "Open a chapter or story-bible entry before generating.";
+  }
+  if (dirty) {
+    return "Save the current draft before generating.";
   }
   if (!activeModelVariantId) {
     return "Choose an active model variant in Settings before generating.";
@@ -70,15 +75,20 @@ export interface SelectionValidationInput {
   contentContext: EditorContentContext | null;
   selection: { startByte: number; endByte: number } | null;
   activeModelVariantId: string | null;
+  dirty: boolean;
 }
 
 export function validateSelectionAction({
   contentContext,
   selection,
   activeModelVariantId,
+  dirty,
 }: SelectionValidationInput): string | null {
   if (!contentContext) {
     return "Open a chapter or story-bible entry before running this action.";
+  }
+  if (dirty) {
+    return "Save the current draft before running this action.";
   }
   if (!activeModelVariantId) {
     return "Choose an active model variant in Settings before running this action.";

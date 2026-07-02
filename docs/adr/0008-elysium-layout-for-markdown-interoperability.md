@@ -5,6 +5,9 @@ Open Edda defines one comfortable Markdown project layout instead of trying to s
 ```text
 AGENTS.md
 BOOTSTRAP.md
+.edda/
+.edda/project.json
+.edda/ids.json
 .agents/skills/
 story/
 story/_index.md

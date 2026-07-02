@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -88,9 +89,51 @@ func TestAssignStableIDsAddsAndPrunesPaths(t *testing.T) {
 	}
 }
 
+func TestAssignStableIDsExcludesEddaOperationalFiles(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, root, "story/chapter-01.md", "# Chapter 1\n")
+	if _, err := InitMetadata(root, InitMetadataInput{ID: "project-1", Title: "Draft"}); err != nil {
+		t.Fatalf("InitMetadata error = %v", err)
+	}
+	mustWrite(t, root, ".edda/state.local.json", "{}")
+	mustWrite(t, root, ".edda/drafts/story-1.md", "draft")
+	mustWrite(t, root, ".edda/conflicts/story-1/local.md", "local")
+
+	layout, err := Scan(root)
+	if err != nil {
+		t.Fatalf("Scan error = %v", err)
+	}
+	idMap, files, err := AssignStableIDs(root, layout)
+	if err != nil {
+		t.Fatalf("AssignStableIDs error = %v", err)
+	}
+	if len(files) != 1 || files[0].Path != "story/chapter-01.md" {
+		t.Fatalf("stable files = %#v", files)
+	}
+	for path := range idMap.Items {
+		if strings.HasPrefix(path, ".edda/") {
+			t.Fatalf("operational path received stable id: %#v", idMap.Items)
+		}
+	}
+}
+
 func TestReadIDMapMissing(t *testing.T) {
 	_, err := ReadIDMap(t.TempDir())
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("ReadIDMap(missing) error = %v, want fs.ErrNotExist", err)
+	}
+}
+
+func TestReadIDMapRejectsUnsupportedSchemaVersion(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".edda"), 0o755); err != nil {
+		t.Fatalf("create .edda: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".edda", "ids.json"), []byte(`{"schemaVersion":999,"items":{}}`), 0o644); err != nil {
+		t.Fatalf("write ids map: %v", err)
+	}
+
+	if _, err := ReadIDMap(root); err == nil {
+		t.Fatalf("ReadIDMap accepted unsupported schema version")
 	}
 }

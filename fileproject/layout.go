@@ -47,6 +47,13 @@ type ProjectLayout struct {
 }
 
 var recommendedRoots = []string{"story", "characters", "worldbuilding", "storyline", "drafts"}
+var recommendedRootKinds = map[string]LayoutKind{
+	"story":         LayoutKindStory,
+	"characters":    LayoutKindCharacter,
+	"worldbuilding": LayoutKindWorldbuilding,
+	"storyline":     LayoutKindStoryline,
+	"drafts":        LayoutKindDraft,
+}
 
 func Scan(root string) (ProjectLayout, error) {
 	info, err := os.Stat(root)
@@ -62,7 +69,7 @@ func Scan(root string) (ProjectLayout, error) {
 		return ProjectLayout{}, fmt.Errorf("absolute project root: %w", err)
 	}
 
-	layout := ProjectLayout{Root: absRoot}
+	layout := ProjectLayout{Root: absRoot, Files: []LayoutFile{}, Warnings: []LayoutWarning{}}
 	if metadata, err := ReadMetadata(absRoot); err == nil {
 		layout.Metadata = &metadata
 	} else if errors.Is(err, fs.ErrNotExist) {
@@ -77,6 +84,7 @@ func Scan(root string) (ProjectLayout, error) {
 
 	rootSeen := map[string]bool{}
 	rootIndexSeen := map[string]bool{}
+	hasLayoutIdentity := false
 
 	err = filepath.WalkDir(absRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -98,6 +106,7 @@ func Scan(root string) (ProjectLayout, error) {
 			}
 			if root := strings.Split(rel, "/")[0]; contains(recommendedRoots, root) {
 				rootSeen[root] = true
+				hasLayoutIdentity = true
 			}
 			return nil
 		}
@@ -110,9 +119,13 @@ func Scan(root string) (ProjectLayout, error) {
 		if !ok {
 			return nil
 		}
+		if kind != LayoutKindMetadata {
+			hasLayoutIdentity = true
+		}
 
 		if name := filepath.Base(rel); name == "_index.md" {
-			if root := strings.Split(rel, "/")[0]; contains(recommendedRoots, root) {
+			root := strings.Split(rel, "/")[0]
+			if contains(recommendedRoots, root) && rel == root+"/_index.md" {
 				rootIndexSeen[root] = true
 			}
 		}
@@ -126,6 +139,9 @@ func Scan(root string) (ProjectLayout, error) {
 	})
 	if err != nil {
 		return ProjectLayout{}, fmt.Errorf("scan project layout: %w", err)
+	}
+	if !hasLayoutIdentity {
+		return ProjectLayout{}, fmt.Errorf("project root does not look like an Edda layout")
 	}
 
 	for _, root := range recommendedRoots {
@@ -205,20 +221,8 @@ func classify(rel string) (LayoutKind, bool) {
 	if !strings.HasSuffix(rel, ".md") {
 		return "", false
 	}
-	switch strings.Split(rel, "/")[0] {
-	case "story":
-		return LayoutKindStory, true
-	case "characters":
-		return LayoutKindCharacter, true
-	case "worldbuilding":
-		return LayoutKindWorldbuilding, true
-	case "storyline":
-		return LayoutKindStoryline, true
-	case "drafts":
-		return LayoutKindDraft, true
-	default:
-		return "", false
-	}
+	kind, ok := recommendedRootKinds[strings.Split(rel, "/")[0]]
+	return kind, ok
 }
 
 func layoutFile(path string, rel string, kind LayoutKind) (LayoutFile, error) {
@@ -227,16 +231,12 @@ func layoutFile(path string, rel string, kind LayoutKind) (LayoutFile, error) {
 		return LayoutFile{}, err
 	}
 	sum := sha256.Sum256(data)
-	info, err := os.Stat(path)
-	if err != nil {
-		return LayoutFile{}, err
-	}
 	return LayoutFile{
 		Path:   rel,
 		Kind:   kind,
 		Title:  titleFromPath(rel),
 		SHA256: hex.EncodeToString(sum[:]),
-		Size:   info.Size(),
+		Size:   int64(len(data)),
 	}, nil
 }
 

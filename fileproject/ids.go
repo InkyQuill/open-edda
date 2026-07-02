@@ -35,6 +35,9 @@ func ReadIDMap(root string) (IDMap, error) {
 	if err := json.Unmarshal(data, &idMap); err != nil {
 		return IDMap{}, fmt.Errorf("parse ids map: %w", err)
 	}
+	if idMap.SchemaVersion != CurrentSchemaVersion {
+		return IDMap{}, fmt.Errorf("unsupported ids map schema version %d", idMap.SchemaVersion)
+	}
 	if idMap.Items == nil {
 		idMap.Items = map[string]string{}
 	}
@@ -57,7 +60,29 @@ func WriteIDMap(root string, idMap IDMap) error {
 		return fmt.Errorf("marshal ids map: %w", err)
 	}
 	data = append(data, '\n')
-	if err := os.WriteFile(filepath.Join(eddaDir, "ids.json"), data, 0o644); err != nil {
+	path := filepath.Join(eddaDir, "ids.json")
+	tmp, err := os.CreateTemp(eddaDir, "ids-*.json")
+	if err != nil {
+		return fmt.Errorf("create temporary ids map: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write temporary ids map: %w", err)
+	}
+	if err := tmp.Chmod(0o644); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("chmod temporary ids map: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("sync temporary ids map: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temporary ids map: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
 		return fmt.Errorf("write ids map: %w", err)
 	}
 	return nil

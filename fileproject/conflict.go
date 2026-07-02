@@ -2,6 +2,7 @@ package fileproject
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -61,13 +62,17 @@ func PreserveConflict(root string, input PreserveConflictInput) (ConflictRecord,
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return ConflictRecord{}, fmt.Errorf("create conflict directory: %w", err)
 	}
-	for name, body := range map[string]string{
-		"base.md":   input.BaseMarkdown,
-		"local.md":  input.LocalMarkdown,
-		"server.md": input.ServerMarkdown,
-	} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
-			return ConflictRecord{}, fmt.Errorf("write conflict %s: %w", name, err)
+	files := []struct {
+		name string
+		body string
+	}{
+		{name: "base.md", body: input.BaseMarkdown},
+		{name: "local.md", body: input.LocalMarkdown},
+		{name: "server.md", body: input.ServerMarkdown},
+	}
+	for _, file := range files {
+		if err := os.WriteFile(filepath.Join(dir, file.name), []byte(file.body), 0o644); err != nil {
+			return ConflictRecord{}, fmt.Errorf("write conflict %s: %w", file.name, err)
 		}
 	}
 	if err := writeConflictRecord(root, record); err != nil {
@@ -112,6 +117,9 @@ func ListConflicts(root string) ([]ConflictRecord, error) {
 		}
 		record, err := ReadConflict(root, entry.Name())
 		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
 			return nil, err
 		}
 		if record.ResolvedAt == nil {
@@ -131,6 +139,9 @@ func ResolveConflict(root string, input ResolveConflictInput) (ConflictRecord, S
 	record, err := ReadConflict(root, input.FileID)
 	if err != nil {
 		return ConflictRecord{}, SavedFile{}, err
+	}
+	if record.ResolvedAt != nil {
+		return ConflictRecord{}, SavedFile{}, fmt.Errorf("conflict %s already resolved", input.FileID)
 	}
 	body := input.BodyMarkdown
 	resolution := input.Resolution

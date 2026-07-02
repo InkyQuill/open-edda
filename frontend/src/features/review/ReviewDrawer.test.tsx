@@ -188,6 +188,7 @@ describe("ReviewDrawer", () => {
         selectedRevisionNumber: 1,
         restoreStatus: "failed",
         restoreError: "restore revision failed: 409",
+        restoreErrorCode: "HTTP_409",
       },
     });
 

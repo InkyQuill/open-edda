@@ -1,5 +1,5 @@
 import { Activity, AlertCircle, FileText, GitCompareArrows, MessageSquareText, RotateCcw } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 
 import type { AppDispatch, RootState } from "../../app/store/store";
@@ -44,9 +44,9 @@ function formatJSON(value: string): string {
   }
 }
 
-function restoreConflictMessage(error: string | null): string | null {
+function restoreConflictMessage(error: string | null, code: string | null): string | null {
   if (!error) return null;
-  if (error.includes("409") || error.toLowerCase().includes("conflict")) {
+  if (code === "HTTP_409" || /\b409\b|conflict/i.test(error)) {
     return "Content changed before this checkpoint was restored. Review the latest draft, then try again.";
   }
   return error;
@@ -55,22 +55,44 @@ function restoreConflictMessage(error: string | null): string | null {
 function diffLines(current: string, selected: string): Array<{ kind: "same" | "added" | "removed"; text: string }> {
   const currentLines = current.split("\n");
   const selectedLines = selected.split("\n");
-  const max = Math.max(currentLines.length, selectedLines.length);
-  const lines: Array<{ kind: "same" | "added" | "removed"; text: string }> = [];
+  const lengths = Array.from({ length: currentLines.length + 1 }, () => Array<number>(selectedLines.length + 1).fill(0));
 
-  for (let index = 0; index < max; index += 1) {
-    const currentLine = currentLines[index];
-    const selectedLine = selectedLines[index];
-    if (currentLine === selectedLine) {
-      lines.push({ kind: "same", text: currentLine ?? "" });
+  for (let currentIndex = currentLines.length - 1; currentIndex >= 0; currentIndex -= 1) {
+    for (let selectedIndex = selectedLines.length - 1; selectedIndex >= 0; selectedIndex -= 1) {
+      lengths[currentIndex][selectedIndex] =
+        currentLines[currentIndex] === selectedLines[selectedIndex]
+          ? lengths[currentIndex + 1][selectedIndex + 1] + 1
+          : Math.max(lengths[currentIndex + 1][selectedIndex], lengths[currentIndex][selectedIndex + 1]);
+    }
+  }
+
+  const lines: Array<{ kind: "same" | "added" | "removed"; text: string }> = [];
+  let currentIndex = 0;
+  let selectedIndex = 0;
+
+  while (currentIndex < currentLines.length && selectedIndex < selectedLines.length) {
+    if (currentLines[currentIndex] === selectedLines[selectedIndex]) {
+      lines.push({ kind: "same", text: currentLines[currentIndex] });
+      currentIndex += 1;
+      selectedIndex += 1;
       continue;
     }
-    if (currentLine !== undefined) {
-      lines.push({ kind: "removed", text: currentLine });
+
+    if (lengths[currentIndex + 1][selectedIndex] >= lengths[currentIndex][selectedIndex + 1]) {
+      lines.push({ kind: "removed", text: currentLines[currentIndex] });
+      currentIndex += 1;
+    } else {
+      lines.push({ kind: "added", text: selectedLines[selectedIndex] });
+      selectedIndex += 1;
     }
-    if (selectedLine !== undefined) {
-      lines.push({ kind: "added", text: selectedLine });
-    }
+  }
+  while (currentIndex < currentLines.length) {
+    lines.push({ kind: "removed", text: currentLines[currentIndex] });
+    currentIndex += 1;
+  }
+  while (selectedIndex < selectedLines.length) {
+    lines.push({ kind: "added", text: selectedLines[selectedIndex] });
+    selectedIndex += 1;
   }
 
   return lines;
@@ -168,7 +190,9 @@ export function ReviewDrawer({ projectId, content, onContentSaved }: ReviewDrawe
     projectId: reviewProjectId,
     promptRecords,
     promptRecordsStatus,
+    revisionsError,
     restoreError,
+    restoreErrorCode,
     restoreStatus,
     revisions,
     revisionsStatus,
@@ -182,7 +206,8 @@ export function ReviewDrawer({ projectId, content, onContentSaved }: ReviewDrawe
   const visibleActivityEvents = isCurrentProject ? activityEvents : [];
   const visiblePromptRecords = isCurrentProject ? promptRecords : [];
   const visibleRevisions = isCurrentContent ? revisions : [];
-  const visibleRestoreError = isCurrentContent ? restoreConflictMessage(restoreError) : null;
+  const visibleRevisionsError = isCurrentContent ? revisionsError : null;
+  const visibleRestoreError = isCurrentContent ? restoreConflictMessage(restoreError, restoreErrorCode) : null;
   const visibleCheckResult = checkResult?.note.contentItemId === content?.id ? checkResult : null;
   const selectedPromptRecord = visiblePromptRecords.find((record) => record.id === selectedPromptRecordId) ?? null;
   const selectedRevision =
@@ -191,9 +216,11 @@ export function ReviewDrawer({ projectId, content, onContentSaved }: ReviewDrawe
   const hasActivity = visibleActivityEvents.length > 0;
   const hasPromptRecords = visiblePromptRecords.length > 0;
   const isEmpty = !visibleError && !loading && !hasActivity && !hasPromptRecords;
-  const revisionsLoading = revisionsStatus === "pending";
+  const visibleRevisionsStatus = isCurrentContent ? revisionsStatus : "idle";
+  const revisionsLoading = visibleRevisionsStatus === "pending";
   const hasRevisions = visibleRevisions.length > 0;
   const restorePending = restoreStatus === "pending";
+  const loadedThroughRevision = Math.max(0, ...visibleRevisions.map((revision) => revision.revisionNumber));
 
   useEffect(() => {
     if (reviewProjectId !== projectId || activityStatus === "idle") {
@@ -209,10 +236,15 @@ export function ReviewDrawer({ projectId, content, onContentSaved }: ReviewDrawe
 
   useEffect(() => {
     if (!content) return;
-    if (reviewProjectId !== projectId || contentId !== content.id || revisionsStatus === "idle") {
+    if (
+      reviewProjectId !== projectId ||
+      contentId !== content.id ||
+      revisionsStatus === "idle" ||
+      (revisionsStatus === "succeeded" && loadedThroughRevision < content.currentRevision)
+    ) {
       void dispatch(loadContentRevisions({ projectId, contentId: content.id }));
     }
-  }, [content, contentId, dispatch, projectId, reviewProjectId, revisionsStatus]);
+  }, [content, contentId, dispatch, loadedThroughRevision, projectId, reviewProjectId, revisionsStatus]);
 
   function handleRestore(): void {
     if (!content || !selectedRevision || selectedRevision.revisionNumber === content.currentRevision || restorePending) {
@@ -235,9 +267,17 @@ export function ReviewDrawer({ projectId, content, onContentSaved }: ReviewDrawe
       .catch(() => undefined);
   }
 
+  function handleRetryRevisions(): void {
+    if (!content || revisionsLoading) return;
+    void dispatch(loadContentRevisions({ projectId, contentId: content.id }));
+  }
+
   const restoreDisabled =
     !content || !selectedRevision || selectedRevision.revisionNumber === content.currentRevision || restorePending;
-  const diff = content && selectedRevision ? diffLines(content.bodyMarkdown, selectedRevision.bodyMarkdown) : [];
+  const diff = useMemo(
+    () => (content && selectedRevision ? diffLines(content.bodyMarkdown, selectedRevision.bodyMarkdown) : []),
+    [content, selectedRevision],
+  );
 
   return (
     <aside className="flex h-full flex-col gap-4" aria-label="Review">
@@ -296,14 +336,28 @@ export function ReviewDrawer({ projectId, content, onContentSaved }: ReviewDrawe
                 </div>
               ) : null}
 
-              {visibleRestoreError ? (
-                <p
+              {visibleRevisionsError || visibleRestoreError ? (
+                <div
                   role="alert"
-                  className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+                  className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
                 >
-                  <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-                  {visibleRestoreError}
-                </p>
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+                    <span>{visibleRestoreError ?? visibleRevisionsError}</span>
+                  </div>
+                  {visibleRevisionsError ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                      disabled={revisionsLoading}
+                      onClick={handleRetryRevisions}
+                    >
+                      Retry
+                    </Button>
+                  ) : null}
+                </div>
               ) : null}
 
               {!revisionsLoading && !hasRevisions ? (

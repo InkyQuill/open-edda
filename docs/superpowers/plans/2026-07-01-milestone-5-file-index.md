@@ -43,7 +43,7 @@ This phase still does not replace the web editor's database-backed content. It c
 
 ## Task 3: Add File Index Service
 
-- Add `fileproject.Indexer` or `projectfile` service that:
+- Add `fileproject.RebuildIndex` service that:
   - scans a root,
   - assigns stable IDs,
   - upserts file index rows for one project ID,
@@ -51,10 +51,10 @@ This phase still does not replace the web editor's database-backed content. It c
   - returns counts by kind and warnings.
 - Use explicit SQL in this package rather than regenerating all existing sqlc output for the first slice.
 
-## Task 4: Extend CLI Status
+## Task 4: Extend CLI Status And ID Sync
 
-- `edda status [path]` should report whether `.edda/ids.json` exists.
-- Add `edda status --write-ids [path]` to create/update IDs without writing SQLite.
+- `edda status [path]` should inspect and report whether `.edda/ids.json` exists without writing it.
+- Add `edda ids sync [path]` as the only CLI verb in this phase that creates or updates IDs without writing SQLite.
 - Do not add sync/checkpoint behavior yet.
 
 ## Task 5: Tests And Verification
@@ -63,7 +63,7 @@ This phase still does not replace the web editor's database-backed content. It c
   - IDs are stable across repeated scans.
   - Deleted files are removed from `ids.json`.
   - SQLite index upsert mirrors current files and removes disappeared files.
-  - CLI `status --write-ids` creates `.edda/ids.json`.
+  - CLI `ids sync` creates `.edda/ids.json`; `status` remains read-only.
 - Run:
   - `mise run test`
   - `mise exec -- bun run test`

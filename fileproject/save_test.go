@@ -53,6 +53,26 @@ func TestDraftRejectsPathTraversalFileID(t *testing.T) {
 	}
 }
 
+func TestReadDraftRejectsBodyHashMismatch(t *testing.T) {
+	root := t.TempDir()
+	if _, err := WriteDraft(root, WriteDraftInput{
+		FileID:       "story-1",
+		BasePath:     "story/chapter-01.md",
+		BaseSHA256:   "base-hash",
+		BodyMarkdown: "# Draft\n\nOriginal text.\n",
+	}); err != nil {
+		t.Fatalf("WriteDraft error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".edda", "drafts", "story-1.md"), []byte("# Draft\n\nTampered text.\n"), 0o644); err != nil {
+		t.Fatalf("tamper draft body: %v", err)
+	}
+
+	_, err := ReadDraft(root, "story-1")
+	if err == nil || !strings.Contains(err.Error(), "draft body hash") {
+		t.Fatalf("ReadDraft tampered body error = %v", err)
+	}
+}
+
 func TestSaveCanonicalFileWritesResolvedStableFile(t *testing.T) {
 	root := copyFileProjectFixture(t, filepath.Join("testdata", "partial"))
 	mustWriteIDMap(t, root, map[string]string{"story/chapter-01.md": "story-1"})
@@ -102,6 +122,29 @@ func TestSaveCanonicalFileRejectsStaleHash(t *testing.T) {
 	}
 }
 
+func TestSaveCanonicalFilePreservesExistingPermissions(t *testing.T) {
+	root := copyFileProjectFixture(t, filepath.Join("testdata", "partial"))
+	path := filepath.Join(root, "story", "chapter-01.md")
+	if err := os.Chmod(path, 0o640); err != nil {
+		t.Fatalf("chmod canonical file: %v", err)
+	}
+	mustWriteIDMap(t, root, map[string]string{"story/chapter-01.md": "story-1"})
+
+	if _, err := SaveCanonicalFile(root, SaveCanonicalInput{
+		FileID:       "story-1",
+		BodyMarkdown: "# Chapter 1\n\nSaved text.\n",
+	}); err != nil {
+		t.Fatalf("SaveCanonicalFile error = %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat saved file: %v", err)
+	}
+	if info.Mode().Perm() != 0o640 {
+		t.Fatalf("saved file mode = %v, want 0640", info.Mode().Perm())
+	}
+}
+
 func TestPromoteDraftSavesAndDeletesDraft(t *testing.T) {
 	root := copyFileProjectFixture(t, filepath.Join("testdata", "partial"))
 	mustWriteIDMap(t, root, map[string]string{"story/chapter-01.md": "story-1"})
@@ -124,6 +167,35 @@ func TestPromoteDraftSavesAndDeletesDraft(t *testing.T) {
 	}
 	if _, err := ReadDraft(root, "story-1"); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("ReadDraft after promote error = %v, want fs.ErrNotExist", err)
+	}
+}
+
+func TestPromoteDraftReturnsSavedFileWhenCleanupFails(t *testing.T) {
+	root := copyFileProjectFixture(t, filepath.Join("testdata", "partial"))
+	mustWriteIDMap(t, root, map[string]string{"story/chapter-01.md": "story-1"})
+	before := mustLayoutFile(t, root, "story/chapter-01.md")
+	if _, err := WriteDraft(root, WriteDraftInput{
+		FileID:       "story-1",
+		BasePath:     before.Path,
+		BaseSHA256:   before.SHA256,
+		BodyMarkdown: "# Chapter 1\n\nPromoted draft.\n",
+	}); err != nil {
+		t.Fatalf("WriteDraft error = %v", err)
+	}
+	draftDir := filepath.Join(root, ".edda", "drafts")
+	if err := os.Chmod(draftDir, 0o500); err != nil {
+		t.Fatalf("chmod drafts dir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chmod(draftDir, 0o700)
+	})
+
+	saved, err := PromoteDraft(root, SaveDraftInput{FileID: "story-1"})
+	if err == nil {
+		t.Fatalf("PromoteDraft succeeded")
+	}
+	if saved.ID != "story-1" || saved.SHA256 != HashMarkdown("# Chapter 1\n\nPromoted draft.\n") {
+		t.Fatalf("saved result = %#v, err = %v", saved, err)
 	}
 }
 

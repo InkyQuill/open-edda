@@ -21,7 +21,7 @@ In scope for the first vertical slice and file-first migration:
 - Configure OpenAI-compatible providers and model variants.
 - Run project-aware chat and the first three agent actions: Continuation, Rewrite, and Read and Check.
 - Preserve meaningful changes through explicit saves, project-wide checkpoints, diffs, Activity Trails, and Prompt Records.
-- Support a small local CLI for folder checkout/open, status, checkpoint save, send/take sync, diff, history, and restore.
+- Support a small local CLI for `edda get`, `edda save`, status, `edda send`, `edda take`, diff, history, and restore.
 - Install/import Skills as instructions, routing metadata, templates, and data files.
 
 Out of scope for the first version:

@@ -114,7 +114,44 @@ describe("reviewSlice", () => {
     expect(loaded.revisionsRequestId).toBeNull();
     expect(loaded.projectId).toBe("project-1");
     expect(loaded.contentId).toBe("content-1");
+    expect(loaded.revisionsError).toBeNull();
     expect(loaded.restoreError).toBeNull();
+  });
+
+  it("stores revision load failures separately from restore failures", () => {
+    const loading = reviewReducer(
+      initialReviewState,
+      loadContentRevisions.pending("request-1", { projectId: "project-1", contentId: "content-1" }),
+    );
+
+    const failed = reviewReducer(
+      loading,
+      loadContentRevisions.rejected(new Error("list revisions failed"), "request-1", {
+        projectId: "project-1",
+        contentId: "content-1",
+      }),
+    );
+
+    expect(failed.revisionsStatus).toBe("failed");
+    expect(failed.revisionsError).toBe("list revisions failed");
+    expect(failed.restoreError).toBeNull();
+  });
+
+  it("clears stale restore errors when revisions reload", () => {
+    const loading = reviewReducer(
+      {
+        ...initialReviewState,
+        projectId: "project-1",
+        contentId: "content-1",
+        restoreStatus: "failed",
+        restoreError: "expected revision conflict",
+        restoreErrorCode: "HTTP_409",
+      },
+      loadContentRevisions.pending("request-1", { projectId: "project-1", contentId: "content-1" }),
+    );
+
+    expect(loading.restoreError).toBeNull();
+    expect(loading.restoreErrorCode).toBeNull();
   });
 
   it("ignores stale activity loads", () => {
@@ -413,6 +450,7 @@ describe("reviewSlice", () => {
     expect(restored.restoreRequestId).toBeNull();
     expect(restored.restoreError).toBeNull();
     expect(restored.selectedRevisionNumber).toBe(restoredContent.currentRevision);
+    expect(restored.revisions).toEqual([revision]);
   });
 
   it("tracks restore conflicts for the active content item", () => {
@@ -443,6 +481,36 @@ describe("reviewSlice", () => {
     expect(failed.restoreStatus).toBe("failed");
     expect(failed.restoreRequestId).toBeNull();
     expect(failed.restoreError).toBe("restore revision failed: 409");
+    expect(failed.restoreErrorCode).toBeNull();
+  });
+
+  it("tracks structured restore conflict codes", () => {
+    const loading = reviewReducer(
+      {
+        ...initialReviewState,
+        projectId: "project-1",
+        contentId: "content-1",
+      },
+      restoreContentRevision.pending("request-1", {
+        projectId: "project-1",
+        contentId: "content-1",
+        revisionNumber: 1,
+        expectedRevision: 2,
+      }),
+    );
+
+    const failed = reviewReducer(
+      loading,
+      restoreContentRevision.rejected(Object.assign(new Error("expected revision conflict"), { code: "HTTP_409" }), "request-1", {
+        projectId: "project-1",
+        contentId: "content-1",
+        revisionNumber: 1,
+        expectedRevision: 2,
+      }),
+    );
+
+    expect(failed.restoreError).toBe("expected revision conflict");
+    expect(failed.restoreErrorCode).toBe("HTTP_409");
   });
 
   it("resets project-scoped review state", () => {

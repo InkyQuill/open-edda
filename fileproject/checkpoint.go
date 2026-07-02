@@ -2,14 +2,17 @@ package fileproject
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -50,16 +53,17 @@ type CheckpointDiffEntry struct {
 	ToSHA256   string               `json:"toSha256,omitempty"`
 }
 
+type checkpointRestoreFile struct {
+	manifest CheckpointFile
+	source   string
+	target   string
+}
+
 func CreateCheckpoint(root string, input CreateCheckpointInput) (Checkpoint, error) {
-	layout, err := Scan(root)
+	unlock := lockProjectSave(root)
+	defer unlock()
+	_, stableFiles, err := scanAndPersistStableFiles(root)
 	if err != nil {
-		return Checkpoint{}, err
-	}
-	idMap, stableFiles, err := AssignStableIDs(root, layout)
-	if err != nil {
-		return Checkpoint{}, err
-	}
-	if err := WriteIDMap(root, idMap); err != nil {
 		return Checkpoint{}, err
 	}
 
@@ -74,9 +78,23 @@ func CreateCheckpoint(root string, input CreateCheckpointInput) (Checkpoint, err
 		CreatedAt:     time.Now().UTC(),
 		Files:         make([]CheckpointFile, 0, len(stableFiles)),
 	}
+	checkpointsDir := filepath.Join(root, ".edda", "checkpoints")
+	if err := os.MkdirAll(checkpointsDir, 0o755); err != nil {
+		return Checkpoint{}, fmt.Errorf("create checkpoints directory: %w", err)
+	}
 	baseDir := checkpointDir(root, id)
+	tmpDir, err := os.MkdirTemp(checkpointsDir, "."+id+".tmp-*")
+	if err != nil {
+		return Checkpoint{}, fmt.Errorf("create temporary checkpoint directory: %w", err)
+	}
+	removeTmp := true
+	defer func() {
+		if removeTmp {
+			_ = os.RemoveAll(tmpDir)
+		}
+	}()
 	for _, file := range stableFiles {
-		if err := copyProjectFile(root, file.Path, filepath.Join(baseDir, "files", filepath.FromSlash(file.Path))); err != nil {
+		if err := copyProjectFile(root, file.Path, filepath.Join(tmpDir, "files", filepath.FromSlash(file.Path))); err != nil {
 			return Checkpoint{}, err
 		}
 		checkpoint.Files = append(checkpoint.Files, CheckpointFile{
@@ -88,10 +106,152 @@ func CreateCheckpoint(root string, input CreateCheckpointInput) (Checkpoint, err
 			Size:   file.Size,
 		})
 	}
-	if err := writeCheckpointManifest(root, checkpoint); err != nil {
+	if err := writeCheckpointManifestAt(tmpDir, checkpoint); err != nil {
 		return Checkpoint{}, err
 	}
+	if err := os.Rename(tmpDir, baseDir); err != nil {
+		return Checkpoint{}, fmt.Errorf("publish checkpoint: %w", err)
+	}
+	removeTmp = false
 	return checkpoint, nil
+}
+
+func validateCheckpointPath(rel string) error {
+	if rel == "" {
+		return fmt.Errorf("checkpoint file path is required")
+	}
+	if filepath.IsAbs(rel) {
+		return fmt.Errorf("checkpoint file path %q must be relative", rel)
+	}
+	if rel != filepath.ToSlash(filepath.Clean(rel)) || rel == "." {
+		return fmt.Errorf("checkpoint file path %q is not clean", rel)
+	}
+	for _, part := range strings.Split(rel, "/") {
+		if part == ".." {
+			return fmt.Errorf("checkpoint file path %q escapes project root", rel)
+		}
+	}
+	return nil
+}
+
+func verifyCheckpointSnapshots(root string, checkpoint Checkpoint) error {
+	_, err := checkpointRestoreFiles(root, checkpoint)
+	return err
+}
+
+func checkpointRestoreFiles(root string, checkpoint Checkpoint) ([]checkpointRestoreFile, error) {
+	files := make([]checkpointRestoreFile, 0, len(checkpoint.Files))
+	for _, file := range checkpoint.Files {
+		if err := validateCheckpointPath(file.Path); err != nil {
+			return nil, err
+		}
+		source := filepath.Join(checkpointDir(root, checkpoint.ID), "files", filepath.FromSlash(file.Path))
+		sum, size, err := hashFile(source)
+		if err != nil {
+			return nil, err
+		}
+		if sum != file.SHA256 {
+			return nil, fmt.Errorf("checkpoint snapshot %s hash mismatch", file.Path)
+		}
+		if size != file.Size {
+			return nil, fmt.Errorf("checkpoint snapshot %s size mismatch", file.Path)
+		}
+		files = append(files, checkpointRestoreFile{
+			manifest: file,
+			source:   source,
+			target:   filepath.Join(root, filepath.FromSlash(file.Path)),
+		})
+	}
+	return files, nil
+}
+
+func hashFile(path string) (string, int64, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", 0, fs.ErrNotExist
+		}
+		return "", 0, fmt.Errorf("open checkpoint snapshot: %w", err)
+	}
+	defer file.Close()
+	hash := sha256.New()
+	size, err := io.Copy(hash, file)
+	if err != nil {
+		return "", 0, fmt.Errorf("hash checkpoint snapshot: %w", err)
+	}
+	return hex.EncodeToString(hash.Sum(nil)), size, nil
+}
+
+func writeCheckpointManifestAt(dir string, checkpoint Checkpoint) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create checkpoint directory: %w", err)
+	}
+	data, err := json.MarshalIndent(checkpoint, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal checkpoint manifest: %w", err)
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(filepath.Join(dir, "manifest.json"), data, 0o644); err != nil {
+		return fmt.Errorf("write checkpoint manifest: %w", err)
+	}
+	return nil
+}
+
+func writeCheckpointManifest(root string, checkpoint Checkpoint) error {
+	return writeCheckpointManifestAt(checkpointDir(root, checkpoint.ID), checkpoint)
+}
+
+func newCheckpointID(now time.Time) (string, error) {
+	var data [4]byte
+	if _, err := rand.Read(data[:]); err != nil {
+		return "", fmt.Errorf("generate checkpoint id: %w", err)
+	}
+	return "checkpoint-" + now.Format("20060102T150405Z") + "-" + hex.EncodeToString(data[:]), nil
+}
+
+func checkpointDir(root string, id string) string {
+	return filepath.Join(root, ".edda", "checkpoints", id)
+}
+
+func copyProjectFile(root string, rel string, target string) error {
+	source := filepath.Join(root, filepath.FromSlash(rel))
+	return copyFile(source, target)
+}
+
+func copyFile(source string, target string) error {
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return fmt.Errorf("create target directory: %w", err)
+	}
+	in, err := os.Open(source)
+	if err != nil {
+		return fmt.Errorf("open source file: %w", err)
+	}
+	defer in.Close()
+	mode := fs.FileMode(0o644)
+	if info, err := in.Stat(); err == nil {
+		mode = info.Mode().Perm()
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(target), ".edda-copy-*")
+	if err != nil {
+		return fmt.Errorf("create target file: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("set target file permissions: %w", err)
+	}
+	if _, err := io.Copy(tmp, in); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("copy file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close target file: %w", err)
+	}
+	if err := os.Rename(tmpName, target); err != nil {
+		return fmt.Errorf("replace target file: %w", err)
+	}
+	return nil
 }
 
 func ListCheckpoints(root string) ([]Checkpoint, error) {
@@ -109,6 +269,9 @@ func ListCheckpoints(root string) ([]Checkpoint, error) {
 		}
 		checkpoint, err := ReadCheckpoint(root, entry.Name())
 		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
 			return nil, err
 		}
 		checkpoints = append(checkpoints, checkpoint)
@@ -140,6 +303,14 @@ func ReadCheckpoint(root string, id string) (Checkpoint, error) {
 	if checkpoint.ID != id {
 		return Checkpoint{}, fmt.Errorf("checkpoint manifest id %q does not match %q", checkpoint.ID, id)
 	}
+	if checkpoint.SchemaVersion != CurrentSchemaVersion {
+		return Checkpoint{}, fmt.Errorf("unsupported checkpoint schema version %d", checkpoint.SchemaVersion)
+	}
+	for _, file := range checkpoint.Files {
+		if err := validateCheckpointPath(file.Path); err != nil {
+			return Checkpoint{}, err
+		}
+	}
 	return checkpoint, nil
 }
 
@@ -170,14 +341,20 @@ func RestoreCheckpoint(root string, id string) (Checkpoint, error) {
 	if err != nil {
 		return Checkpoint{}, err
 	}
+	restoreFiles, err := checkpointRestoreFiles(root, checkpoint)
+	if err != nil {
+		return Checkpoint{}, err
+	}
 
+	unlock := lockProjectSave(root)
+	defer unlock()
 	layout, err := Scan(root)
 	if err != nil {
 		return Checkpoint{}, err
 	}
 	restoredPaths := map[string]string{}
-	for _, file := range checkpoint.Files {
-		restoredPaths[file.Path] = file.ID
+	for _, file := range restoreFiles {
+		restoredPaths[file.manifest.Path] = file.manifest.ID
 	}
 	for _, file := range layout.Files {
 		if !isStableIDFile(file) {
@@ -190,81 +367,15 @@ func RestoreCheckpoint(root string, id string) (Checkpoint, error) {
 			return Checkpoint{}, fmt.Errorf("remove file not present in checkpoint: %w", err)
 		}
 	}
-	for _, file := range checkpoint.Files {
-		source := filepath.Join(checkpointDir(root, id), "files", filepath.FromSlash(file.Path))
-		target := filepath.Join(root, filepath.FromSlash(file.Path))
-		if err := copyFile(source, target); err != nil {
+	for _, file := range restoreFiles {
+		if err := copyFile(file.source, file.target); err != nil {
 			return Checkpoint{}, err
 		}
 	}
 	if err := WriteIDMap(root, IDMap{SchemaVersion: CurrentSchemaVersion, Items: restoredPaths}); err != nil {
 		return Checkpoint{}, err
 	}
-	layout, err = Scan(root)
-	if err != nil {
-		return Checkpoint{}, err
-	}
-	idMap, _, err := AssignStableIDs(root, layout)
-	if err != nil {
-		return Checkpoint{}, err
-	}
-	if err := WriteIDMap(root, idMap); err != nil {
-		return Checkpoint{}, err
-	}
 	return checkpoint, nil
-}
-
-func writeCheckpointManifest(root string, checkpoint Checkpoint) error {
-	dir := checkpointDir(root, checkpoint.ID)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create checkpoint directory: %w", err)
-	}
-	data, err := json.MarshalIndent(checkpoint, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal checkpoint manifest: %w", err)
-	}
-	data = append(data, '\n')
-	if err := os.WriteFile(filepath.Join(dir, "manifest.json"), data, 0o644); err != nil {
-		return fmt.Errorf("write checkpoint manifest: %w", err)
-	}
-	return nil
-}
-
-func newCheckpointID(now time.Time) (string, error) {
-	var data [4]byte
-	if _, err := rand.Read(data[:]); err != nil {
-		return "", fmt.Errorf("generate checkpoint id: %w", err)
-	}
-	return "checkpoint-" + now.Format("20060102T150405Z") + "-" + hex.EncodeToString(data[:]), nil
-}
-
-func checkpointDir(root string, id string) string {
-	return filepath.Join(root, ".edda", "checkpoints", id)
-}
-
-func copyProjectFile(root string, rel string, target string) error {
-	source := filepath.Join(root, filepath.FromSlash(rel))
-	return copyFile(source, target)
-}
-
-func copyFile(source string, target string) error {
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return fmt.Errorf("create target directory: %w", err)
-	}
-	in, err := os.Open(source)
-	if err != nil {
-		return fmt.Errorf("open source file: %w", err)
-	}
-	defer in.Close()
-	out, err := os.Create(target)
-	if err != nil {
-		return fmt.Errorf("create target file: %w", err)
-	}
-	defer out.Close()
-	if _, err := io.Copy(out, in); err != nil {
-		return fmt.Errorf("copy file: %w", err)
-	}
-	return nil
 }
 
 func checkpointFileMap(files []CheckpointFile) map[string]CheckpointFile {
@@ -276,15 +387,8 @@ func checkpointFileMap(files []CheckpointFile) map[string]CheckpointFile {
 }
 
 func workingTreeCheckpointFiles(root string) (map[string]CheckpointFile, error) {
-	layout, err := Scan(root)
+	_, stableFiles, err := SyncStableIDs(root)
 	if err != nil {
-		return nil, err
-	}
-	idMap, stableFiles, err := AssignStableIDs(root, layout)
-	if err != nil {
-		return nil, err
-	}
-	if err := WriteIDMap(root, idMap); err != nil {
 		return nil, err
 	}
 	files := make([]CheckpointFile, 0, len(stableFiles))

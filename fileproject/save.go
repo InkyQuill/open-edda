@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sync"
 	"time"
 )
 
@@ -19,12 +20,14 @@ var (
 )
 
 var fileIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+var saveLocks sync.Map
 
 type DraftMetadata struct {
 	SchemaVersion int       `json:"schemaVersion"`
 	FileID        string    `json:"fileId"`
 	BasePath      string    `json:"basePath"`
 	BaseSHA256    string    `json:"baseSha256"`
+	BodySHA256    string    `json:"bodySha256"`
 	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
@@ -68,6 +71,7 @@ func WriteDraft(root string, input WriteDraftInput) (Draft, error) {
 			FileID:        input.FileID,
 			BasePath:      filepath.ToSlash(input.BasePath),
 			BaseSHA256:    input.BaseSHA256,
+			BodySHA256:    HashMarkdown(input.BodyMarkdown),
 			UpdatedAt:     time.Now().UTC(),
 		},
 		BodyMarkdown: input.BodyMarkdown,
@@ -77,16 +81,28 @@ func WriteDraft(root string, input WriteDraftInput) (Draft, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return Draft{}, fmt.Errorf("create draft directory: %w", err)
 	}
-	if err := os.WriteFile(draftBodyPath(root, input.FileID), []byte(input.BodyMarkdown), 0o644); err != nil {
-		return Draft{}, fmt.Errorf("write draft body: %w", err)
-	}
 	data, err := json.MarshalIndent(draft.Metadata, "", "  ")
 	if err != nil {
 		return Draft{}, fmt.Errorf("marshal draft metadata: %w", err)
 	}
 	data = append(data, '\n')
-	if err := os.WriteFile(draftMetadataPath(root, input.FileID), data, 0o644); err != nil {
+	bodyPath := draftBodyPath(root, input.FileID)
+	metadataPath := draftMetadataPath(root, input.FileID)
+	bodyTmp, err := writeTempFile(filepath.Dir(bodyPath), "draft-body-*.md", []byte(input.BodyMarkdown), 0o644)
+	if err != nil {
+		return Draft{}, fmt.Errorf("write temporary draft body: %w", err)
+	}
+	defer os.Remove(bodyTmp)
+	metadataTmp, err := writeTempFile(filepath.Dir(metadataPath), "draft-meta-*.json", data, 0o644)
+	if err != nil {
+		return Draft{}, fmt.Errorf("write temporary draft metadata: %w", err)
+	}
+	defer os.Remove(metadataTmp)
+	if err := os.Rename(metadataTmp, metadataPath); err != nil {
 		return Draft{}, fmt.Errorf("write draft metadata: %w", err)
+	}
+	if err := os.Rename(bodyTmp, bodyPath); err != nil {
+		return Draft{}, fmt.Errorf("write draft body: %w", err)
 	}
 	return draft, nil
 }
@@ -116,6 +132,9 @@ func ReadDraft(root string, fileID string) (Draft, error) {
 	if metadata.FileID != fileID {
 		return Draft{}, fmt.Errorf("draft metadata file id %q does not match %q", metadata.FileID, fileID)
 	}
+	if metadata.BodySHA256 != "" && metadata.BodySHA256 != HashMarkdown(string(body)) {
+		return Draft{}, fmt.Errorf("draft body hash does not match metadata")
+	}
 	return Draft{Metadata: metadata, BodyMarkdown: string(body)}, nil
 }
 
@@ -132,6 +151,9 @@ func DeleteDraft(root string, fileID string) error {
 }
 
 func SaveCanonicalFile(root string, input SaveCanonicalInput) (SavedFile, error) {
+	unlock := lockProjectSave(root)
+	defer unlock()
+
 	if err := validateFileID(input.FileID); err != nil {
 		return SavedFile{}, err
 	}
@@ -147,6 +169,12 @@ func SaveCanonicalFile(root string, input SaveCanonicalInput) (SavedFile, error)
 	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 		return SavedFile{}, fmt.Errorf("create target directory: %w", err)
 	}
+	mode := fs.FileMode(0o644)
+	if info, err := os.Stat(targetPath); err == nil {
+		mode = info.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		return SavedFile{}, fmt.Errorf("stat saved file: %w", err)
+	}
 	tmp, err := os.CreateTemp(filepath.Dir(targetPath), "."+filepath.Base(targetPath)+".tmp-*")
 	if err != nil {
 		return SavedFile{}, fmt.Errorf("create temporary file: %w", err)
@@ -158,6 +186,10 @@ func SaveCanonicalFile(root string, input SaveCanonicalInput) (SavedFile, error)
 			_ = os.Remove(tmpPath)
 		}
 	}()
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		return SavedFile{}, fmt.Errorf("set temporary file permissions: %w", err)
+	}
 	if _, err := tmp.WriteString(input.BodyMarkdown); err != nil {
 		_ = tmp.Close()
 		return SavedFile{}, fmt.Errorf("write temporary file: %w", err)
@@ -165,33 +197,37 @@ func SaveCanonicalFile(root string, input SaveCanonicalInput) (SavedFile, error)
 	if err := tmp.Close(); err != nil {
 		return SavedFile{}, fmt.Errorf("close temporary file: %w", err)
 	}
+	if input.ExpectedSHA256 != "" {
+		current, err := os.ReadFile(targetPath)
+		if err != nil {
+			return SavedFile{}, fmt.Errorf("read saved file before replace: %w", err)
+		}
+		if HashMarkdown(string(current)) != input.ExpectedSHA256 {
+			return SavedFile{}, ErrFileConflict
+		}
+	}
 	if err := os.Rename(tmpPath, targetPath); err != nil {
 		return SavedFile{}, fmt.Errorf("replace saved file: %w", err)
 	}
 	removeTmp = false
 
-	layout, err := Scan(root)
+	return SavedFile{
+		ID:     input.FileID,
+		Path:   stable.Path,
+		SHA256: HashMarkdown(input.BodyMarkdown),
+		Size:   int64(len(input.BodyMarkdown)),
+	}, nil
+}
+
+func lockProjectSave(root string) func() {
+	key, err := filepath.Abs(root)
 	if err != nil {
-		return SavedFile{}, err
+		key = root
 	}
-	idMap, files, err := AssignStableIDs(root, layout)
-	if err != nil {
-		return SavedFile{}, err
-	}
-	if err := WriteIDMap(root, idMap); err != nil {
-		return SavedFile{}, err
-	}
-	for _, file := range files {
-		if file.ID == input.FileID {
-			return SavedFile{
-				ID:     file.ID,
-				Path:   file.Path,
-				SHA256: file.SHA256,
-				Size:   file.Size,
-			}, nil
-		}
-	}
-	return SavedFile{}, fmt.Errorf("saved file %q disappeared from project layout", input.FileID)
+	value, _ := saveLocks.LoadOrStore(key, &sync.Mutex{})
+	mutex := value.(*sync.Mutex)
+	mutex.Lock()
+	return mutex.Unlock
 }
 
 func PromoteDraft(root string, input SaveDraftInput) (SavedFile, error) {
@@ -212,12 +248,16 @@ func PromoteDraft(root string, input SaveDraftInput) (SavedFile, error) {
 		return SavedFile{}, err
 	}
 	if err := DeleteDraft(root, input.FileID); err != nil {
-		return SavedFile{}, err
+		return saved, fmt.Errorf("promote saved canonical file but failed to delete draft: %w", err)
 	}
 	return saved, nil
 }
 
 func ResolveStableFile(root string, fileID string) (StableFile, error) {
+	return resolveStableFile(root, fileID)
+}
+
+func resolveStableFile(root string, fileID string) (StableFile, error) {
 	if err := validateFileID(fileID); err != nil {
 		return StableFile{}, err
 	}
@@ -225,11 +265,8 @@ func ResolveStableFile(root string, fileID string) (StableFile, error) {
 	if err != nil {
 		return StableFile{}, err
 	}
-	idMap, files, err := AssignStableIDs(root, layout)
+	_, files, err := AssignStableIDs(root, layout)
 	if err != nil {
-		return StableFile{}, err
-	}
-	if err := WriteIDMap(root, idMap); err != nil {
 		return StableFile{}, err
 	}
 	for _, file := range files {
@@ -250,6 +287,37 @@ func validateFileID(fileID string) error {
 		return ErrInvalidFileID
 	}
 	return nil
+}
+
+func writeTempFile(dir string, pattern string, data []byte, mode fs.FileMode) (string, error) {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	tmp, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return "", err
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return "", err
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return "", err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return "", err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", err
+	}
+	return tmpPath, nil
 }
 
 func draftBodyPath(root string, fileID string) string {

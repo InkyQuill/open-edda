@@ -122,7 +122,7 @@ docs/        Roadmap, specs, implementation plans, skill library docs
 Open Edda supports:
 
 - Authenticated local author workflow.
-- Story projects with chapters, story bible entries, writing briefs, project notes, attached notes, entry sections, relations, and current legacy per-item revisions.
+- Story projects with chapters, story bible entries, writing briefs, project notes, attached notes, entry sections, relations, and checkpoint-based history; per-item revisions remain as legacy/internal migration data.
 - Edda-layout Markdown import/export, moving toward file-first project folders and `.edda/` metadata. Elysium is treated as an older conversion source, not the target structure.
 - OpenAI-compatible provider/model configuration.
 - Agent sessions for chat, continuation, rewrite, and read/check flows.

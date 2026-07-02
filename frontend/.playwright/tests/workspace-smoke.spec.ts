@@ -56,6 +56,9 @@ async function mockOpenEddaApi(page: Page): Promise<void> {
       body = [];
     } else if (path === "/api/projects/project-1/content/content-1/revisions") {
       body = [revision];
+    } else {
+      await route.fulfill({ status: 404, body: `unmocked route: ${path}` });
+      return;
     }
 
     await route.fulfill({

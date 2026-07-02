@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add the local sync workflow skeleton around `.edda/state.local.json`: server connection metadata, device-local state, pending upload records, and retry-oriented `get`, `save`, `send`, and `take` commands.
+Add the local sync workflow skeleton around `.edda/state.local.json`: server connection metadata, device-local state, a queued pending upload ledger, and retry-oriented `get`, `save`, `send`, and `take` commands.
 
 ## Context
 
@@ -16,21 +16,22 @@ Add the local sync workflow skeleton around `.edda/state.local.json`: server con
 1. Add sync state primitives in `fileproject`.
    - Read/write `.edda/state.local.json`.
    - Generate a stable local device ID.
-   - Track `lastSentCheckpointId`, `lastTakeAt`, and a single pending upload with checkpoint ID, attempts, and last error.
+   - Track `lastSentCheckpointId`, `lastTakeAt`, and pending uploads keyed by checkpoint ID with attempts and last error per item.
 
 2. Add CLI sync commands.
    - `edda get URL [path] --title "Title"` initializes a local Edda folder connected to a server URL.
-   - `edda save [path] "Note"` creates a named checkpoint and records it as pending upload.
-   - `edda send [path]` retries/completes pending upload state when a server URL exists.
+   - `edda save [path] "Note"` creates a named checkpoint and queues it for upload.
+   - `edda checkpoint [path] --message "Note"` creates a local checkpoint without changing the upload queue.
+   - `edda send [path]` retries/completes the next queued pending checkpoint when a server URL exists.
    - `edda take [path]` records a server take attempt in local sync state.
 
 3. Preserve file-save compatibility.
-   - Keep `edda save [path] --id ...` for Phase 3 canonical file writes.
-   - Route `edda save [path] "Note"` to checkpoint-plus-pending-upload behavior only when no file-save flags are present.
+   - Keep `edda save [path] --id ...` limited to Phase 3 canonical file writes.
+   - Keep checkpoint creation on the checkpoint flow so file-save behavior remains unambiguous.
 
 4. Add tests.
-   - Sync state round-trips, initializes missing state, and records pending upload retry attempts.
-   - CLI `get/save/send/take` exercises the local workflow.
+   - Sync state round-trips, initializes missing state, preserves multiple pending checkpoints, and records pending upload retry attempts.
+   - CLI `get/save/send/take` exercises the queued upload workflow; `checkpoint` remains a local snapshot command.
    - Commands fail clearly when server metadata is missing.
 
 5. Update roadmap and verify.

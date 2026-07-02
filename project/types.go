@@ -149,6 +149,7 @@ type RestoreRevisionInput struct {
 	RevisionNumber   int64
 	ExpectedRevision int64
 	Reason           string
+	CreatedBy        string
 }
 
 type StructuredWriteInput struct {

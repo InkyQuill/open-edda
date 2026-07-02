@@ -3,6 +3,7 @@ package project
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -54,6 +55,10 @@ type updateContentRequest struct {
 type restoreRevisionRequest struct {
 	ExpectedRevision int64  `json:"expectedRevision"`
 	Reason           string `json:"reason"`
+}
+
+type restoreRevisionService interface {
+	RestoreRevision(context.Context, RestoreRevisionInput) (ContentItem, error)
 }
 
 // RegisterRoutes mounts project core routes on an /api router.
@@ -265,6 +270,10 @@ func (h httpHandler) listRevisions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h httpHandler) restoreRevision(w http.ResponseWriter, r *http.Request) {
+	restoreRevisionHTTP(w, r, h.service)
+}
+
+func restoreRevisionHTTP(w http.ResponseWriter, r *http.Request, service restoreRevisionService) {
 	revisionNumber, err := strconv.ParseInt(chi.URLParam(r, "revisionNumber"), 10, 64)
 	if err != nil || revisionNumber < 1 {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid revision number"})
@@ -277,12 +286,13 @@ func (h httpHandler) restoreRevision(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := h.service.RestoreRevision(r.Context(), RestoreRevisionInput{
+	item, err := service.RestoreRevision(r.Context(), RestoreRevisionInput{
 		ProjectID:        chi.URLParam(r, "projectID"),
 		ContentID:        chi.URLParam(r, "contentID"),
 		RevisionNumber:   revisionNumber,
 		ExpectedRevision: input.ExpectedRevision,
 		Reason:           input.Reason,
+		CreatedBy:        "author",
 	})
 	if err != nil {
 		writeError(w, err)

@@ -355,12 +355,16 @@ describe("assistantActionsSlice", () => {
 
     const state = assistantActionsReducer(
       pendingState,
-      acceptAssistantCandidate.rejected(new Error("revision conflict"), "request-1", {
-        projectId: "project-1",
-        candidateId: "candidate-1",
-        requestKey: "same-key",
-        requestToken: "token-1",
-      }),
+      acceptAssistantCandidate.rejected(
+        Object.assign(new Error("expected revision conflict"), { code: "HTTP_409" }),
+        "request-1",
+        {
+          projectId: "project-1",
+          candidateId: "candidate-1",
+          requestKey: "same-key",
+          requestToken: "token-1",
+        },
+      ),
     );
 
     expect(state.candidate).toEqual(candidate);
@@ -368,6 +372,28 @@ describe("assistantActionsSlice", () => {
     expect(state.acceptError).toBe(
       "Content changed before this preview was accepted. Review the latest draft, then run the action again.",
     );
+  });
+
+  it("does not rewrite non-conflict HTTP accept failures", () => {
+    const pendingState = {
+      ...initialAssistantActionsState,
+      candidate,
+      requestKey: "same-key",
+      requestToken: "token-1",
+    };
+
+    const state = assistantActionsReducer(
+      pendingState,
+      acceptAssistantCandidate.rejected(Object.assign(new Error("revision service unavailable"), { code: "HTTP_500" }), "request-1", {
+        projectId: "project-1",
+        candidateId: "candidate-1",
+        requestKey: "same-key",
+        requestToken: "token-1",
+      }),
+    );
+
+    expect(state.acceptStatus).toBe("failed");
+    expect(state.acceptError).toBe("revision service unavailable");
   });
 
   it("keeps the candidate and shows generic accept failures", () => {

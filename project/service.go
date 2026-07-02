@@ -477,6 +477,10 @@ func (s *Service) UpdateContent(ctx context.Context, input UpdateContentInput) (
 
 func (s *Service) RestoreRevision(ctx context.Context, input RestoreRevisionInput) (ContentItem, error) {
 	var restored ContentItem
+	createdBy, err := createdBy(input.CreatedBy)
+	if err != nil {
+		return ContentItem{}, err
+	}
 	if err := s.inTx(ctx, func(queries *store.Queries) error {
 		item, err := queries.GetContentItem(ctx, store.GetContentItemParams{
 			ID:        input.ContentID,
@@ -489,25 +493,13 @@ func (s *Service) RestoreRevision(ctx context.Context, input RestoreRevisionInpu
 			return ErrConflict
 		}
 
-		revisions, err := queries.ListRevisions(ctx, store.ListRevisionsParams{
-			ContentItemID: input.ContentID,
-			ProjectID:     input.ProjectID,
+		target, err := queries.GetRevisionByNumber(ctx, store.GetRevisionByNumberParams{
+			ContentItemID:  input.ContentID,
+			ProjectID:      input.ProjectID,
+			RevisionNumber: input.RevisionNumber,
 		})
 		if err != nil {
-			return fmt.Errorf("list revisions: %w", err)
-		}
-
-		var target store.Revision
-		found := false
-		for _, revision := range revisions {
-			if revision.RevisionNumber == input.RevisionNumber {
-				target = revision
-				found = true
-				break
-			}
-		}
-		if !found {
-			return sql.ErrNoRows
+			return fmt.Errorf("get revision: %w", err)
 		}
 
 		nextRevision := input.ExpectedRevision + 1
@@ -528,7 +520,7 @@ func (s *Service) RestoreRevision(ctx context.Context, input RestoreRevisionInpu
 			return ErrConflict
 		}
 
-		reason := emptyDefault(input.Reason, fmt.Sprintf("restore checkpoint %d", input.RevisionNumber))
+		reason := emptyDefault(input.Reason, fmt.Sprintf("restore revision %d", input.RevisionNumber))
 		if err := queries.CreateRevision(ctx, store.CreateRevisionParams{
 			ID:             newID("revision"),
 			ContentItemID:  input.ContentID,
@@ -536,7 +528,7 @@ func (s *Service) RestoreRevision(ctx context.Context, input RestoreRevisionInpu
 			BodyMarkdown:   target.BodyMarkdown,
 			MetadataJson:   target.MetadataJson,
 			Reason:         reason,
-			CreatedBy:      "restore",
+			CreatedBy:      createdBy,
 			CreatedAt:      now,
 			AgentSessionID: sql.NullString{},
 			ActionKind:     "",
@@ -546,17 +538,10 @@ func (s *Service) RestoreRevision(ctx context.Context, input RestoreRevisionInpu
 			return fmt.Errorf("create revision: %w", err)
 		}
 
-		restored = contentItemFromStore(store.ContentItem{
-			ID:              item.ID,
-			ProjectID:       item.ProjectID,
-			Kind:            item.Kind,
-			Title:           item.Title,
-			Slug:            item.Slug,
-			BodyMarkdown:    target.BodyMarkdown,
-			MetadataJson:    target.MetadataJson,
-			SortOrder:       item.SortOrder,
-			CurrentRevision: nextRevision,
-		})
+		item.BodyMarkdown = target.BodyMarkdown
+		item.MetadataJson = target.MetadataJson
+		item.CurrentRevision = nextRevision
+		restored = contentItemFromStore(item)
 		return nil
 	}); err != nil {
 		return ContentItem{}, err

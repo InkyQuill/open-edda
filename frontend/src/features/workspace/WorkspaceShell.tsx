@@ -80,7 +80,7 @@ function mobileSheetTitle(sheet: NonNullable<MobileSheet>): string {
   }
 }
 
-function mobileSheetDescription(sheet: NonNullable<MobileSheet>): string {
+export function mobileSheetDescription(sheet: NonNullable<MobileSheet>): string {
   switch (sheet) {
     case "contents":
       return "Choose or create project content.";

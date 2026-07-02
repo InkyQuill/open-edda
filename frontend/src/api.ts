@@ -1,6 +1,52 @@
 import { getToken } from "./authApi";
 import type { ContentItem, ContentKind, Revision, StoryProject } from "./types";
 
+const maxErrorDetailLength = 300;
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly body: string;
+  readonly code: string;
+
+  constructor(operation: string, status: number, body: string) {
+    const detail = errorDetail(body);
+    super(`${operation} failed: ${status}${detail ? `: ${detail}` : ""}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+    this.code = `HTTP_${status}`;
+  }
+}
+
+function errorDetail(body: string): string {
+  const trimmed = body.trim();
+  if (!trimmed) {
+    return "";
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as { error?: unknown };
+    if (typeof parsed.error === "string" && parsed.error.trim()) {
+      return parsed.error.trim();
+    }
+  } catch {
+    // Non-JSON error bodies are surfaced as plain text.
+  }
+  return trimmed.length > maxErrorDetailLength ? `${trimmed.slice(0, maxErrorDetailLength)}...` : trimmed;
+}
+
+async function responseBody(response: Response): Promise<string> {
+  try {
+    const text = await response.text();
+    return text.trim();
+  } catch {
+    return "";
+  }
+}
+
+export async function apiError(operation: string, response: Response): Promise<ApiError> {
+  return new ApiError(operation, response.status, await responseBody(response));
+}
+
 async function authFetch(path: string, init?: RequestInit): Promise<Response> {
   const token = getToken();
   const headers = new Headers(init?.headers);
@@ -14,7 +60,7 @@ async function authFetch(path: string, init?: RequestInit): Promise<Response> {
 export async function listProjects(): Promise<StoryProject[]> {
   const response = await authFetch("/api/projects");
   if (!response.ok) {
-    throw new Error(`list projects failed: ${response.status}`);
+    throw await apiError("list projects", response);
   }
   return response.json() as Promise<StoryProject[]>;
 }
@@ -30,7 +76,7 @@ export async function createProject(input: CreateProjectInput): Promise<StoryPro
     body: JSON.stringify(input),
   });
   if (!response.ok) {
-    throw new Error(`create project failed: ${response.status}`);
+    throw await apiError("create project", response);
   }
   return response.json() as Promise<StoryProject>;
 }
@@ -42,7 +88,7 @@ export async function importElysiumProject(file: File): Promise<StoryProject> {
     headers: new Headers({ "Content-Type": "application/zip" }),
   });
   if (!response.ok) {
-    throw new Error(`import Elysium project failed: ${response.status}`);
+    throw await apiError("import Elysium project", response);
   }
   return response.json() as Promise<StoryProject>;
 }
@@ -67,7 +113,7 @@ export async function createContent(
     signal,
   });
   if (!response.ok) {
-    throw new Error(`create content failed: ${response.status}`);
+    throw await apiError("create content", response);
   }
   return response.json() as Promise<ContentItem>;
 }
@@ -76,7 +122,7 @@ export async function listContent(projectId: string, kind: ContentKind, signal?:
   const params = new URLSearchParams({ kind });
   const response = await authFetch(`/api/projects/${encodeURIComponent(projectId)}/content?${params}`, { signal });
   if (!response.ok) {
-    throw new Error(`list content failed: ${response.status}`);
+    throw await apiError("list content", response);
   }
   return response.json() as Promise<ContentItem[]>;
 }
@@ -103,7 +149,7 @@ export async function updateContent(
     },
   );
   if (!response.ok) {
-    throw new Error(`update content failed: ${response.status}`);
+    throw await apiError("update content", response);
   }
   return response.json() as Promise<ContentItem>;
 }
@@ -114,7 +160,7 @@ export async function listRevisions(projectId: string, contentId: string, signal
     { signal },
   );
   if (!response.ok) {
-    throw new Error(`list revisions failed: ${response.status}`);
+    throw await apiError("list revisions", response);
   }
   return response.json() as Promise<Revision[]>;
 }
@@ -140,7 +186,7 @@ export async function restoreRevision(
     },
   );
   if (!response.ok) {
-    throw new Error(`restore revision failed: ${response.status}`);
+    throw await apiError("restore revision", response);
   }
   return response.json() as Promise<ContentItem>;
 }

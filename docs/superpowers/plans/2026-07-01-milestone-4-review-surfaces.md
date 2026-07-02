@@ -28,14 +28,14 @@ Add frontend and backend API support needed by the review drawer.
 
 - Add a backend route:
   - `POST /api/projects/{projectID}/content/{contentID}/revisions/{revisionNumber}/restore`
-  - body: `{ "expectedRevision": number, "reason": string }`
+  - body: `{ "expectedRevision": number, "reason": string }`, where the frontend sends `restore checkpoint {revisionNumber}` and the service applies a revision-specific default if the field is blank.
   - returns updated `ContentItem`
 - Add `Service.RestoreRevision(ctx, input)` that:
   - verifies the target content belongs to the project,
   - finds the requested historical revision,
   - verifies `current_revision == expectedRevision`,
   - updates content body/metadata from the selected revision,
-  - creates a new revision with `created_by = "restore"` and a default reason such as `restore checkpoint {revisionNumber}`.
+  - creates a new revision with the author restore actor and a default reason such as `restore revision {revisionNumber}`.
 - Add tests for successful restore and stale expected-revision conflict.
 - Extend `frontend/src/types.ts` with `Revision`.
 - Add `listRevisions()` and `restoreRevision()` in `frontend/src/api.ts`.
@@ -81,8 +81,8 @@ Pass selected content into the review drawer and wire refresh/restore.
 Replace placeholders with working review surfaces.
 
 - Reports tab:
-  - Show recent Read and Check attached note output already captured in `assistantActions.checkResult` when available for the selected content.
-  - Show an empty state that points the author to the editor Check action when no report exists.
+  - Show the transient last-run Read and Check output already held in `assistantActions.checkResult` when it belongs to the selected content.
+  - Show an empty state that points the author to the editor Check action when no in-memory check result exists.
   - Keep buttons for Read report / Check draft only if they perform existing actions or are clearly disabled; avoid dead primary controls.
 - Revisions tab:
   - Show current checkpoint number from selected content.

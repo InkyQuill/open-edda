@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"git.inkyquill.net/inky/writer/store"
 	"github.com/pressly/goose/v3"
@@ -27,11 +28,19 @@ func TestRebuildIndexMirrorsCurrentFiles(t *testing.T) {
 	}
 
 	rows := loadIndexedFiles(t, db)
-	if rows["story/chapter-01.md"] == "" {
+	story := rows["story/chapter-01.md"]
+	if story.ID == "" {
 		t.Fatalf("story row missing: %#v", rows)
 	}
-	if rows["characters/Protagonist.md"] == "" {
+	if story.Kind != string(LayoutKindStory) || story.Title != "chapter 01" || story.SHA256 != result.Files[1].SHA256 || story.Bytes != result.Files[1].Size {
+		t.Fatalf("story row = %#v, files = %#v", story, result.Files)
+	}
+	character := rows["characters/Protagonist.md"]
+	if character.ID == "" {
 		t.Fatalf("character row missing: %#v", rows)
+	}
+	if character.Kind != string(LayoutKindCharacter) || character.Title != "Protagonist" || character.SHA256 != result.Files[0].SHA256 || character.Bytes != result.Files[0].Size {
+		t.Fatalf("character row = %#v, files = %#v", character, result.Files)
 	}
 }
 
@@ -56,8 +65,29 @@ func TestRebuildIndexRemovesDisappearedFiles(t *testing.T) {
 	if _, ok := rows["story/chapter-02.md"]; ok {
 		t.Fatalf("deleted file remains indexed: %#v", rows)
 	}
-	if rows["story/chapter-01.md"] == "" {
+	if rows["story/chapter-01.md"].ID == "" {
 		t.Fatalf("remaining file missing: %#v", rows)
+	}
+}
+
+func TestRebuildIndexPreservesUpdatedAtForUnchangedFiles(t *testing.T) {
+	db := openFileIndexTestDB(t)
+	seedFileIndexProject(t, db)
+	root := t.TempDir()
+	mustWrite(t, root, "story/chapter-01.md", "# Chapter 1\n")
+
+	if _, err := RebuildIndex(context.Background(), db, "project-1", root); err != nil {
+		t.Fatalf("first RebuildIndex() error = %v", err)
+	}
+	rows := loadIndexedFiles(t, db)
+	firstUpdatedAt := rows["story/chapter-01.md"].UpdatedAt
+	time.Sleep(time.Nanosecond)
+	if _, err := RebuildIndex(context.Background(), db, "project-1", root); err != nil {
+		t.Fatalf("second RebuildIndex() error = %v", err)
+	}
+	rows = loadIndexedFiles(t, db)
+	if rows["story/chapter-01.md"].UpdatedAt != firstUpdatedAt {
+		t.Fatalf("updated_at changed for unchanged file: first=%q second=%q", firstUpdatedAt, rows["story/chapter-01.md"].UpdatedAt)
 	}
 }
 
@@ -90,22 +120,31 @@ func seedFileIndexProject(t *testing.T, db *sql.DB) {
 	}
 }
 
-func loadIndexedFiles(t *testing.T, db *sql.DB) map[string]string {
+type indexedFileRow struct {
+	ID        string
+	Kind      string
+	Title     string
+	SHA256    string
+	Bytes     int64
+	UpdatedAt string
+}
+
+func loadIndexedFiles(t *testing.T, db *sql.DB) map[string]indexedFileRow {
 	t.Helper()
-	rows, err := db.Query(`SELECT relative_path, id FROM project_files WHERE project_id = 'project-1'`)
+	rows, err := db.Query(`SELECT relative_path, id, kind, title, sha256, bytes, updated_at FROM project_files WHERE project_id = 'project-1'`)
 	if err != nil {
 		t.Fatalf("query project_files: %v", err)
 	}
 	defer rows.Close()
 
-	result := map[string]string{}
+	result := map[string]indexedFileRow{}
 	for rows.Next() {
 		var path string
-		var id string
-		if err := rows.Scan(&path, &id); err != nil {
+		var row indexedFileRow
+		if err := rows.Scan(&path, &row.ID, &row.Kind, &row.Title, &row.SHA256, &row.Bytes, &row.UpdatedAt); err != nil {
 			t.Fatalf("scan project file: %v", err)
 		}
-		result[path] = id
+		result[path] = row
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatalf("project file rows: %v", err)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -30,6 +31,8 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runGet(args[1:], stdout)
 	case "status":
 		return runStatus(args[1:], stdout)
+	case "ids":
+		return runIDs(args[1:], stdout)
 	case "init":
 		return runInit(args[1:], stdout)
 	case "save":
@@ -64,8 +67,7 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 func runStatus(args []string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("status", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	writeIDs := flags.Bool("write-ids", false, "write .edda/ids.json")
-	root, flagArgs := splitExistingOptionalPath(args)
+	root, flagArgs := splitOptionalPath(args)
 	if err := flags.Parse(flagArgs); err != nil {
 		return err
 	}
@@ -77,16 +79,6 @@ func runStatus(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if *writeIDs {
-		idMap, files, err := fileproject.AssignStableIDs(root, layout)
-		if err != nil {
-			return err
-		}
-		if err := fileproject.WriteIDMap(root, idMap); err != nil {
-			return err
-		}
-		fmt.Fprintf(stdout, "Updated .edda/ids.json for %d files.\n", len(files))
-	}
 
 	if layout.Metadata != nil {
 		fmt.Fprintf(stdout, "Project: %s (%s)\n", layout.Metadata.Title, layout.Metadata.ID)
@@ -94,6 +86,13 @@ func runStatus(args []string, stdout io.Writer) error {
 		fmt.Fprintln(stdout, "Project: uninitialized Edda folder")
 	}
 	fmt.Fprintf(stdout, "Root: %s\n", layout.Root)
+	if _, err := os.Stat(filepath.Join(layout.Root, ".edda", "ids.json")); err == nil {
+		fmt.Fprintln(stdout, "Stable IDs: present")
+	} else if errors.Is(err, os.ErrNotExist) {
+		fmt.Fprintln(stdout, "Stable IDs: missing")
+	} else {
+		return fmt.Errorf("stat stable IDs: %w", err)
+	}
 
 	counts := fileproject.CountByKind(layout.Files)
 	kinds := make([]fileproject.LayoutKind, 0, len(counts))
@@ -123,13 +122,43 @@ func runStatus(args []string, stdout io.Writer) error {
 	return nil
 }
 
+func runIDs(args []string, stdout io.Writer) error {
+	if len(args) == 0 {
+		return fmt.Errorf("ids requires a subcommand")
+	}
+	switch args[0] {
+	case "sync":
+		return runIDSync(args[1:], stdout)
+	default:
+		return fmt.Errorf("unknown ids subcommand %q", args[0])
+	}
+}
+
+func runIDSync(args []string, stdout io.Writer) error {
+	root, flagArgs := splitOptionalPath(args)
+	flags := flag.NewFlagSet("ids sync", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	if err := flags.Parse(flagArgs); err != nil {
+		return err
+	}
+	if flags.NArg() > 0 {
+		root = flags.Arg(0)
+	}
+	_, files, err := fileproject.SyncStableIDs(root)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "Updated .edda/ids.json for %d files.\n", len(files))
+	return nil
+}
+
 func runInit(args []string, stdout io.Writer) error {
 	flags := flag.NewFlagSet("init", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	title := flags.String("title", "", "project title")
 	id := flags.String("id", "", "project id")
 	serverURL := flags.String("server-url", "", "server URL")
-	root, flagArgs := splitOptionalPath(args)
+	root, flagArgs := splitExistingOptionalPath(args)
 	if err := flags.Parse(flagArgs); err != nil {
 		return err
 	}
@@ -156,7 +185,7 @@ func runSave(args []string, stdout io.Writer) error {
 	fromDraft := flags.Bool("from-draft", false, "promote .edda/drafts/<id>.md")
 	bodyFile := flags.String("body-file", "", "markdown file to save")
 	expectedSHA256 := flags.String("expected-sha256", "", "expected current saved file hash")
-	root, flagArgs := splitOptionalPath(args)
+	root, flagArgs := splitExistingOptionalPath(args)
 	if err := flags.Parse(flagArgs); err != nil {
 		return err
 	}
@@ -225,13 +254,19 @@ func runGet(args []string, stdout io.Writer) error {
 	if projectTitle == "" {
 		projectTitle = "Edda Project"
 	}
-	metadata, err := fileproject.InitMetadata(root, fileproject.InitMetadataInput{
-		ID:        *id,
-		Title:     projectTitle,
-		ServerURL: serverURL,
-	})
+	metadata, err := fileproject.ReadMetadata(root)
 	if err != nil {
-		return err
+		if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		metadata, err = fileproject.InitMetadata(root, fileproject.InitMetadataInput{
+			ID:        *id,
+			Title:     projectTitle,
+			ServerURL: serverURL,
+		})
+		if err != nil {
+			return err
+		}
 	}
 	state, err := fileproject.EnsureSyncState(root)
 	if err != nil {
@@ -378,8 +413,8 @@ func runResolve(args []string, stdout io.Writer) error {
 	if *fileID == "" {
 		return fmt.Errorf("resolve requires --id")
 	}
-	if *bodyFile != "" && *use != "" {
-		return fmt.Errorf("resolve requires only one of --use or --body-file")
+	if (*bodyFile != "") == (*use != "") {
+		return fmt.Errorf("resolve requires exactly one of --use or --body-file")
 	}
 	var body string
 	if *bodyFile != "" {
@@ -526,7 +561,8 @@ func runRestore(args []string, stdout io.Writer) error {
 func printUsage(output io.Writer) {
 	fmt.Fprintln(output, "Usage:")
 	fmt.Fprintln(output, "  edda get [--title \"Title\"] [--id project-id] URL [path]")
-	fmt.Fprintln(output, "  edda status [path] [--write-ids]")
+	fmt.Fprintln(output, "  edda status [path]")
+	fmt.Fprintln(output, "  edda ids sync [path]")
 	fmt.Fprintln(output, "  edda init [path] --title \"Title\" [--id project-id] [--server-url URL]")
 	fmt.Fprintln(output, "  edda save [path] \"Checkpoint note\"")
 	fmt.Fprintln(output, "  edda save [path] --id file-id (--from-draft | --body-file markdown.md) [--expected-sha256 HASH]")
