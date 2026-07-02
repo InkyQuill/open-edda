@@ -251,7 +251,7 @@ export function ReviewDrawer({ projectId, content, onContentSaved }: ReviewDrawe
       <Tabs defaultValue="reports" className="min-h-0 flex-1">
         <TabsList className="w-full">
           <TabsTrigger value="reports">Reports</TabsTrigger>
-          <TabsTrigger value="revisions">Revisions</TabsTrigger>
+          <TabsTrigger value="revisions">File history</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
         </TabsList>
 

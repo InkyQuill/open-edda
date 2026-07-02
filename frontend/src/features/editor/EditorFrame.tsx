@@ -318,7 +318,7 @@ export function EditorFrame({
           <FileText data-icon="inline-start" aria-hidden="true" />
           <span className="capitalize">{formatKind(content.kind)}</span>
           <span aria-hidden="true">/</span>
-          <span>Revision {content.currentRevision}</span>
+          <span>Saved version {content.currentRevision}</span>
           <span aria-hidden="true">/</span>
           <span className="capitalize">{mode} mode</span>
         </div>

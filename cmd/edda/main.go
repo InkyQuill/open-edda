@@ -42,6 +42,8 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runCheckpoint(args[1:], stdout)
 	case "history":
 		return runHistory(args[1:], stdout)
+	case "files":
+		return runFiles(args[1:], stdout)
 	case "diff":
 		return runDiff(args[1:], stdout)
 	case "restore":
@@ -403,13 +405,32 @@ func runHistory(args []string, stdout io.Writer) error {
 	root, flagArgs := splitOptionalPath(args)
 	flags := flag.NewFlagSet("history", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
+	fileID := flags.String("id", "", "stable file id")
 	if err := flags.Parse(flagArgs); err != nil {
 		return err
 	}
 	if flags.NArg() > 0 {
 		root = flags.Arg(0)
 	}
-	checkpoints, err := fileproject.ListCheckpoints(root)
+	if *fileID != "" {
+		history, err := fileproject.ListFileCheckpointHistory(root, *fileID)
+		if err != nil {
+			return err
+		}
+		if len(history) == 0 {
+			fmt.Fprintln(stdout, "No file history.")
+			return nil
+		}
+		for _, entry := range history {
+			if entry.Message == "" {
+				fmt.Fprintf(stdout, "%s %s %s %s %s\n", entry.CheckpointID, entry.FileID, entry.CreatedAt, entry.SHA256, entry.Path)
+			} else {
+				fmt.Fprintf(stdout, "%s %s %s %s %s %q\n", entry.CheckpointID, entry.FileID, entry.CreatedAt, entry.SHA256, entry.Path, entry.Message)
+			}
+		}
+		return nil
+	}
+	checkpoints, err := fileproject.ListCheckpointSummaries(root)
 	if err != nil {
 		return err
 	}
@@ -419,10 +440,34 @@ func runHistory(args []string, stdout io.Writer) error {
 	}
 	for _, checkpoint := range checkpoints {
 		if checkpoint.Message == "" {
-			fmt.Fprintf(stdout, "%s %s (%d files)\n", checkpoint.ID, checkpoint.CreatedAt.Format("2006-01-02T15:04:05Z"), len(checkpoint.Files))
+			fmt.Fprintf(stdout, "%s %s (%d files)\n", checkpoint.ID, checkpoint.CreatedAt, checkpoint.FileCount)
 		} else {
-			fmt.Fprintf(stdout, "%s %s %q (%d files)\n", checkpoint.ID, checkpoint.CreatedAt.Format("2006-01-02T15:04:05Z"), checkpoint.Message, len(checkpoint.Files))
+			fmt.Fprintf(stdout, "%s %s %q (%d files)\n", checkpoint.ID, checkpoint.CreatedAt, checkpoint.Message, checkpoint.FileCount)
 		}
+	}
+	return nil
+}
+
+func runFiles(args []string, stdout io.Writer) error {
+	root, flagArgs := splitOptionalPath(args)
+	flags := flag.NewFlagSet("files", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	if err := flags.Parse(flagArgs); err != nil {
+		return err
+	}
+	if flags.NArg() > 0 {
+		root = flags.Arg(0)
+	}
+	files, err := fileproject.ListStableFiles(root)
+	if err != nil {
+		return err
+	}
+	if len(files) == 0 {
+		fmt.Fprintln(stdout, "No files.")
+		return nil
+	}
+	for _, file := range files {
+		fmt.Fprintf(stdout, "%s %s %s %s\n", file.ID, file.Kind, file.SHA256, file.Path)
 	}
 	return nil
 }
@@ -488,7 +533,8 @@ func printUsage(output io.Writer) {
 	fmt.Fprintln(output, "  edda send [path]")
 	fmt.Fprintln(output, "  edda take [path]")
 	fmt.Fprintln(output, "  edda checkpoint [path] [--message \"Message\"]")
-	fmt.Fprintln(output, "  edda history [path]")
+	fmt.Fprintln(output, "  edda history [path] [--id file-id]")
+	fmt.Fprintln(output, "  edda files [path]")
 	fmt.Fprintln(output, "  edda diff [path] --from checkpoint-id [--to checkpoint-id]")
 	fmt.Fprintln(output, "  edda restore [path] --checkpoint checkpoint-id")
 	fmt.Fprintln(output, "  edda conflicts [path]")

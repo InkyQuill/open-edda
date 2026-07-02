@@ -317,6 +317,33 @@ func TestConflictsAndResolveWorkflow(t *testing.T) {
 	}
 }
 
+func TestFilesAndFilteredHistoryExposeStableHashes(t *testing.T) {
+	root := copyFixture(t, filepath.Join("..", "..", "fileproject", "testdata", "partial"))
+	stable := prepareStableCLIFile(t, root)
+	if _, err := fileproject.CreateCheckpoint(root, fileproject.CreateCheckpointInput{Message: "base"}); err != nil {
+		t.Fatalf("CreateCheckpoint error = %v", err)
+	}
+
+	var filesOut bytes.Buffer
+	if err := run([]string{"files", root}, &filesOut, &bytes.Buffer{}); err != nil {
+		t.Fatalf("files error = %v", err)
+	}
+	if !strings.Contains(filesOut.String(), stable.ID) || !strings.Contains(filesOut.String(), stable.SHA256) {
+		t.Fatalf("files output = %s", filesOut.String())
+	}
+
+	var historyOut bytes.Buffer
+	if err := run([]string{"history", root, "--id", stable.ID}, &historyOut, &bytes.Buffer{}); err != nil {
+		t.Fatalf("history --id error = %v", err)
+	}
+	if !strings.Contains(historyOut.String(), stable.ID) {
+		t.Fatalf("history --id output missing file id context = %s", historyOut.String())
+	}
+	if !strings.Contains(historyOut.String(), stable.SHA256) || !strings.Contains(historyOut.String(), "base") {
+		t.Fatalf("history --id output = %s", historyOut.String())
+	}
+}
+
 func TestInitRequiresTitle(t *testing.T) {
 	var stderr bytes.Buffer
 	err := run([]string{"init", t.TempDir()}, &bytes.Buffer{}, &stderr)

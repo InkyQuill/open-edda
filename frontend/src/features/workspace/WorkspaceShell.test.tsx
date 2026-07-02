@@ -101,7 +101,7 @@ describe("WorkspaceShell", () => {
     expect(html).toContain("Assistant");
     expect(html).toContain("Select a model before starting assistant chat.");
     expect(html).toContain("Opening");
-    expect(html).toContain("Revision 1");
+    expect(html).toContain("Saved version 1");
   });
 
   it("renders desktop Review mode with selected content review surfaces", () => {

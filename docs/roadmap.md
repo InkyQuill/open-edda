@@ -12,7 +12,7 @@ This roadmap tracks product milestones separately from implementation plans. Det
 | 3.5 | Elysium Skill Library Rewrite | Implemented | `docs/superpowers/plans/2026-06-14-writer-skill-library-rewrite.md` |
 | 3.6 | Skill Script Runtime | Implemented | `docs/superpowers/plans/2026-06-14-open-edda-skill-script-runtime.md` |
 | 4 | Daily Writing Polish | In progress | See phase tracker below |
-| 5 | File-First Projects And Checkpoints | In Progress | `docs/superpowers/specs/2026-07-01-file-first-checkpoints-design.md` |
+| 5 | File-First Projects And Checkpoints | Implemented | `docs/superpowers/specs/2026-07-01-file-first-checkpoints-design.md` |
 | Later | Collaboration | Deferred | Needs specs after single-author file-first workflow is stable |
 
 ## Milestone 1: Project Core
@@ -161,7 +161,7 @@ Acceptance target:
 | 4 | Linear checkpoints: create, list, diff, and restore project-wide snapshots using `.edda/checkpoints/` | Implemented | `docs/superpowers/plans/2026-07-01-milestone-5-checkpoints.md` |
 | 5 | CLI sync workflow: implement `edda get`, `send`, `take`, server connection metadata, pending upload state, and retry behavior | Implemented | `docs/superpowers/plans/2026-07-01-milestone-5-sync-workflow.md` |
 | 6 | Conflict preservation and resolution: detect divergent saved file edits, preserve base/local/server versions, and resolve back to normal files | Implemented | `docs/superpowers/plans/2026-07-01-milestone-5-conflicts.md` |
-| 7 | Agent/write migration: move structured writes and review surfaces from database revisions toward saved file hashes and checkpoints | Planned | Create after Phase 6 is implemented |
+| 7 | Agent/write migration: move structured writes and review surfaces from database revisions toward saved file hashes and checkpoints | Implemented | `docs/superpowers/plans/2026-07-01-milestone-5-agent-write-migration.md` |
 
 ## Later: Collaboration
 
