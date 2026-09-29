@@ -114,7 +114,6 @@ export function ProjectsPage() {
       <section className="mx-auto flex w-full max-w-6xl flex-col gap-8" aria-labelledby="projects-page-title">
         <header className="flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <p className="mb-1 text-sm font-medium text-muted-foreground">Open Edda</p>
             <h1 id="projects-page-title" className="text-3xl font-semibold tracking-normal text-foreground">
               Projects
             </h1>
@@ -137,7 +136,7 @@ export function ProjectsPage() {
         </header>
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
-          <section className="rounded-lg border border-border bg-background p-5 shadow-sm" aria-labelledby="create-project-title">
+          <section className="rounded-md bg-muted/40 p-5" aria-labelledby="create-project-title">
             <div className="mb-5">
               <h2 id="create-project-title" className="text-lg font-semibold text-foreground">
                 Start a project
@@ -149,7 +148,7 @@ export function ProjectsPage() {
               <label className="grid gap-1.5 text-sm font-medium text-foreground">
                 Title
                 <input
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/30"
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/30"
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                   placeholder="The Glass Archive"
@@ -159,7 +158,7 @@ export function ProjectsPage() {
               <label className="grid gap-1.5 text-sm font-medium text-foreground">
                 Language
                 <input
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/30"
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/30"
                   value={language}
                   onChange={(event) => setLanguage(event.target.value)}
                   placeholder="en"
@@ -236,7 +235,7 @@ export function ProjectsPage() {
                   <Link
                     key={project.id}
                     to={`/projects/${encodeURIComponent(project.id)}`}
-                    className="group grid min-h-36 gap-4 rounded-lg border border-border bg-background p-4 text-left shadow-sm transition hover:border-ring hover:bg-muted/40 focus:outline-none focus:ring-3 focus:ring-ring/30"
+                    className="group grid min-h-36 gap-4 rounded-lg border border-border bg-background p-4 text-left  transition hover:border-ring hover:bg-muted/40 focus:outline-none focus:ring-3 focus:ring-ring/30"
                   >
                     <span className="flex min-w-0 items-start justify-between gap-3">
                       <span className="min-w-0">

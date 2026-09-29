@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useLocation } from "react-router-dom";
 
+import { AppearancePanel } from "../appearance/AppearancePanel";
 import { listProjects } from "../../api";
 import type { AppDispatch, RootState } from "../../app/store/store";
 import { Button } from "../../shared/ui/button";
@@ -127,26 +128,26 @@ export function SettingsPage() {
           </Button>
         </header>
 
-        <section className="grid gap-3 md:grid-cols-3" aria-label="System status">
-          <div className="rounded-md border border-border bg-muted/30 p-3">
-            <p className="text-xs font-medium uppercase text-muted-foreground">Projects</p>
-            <p className="mt-1 text-lg font-semibold text-foreground">
+        <section className="grid gap-4 border-b border-border pb-5 sm:grid-cols-3" aria-label="System status">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-muted-foreground">Projects</p>
+            <p className="mt-1 text-base font-medium text-foreground">
               {projectsStatus === "pending" ? "Loading" : projects.length}
             </p>
             <p className="mt-1 truncate text-sm text-muted-foreground">
               {selectedProject ? selectedProject.title : "No project selected"}
             </p>
           </div>
-          <div className="rounded-md border border-border bg-muted/30 p-3">
-            <p className="text-xs font-medium uppercase text-muted-foreground">Providers</p>
-            <p className="mt-1 text-lg font-semibold text-foreground">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-muted-foreground">Providers</p>
+            <p className="mt-1 text-base font-medium text-foreground">
               {providersStatus === "pending" ? "Loading" : providerCount}
             </p>
             <p className="mt-1 text-sm text-muted-foreground">Provider configuration status: {providersStatus}</p>
           </div>
-          <div className="rounded-md border border-border bg-muted/30 p-3">
-            <p className="text-xs font-medium uppercase text-muted-foreground">Skills</p>
-            <p className="mt-1 text-lg font-semibold text-foreground">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-muted-foreground">Skills</p>
+            <p className="mt-1 text-base font-medium text-foreground">
               {selectedProject ? "Project scoped" : "Unavailable"}
             </p>
             <p className="mt-1 text-sm text-muted-foreground">Skill catalog status: {skillsStatus}</p>
@@ -160,8 +161,9 @@ export function SettingsPage() {
           </p>
         ) : null}
 
-        <Tabs defaultValue="providers" className="min-h-0">
-          <TabsList>
+        <Tabs defaultValue="appearance" className="min-h-0">
+          <TabsList className="w-full flex-col items-stretch sm:w-fit sm:flex-row">
+            <TabsTrigger value="appearance">Appearance</TabsTrigger>
             <TabsTrigger value="providers">
               <ServerCog data-icon="inline-start" aria-hidden="true" />
               Providers and models
@@ -171,6 +173,8 @@ export function SettingsPage() {
               Skills and scripts
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="appearance" className="min-h-0 py-4"><AppearancePanel /></TabsContent>
 
           <TabsContent value="providers" className="min-h-0 rounded-md border border-border bg-background p-4">
             <ModelSettingsPanel />

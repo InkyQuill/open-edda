@@ -11,7 +11,8 @@
         "@codemirror/state": "^6.6.0",
         "@codemirror/view": "^6.43.1",
         "@fontsource-variable/geist": "^5.2.9",
-        "@inky/galley-editor": "^0.9.1",
+        "@inkyquill/galley-editor": "0.16.0",
+        "@inkyquill/galley-themes": "0.16.0",
         "@lezer/common": "^1.5.2",
         "@lezer/highlight": "^1.2.3",
         "@lezer/markdown": "^1.6.4",
@@ -126,6 +127,8 @@
 
     "@codemirror/lint": ["@codemirror/lint@6.9.7", "", { "dependencies": { "@codemirror/state": "^6.0.0", "@codemirror/view": "^6.42.0", "crelt": "^1.0.5" } }, "sha512-28/+iWLYxKxsvGYhSYL7zaCZqLz5+FFFDq9tVsvGv9kv8RY4fFAchJ5WX9M3YrrRlTIsECjsXPqeNgnSmNP2dg=="],
 
+    "@codemirror/search": ["@codemirror/search@6.7.2", "", { "dependencies": { "@codemirror/state": "^6.0.0", "@codemirror/view": "^6.37.0", "crelt": "^1.0.5" } }, "sha512-gUYkYhT2+n/+VGZ+8EzE5WFkYZUZYm1VOKDudIsNqh42uRVQJ0a6Yss9sdKT3MeOYfuL1N6AZA57oza0Oyr0LA=="],
+
     "@codemirror/state": ["@codemirror/state@6.6.0", "", { "dependencies": { "@marijn/find-cluster-break": "^1.0.0" } }, "sha512-4nbvra5R5EtiCzr9BTHiTLc+MLXK2QGiAVYMyi8PkQd3SR+6ixar/Q/01Fa21TBIDOZXgeWV4WppsQolSreAPQ=="],
 
     "@codemirror/view": ["@codemirror/view@6.43.1", "", { "dependencies": { "@codemirror/state": "^6.6.0", "crelt": "^1.0.6", "style-mod": "^4.1.0", "w3c-keyname": "^2.2.4" } }, "sha512-+BIjw/AG3tDQ4pJgTLPYdAW25eDE66YsvM4LKyVPgGzVgZ4a9Wj1SRX8kPVKgBDdPt8oHtZ15F0qx7p0oOHdHw=="],
@@ -218,7 +221,9 @@
 
     "@hono/node-server": ["@hono/node-server@1.19.14", "", { "peerDependencies": { "hono": "^4" } }, "sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw=="],
 
-    "@inky/galley-editor": ["@inky/galley-editor@0.9.1", "https://git.inkyquill.net/api/v4/projects/94/packages/npm/@inky/galley-editor/-/@inky/galley-editor-0.9.1.tgz", { "peerDependencies": { "@codemirror/commands": ">=6.10.0", "@codemirror/lang-markdown": ">=6.5.0", "@codemirror/language": ">=6.12.0", "@codemirror/state": ">=6.6.0", "@codemirror/view": ">=6.41.0", "@lezer/highlight": ">=1.2.0", "@lezer/markdown": ">=1.6.0", "react": ">=18", "react-dom": ">=18" } }, "sha1-lngkEvQPRmosOHUoEmbktQyUaPs="],
+    "@inkyquill/galley-editor": ["@inkyquill/galley-editor@0.16.0", "", { "dependencies": { "lucide-react": "^1.48.0" }, "peerDependencies": { "@codemirror/commands": ">=6.10.0", "@codemirror/lang-markdown": ">=6.5.0", "@codemirror/language": ">=6.12.0", "@codemirror/search": ">=6.5.0", "@codemirror/state": ">=6.6.0", "@codemirror/view": ">=6.41.0", "@lezer/highlight": ">=1.2.0", "@lezer/markdown": ">=1.6.0", "react": ">=18", "react-dom": ">=18" } }, "sha512-ZifAan2/fdSf5o1wHePP5QZrxO21B86XxfmV8qdS0nX6CQJFKrs0er1RrtMsJ6T1eT/e/5E33sbdibQaCjARCQ=="],
+
+    "@inkyquill/galley-themes": ["@inkyquill/galley-themes@0.16.0", "", {}, "sha512-nO6dIt0POj+eQz+AQt5iArwY14jqrDXe+cIY2P2Gj2KnSFrlfcX04C0v7mcjbDCmU+1ZkthuJ5S1cekt6UFOEg=="],
 
     "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA=="],
 
@@ -1167,6 +1172,8 @@
     "@dotenvx/dotenvx/commander": ["commander@11.1.0", "", {}, "sha512-yPVavfyCcRhmorC7rWlkHn15b4wDVgVmBA7kV4QVBsF7kv/9TKJAbAXVTxvTnwP8HHKjRCJDClKbciiYS7p0DQ=="],
 
     "@dotenvx/dotenvx/execa": ["execa@5.1.1", "", { "dependencies": { "cross-spawn": "^7.0.3", "get-stream": "^6.0.0", "human-signals": "^2.1.0", "is-stream": "^2.0.0", "merge-stream": "^2.0.0", "npm-run-path": "^4.0.1", "onetime": "^5.1.2", "signal-exit": "^3.0.3", "strip-final-newline": "^2.0.0" } }, "sha512-8uSpZZocAZRBAPIEINJj3Lo9HyGitllczc27Eh5YYojjMFMn8yHMDMaUHE2Jqfq05D/wucwI4JGURyXt1vchyg=="],
+
+    "@inkyquill/galley-editor/lucide-react": ["lucide-react@1.48.0", "", { "peerDependencies": { "react": "^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-R0CIKY/fXiC6y9xRBADgsK+VW2p/pcTJOMhLZf1T+uG+vJUvyUR02nGOgmIIC7MPkiNK4Ox8QDnbqF8rJYWPZQ=="],
 
     "@tailwindcss/oxide-wasm32-wasi/@emnapi/core": ["@emnapi/core@1.10.0", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.1", "tslib": "^2.4.0" }, "bundled": true }, "sha512-yq6OkJ4p82CAfPl0u9mQebQHKPJkY7WrIuk205cTYnYe+k2Z8YBh11FrbRG/H6ihirqcacOgl2BIO8oyMQLeXw=="],
 

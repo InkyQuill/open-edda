@@ -35,6 +35,7 @@ func New(deps *Dependencies) http.Handler {
 			// Public routes — no auth required.
 			if deps.AuthService != nil {
 				auth.RegisterRoutes(r, deps.AuthService)
+				auth.RegisterProfileRoutes(r, deps.AuthService)
 			}
 
 			// Protected routes — require valid Bearer token.

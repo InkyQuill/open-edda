@@ -9,3 +9,5 @@ web/dist/
 writer
 *.db-shm
 *.db-wal
+
+.DS_Store

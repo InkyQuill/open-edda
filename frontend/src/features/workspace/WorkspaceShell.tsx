@@ -5,8 +5,12 @@ import {
   Library,
   MessageSquare,
   PenLine,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings2,
+  Menu,
 } from "lucide-react";
+import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 
@@ -95,6 +99,20 @@ export function WorkspaceShell({
   onContentKindChange,
   onContentSaved,
 }: WorkspaceShellProps) {
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const updateHeight = () => {
+      document.documentElement.style.setProperty("--workspace-viewport-height", `${viewport?.height ?? window.innerHeight}px`);
+    };
+    updateHeight();
+    viewport?.addEventListener("resize", updateHeight);
+    window.addEventListener("resize", updateHeight);
+    return () => {
+      viewport?.removeEventListener("resize", updateHeight);
+      window.removeEventListener("resize", updateHeight);
+      document.documentElement.style.removeProperty("--workspace-viewport-height");
+    };
+  }, []);
   const dispatch = useDispatch();
   const workspace = useSelector((state: WorkspaceRootState) => state.workspace);
   const activeLeftTab = toContextTab(workspace.activeLeftTab);
@@ -146,13 +164,22 @@ export function WorkspaceShell({
   }
 
   return (
-    <main className="flex h-dvh min-h-0 flex-col bg-background text-foreground">
+    <main className="writing-workspace flex h-dvh min-h-0 flex-col bg-background text-foreground">
       <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div className="min-w-0">
-          <p className="text-xs text-muted-foreground">Workspace</p>
-          <h1 className="truncate text-base font-semibold">{projectTitle}</h1>
+          <Link to="/projects" className="hidden text-xs text-muted-foreground hover:text-foreground md:inline">Edda / Projects</Link>
+          <h1 className="truncate text-sm font-semibold md:text-base">{projectTitle}</h1>
         </div>
+        <details className="mobile-workspace-menu relative md:hidden">
+          <summary className="flex min-h-10 cursor-pointer items-center gap-1 px-2 text-xs"><Menu className="size-4" aria-hidden="true" />Menu</summary>
+          <nav className="absolute right-0 top-full z-30 flex w-56 flex-col gap-1 rounded-md border border-border bg-popover p-2" aria-label="Workspace menu">
+            <Button asChild variant="ghost"><Link to="/projects">Projects</Link></Button>
+            <Button asChild variant="ghost"><Link to={`/settings?projectId=${encodeURIComponent(projectId)}`}>Settings</Link></Button>
+            {modeButtons.map(({ mode, label }) => <Button key={mode} variant={workspace.mode === mode ? "secondary" : "ghost"} aria-pressed={workspace.mode === mode} onClick={() => dispatch(workspaceActions.setMode(mode))}>{label}</Button>)}
+          </nav>
+        </details>
         <div className="hidden items-center gap-2 md:flex">
+          <Button variant="ghost" size="icon" aria-label={workspace.leftDrawerOpen ? "Hide project navigation" : "Show project navigation"} aria-pressed={workspace.leftDrawerOpen} onClick={() => dispatch(workspaceActions.setLeftDrawerOpen(!workspace.leftDrawerOpen))}>{workspace.leftDrawerOpen ? <PanelLeftClose aria-hidden="true" /> : <PanelLeftOpen aria-hidden="true" />}</Button>
           <Button asChild type="button" variant="outline">
             <Link to={`/settings?projectId=${encodeURIComponent(projectId)}`}>
               <Settings2 data-icon="inline-start" aria-hidden="true" />
@@ -162,6 +189,7 @@ export function WorkspaceShell({
           {modeButtons.map(({ mode, label, icon: Icon }) => (
             <Button
               key={mode}
+              aria-pressed={workspace.mode === mode}
               type="button"
               variant={workspace.mode === mode ? "secondary" : "ghost"}
               onClick={() => dispatch(workspaceActions.setMode(mode))}
@@ -174,28 +202,13 @@ export function WorkspaceShell({
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <nav className="hidden w-16 shrink-0 flex-col items-center gap-2 border-r border-border p-2 md:flex" aria-label="Workspace mode">
-          {modeButtons.map(({ mode, label, icon: Icon }) => (
-            <Button
-              key={mode}
-              type="button"
-              variant={workspace.mode === mode ? "secondary" : "ghost"}
-              size="icon"
-              aria-label={label}
-              onClick={() => dispatch(workspaceActions.setMode(mode))}
-            >
-              <Icon data-icon="inline-start" aria-hidden="true" />
-            </Button>
-          ))}
-        </nav>
-
         {workspace.leftDrawerOpen ? (
-          <aside className="hidden min-h-0 shrink-0 border-r border-border p-4 md:block" style={{ width: workspace.leftDrawerWidth }}>
+          <aside className="workspace-navigation hidden min-h-0 shrink-0 border-r border-border bg-sidebar p-4 md:block" style={{ width: workspace.leftDrawerWidth }}>
             {contextDrawer}
           </aside>
         ) : null}
 
-        <section className="workspace-editor-stage flex min-w-0 flex-1 justify-center overflow-auto bg-muted/30 px-4 py-6">
+        <section className="workspace-editor-stage flex min-w-0 flex-1 justify-center overflow-auto bg-background px-4 py-6">
           <EditorFrame
             projectId={projectId}
             content={selectedContent}
@@ -207,19 +220,19 @@ export function WorkspaceShell({
         </section>
 
         {workspace.rightDrawerOpen ? (
-          <aside className="hidden min-h-0 shrink-0 border-l border-border p-4 md:block" style={{ width: workspace.rightDrawerWidth }}>
+          <aside className="workspace-tools hidden min-h-0 shrink-0 border-l border-border bg-card p-4 md:block" style={{ width: workspace.rightDrawerWidth }}>
             {rightDrawer}
           </aside>
         ) : null}
       </div>
 
-      <nav className="grid grid-cols-4 border-t border-border bg-background p-2 md:hidden" aria-label="Workspace panels">
+      <nav className="grid grid-cols-4 border-t border-border bg-background p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:hidden" aria-label="Workspace panels">
         {mobileButtons.map(({ sheet, label, icon: Icon }) => (
           <Button
             key={sheet}
             type="button"
             variant={workspace.mobileSheet === sheet ? "secondary" : "ghost"}
-            className="h-auto flex-col gap-1 px-1 py-2 text-[0.7rem]"
+            className="h-auto min-h-12 flex-col gap-1 px-1 py-2 text-xs"
             onClick={() => dispatch(workspaceActions.setMobileSheet(sheet))}
           >
             <Icon data-icon="inline-start" aria-hidden="true" />

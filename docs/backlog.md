@@ -10,3 +10,12 @@
 - Evidence: `frontend/src/features/settings/SettingsPage.tsx` now hosts provider/model, skills, and script runtime administration; `frontend/src/features/skills/skillsThunks.ts` currently exposes project/session loading paths only; `docs/roadmap.md` Milestone 4 Phase 3.5 moved skill administration into settings, and Phase 4 is already scoped to assistant actions rather than skill-scope design.
 - Not doing now because: The current PR is scoped to Milestone 4 IA correction plus the Phase 4 assistant-actions plan; adding new skill-scope data models and settings screens would expand backend, frontend, import, and permission semantics.
 - Suggested next step: Add a dedicated settings/project-settings phase plan after Phase 3.5 that defines built-in, global user, and project-local skill sources; global enabled/disabled defaults; per-project enablement overrides; migration behavior for existing project skills; and UI/API changes for managing those scopes.
+
+### Split frontend bundles by route
+
+- Status: open
+- Found while: Thoth writing-workspace redesign verification.
+- Why it matters: Settings and login currently load the same large JavaScript bundle as the Markdown editor and writing tools.
+- Evidence: `bun --bun run build` in `frontend` produces an approximately 1.10 MB JavaScript chunk (356 KB gzip) and Vite warns about chunks above 500 KB; `frontend/src/app/router/routes.tsx` eagerly imports route surfaces.
+- Not doing now because: Route-level performance work is independent of the approved palette, profile preference and editor presentation changes.
+- Suggested next step: Profile initial route loading, then lazy-load workspace and administration route components with appropriate loading states.

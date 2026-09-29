@@ -2,53 +2,17 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
-@import "@inky/galley-editor/style.css";
+@import "@inkyquill/galley-editor/style.css";
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #1f2933;
-  background: #f6f7f9;
-  --app-background: #f6f7f9;
-  --app-surface: #ffffff;
-  --app-surface-muted: #f8fafc;
-  --app-border: #d7dde5;
-  --app-text: #1f2933;
-  --app-text-muted: #5f6b7a;
-  --app-accent: #4a6fa5;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --radius: 0.375rem;
+  --ge-font-body: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --ge-font-size: 16px;
+  --ge-line-height: 1.6;
+  --ge-shadow-editor: none;
 }
 
 body {
@@ -74,7 +38,7 @@ select {
   margin: 80px auto;
   padding: 32px;
   border: 1px solid var(--app-border);
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--app-surface);
 }
 
@@ -119,11 +83,11 @@ select {
 .auth-form input:focus {
   outline: none;
   border-color: var(--app-accent);
-  box-shadow: 0 0 0 2px rgba(74, 111, 165, 0.2);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 20%, transparent);
 }
 
 .auth-error {
-  color: #c0392b;
+  color: var(--destructive);
   font-size: 13px;
   margin: 0;
 }
@@ -170,23 +134,48 @@ select {
   min-width: 0;
 }
 
-.open-edda-galley-surface {
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--background);
+.open-edda-galley-surface,
+.open-edda-galley .ge-editor-shell {
+  border: 0;
+  border-radius: 0;
+  background: var(--ge-color-bg);
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .open-edda-galley .cm-editor {
   min-height: 48dvh;
-  background: var(--background);
-  color: var(--foreground);
-  font-size: 0.95rem;
-  line-height: 1.75;
+  font-size: var(--ge-font-size);
+  line-height: var(--ge-line-height);
 }
 
 .open-edda-galley .cm-content {
-  font-family: var(--font-sans);
+  font-family: var(--ge-font-body);
+}
+
+.open-edda-galley .ge-toolbar,
+.open-edda-galley .ge-footer {
+  background: transparent;
+  border: 0;
+}
+
+.open-edda-galley .ge-toolbar { gap: 2px; min-height: 40px; }
+.open-edda-galley .ge-toolbar-button { border-radius: 4px; min-width: 30px; padding-inline: 6px; }
+.open-edda-galley .ge-toolbar-button svg { width: 16px; height: 16px; }
+.open-edda-galley .ge-toolbar-button:focus-visible,
+.open-edda-galley .ge-toolbar-select:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.theme-choice { border-color: var(--border); background: var(--card); }
+.theme-choice:hover { background: var(--muted); }
+.theme-choice[data-selected="true"] { border-color: var(--primary); background: var(--accent); }
+.theme-choice:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+::selection { background: var(--selection-background); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
 @media (max-width: 760px) {
@@ -252,40 +241,6 @@ select {
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-}
-
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -296,4 +251,52 @@ select {
   html {
     @apply font-sans;
   }
+}
+
+/* Give the manuscript room on laptops; larger displays honor persisted panel widths. */
+@media (min-width: 768px) and (max-width: 1279px) {
+  .workspace-navigation { width: 220px !important; padding: 12px; }
+  .workspace-tools { width: 300px !important; padding: 12px; }
+}
+
+/* Shared browser surfaces use the active Galley palette. */
+html { scrollbar-color: var(--ge-color-scrollbar-thumb) var(--background); }
+a { text-underline-offset: 0.2em; }
+.open-edda-galley { --ge-h1-size: clamp(1.55em, 3vw, 2em); }
+
+@media (max-width: 767px) {
+  .workspace-mobile-modes [data-slot="button"] { min-height: 40px; }
+  .open-edda-galley .ge-toolbar-button { min-width: 40px; height: 40px; }
+  .open-edda-galley .ge-toolbar-select { min-height: 40px; }
+}
+
+@media (pointer: coarse) {
+  [data-slot="button"], [data-slot="tabs-trigger"] { min-height: 44px; }
+  [data-slot="input"] { min-height: 44px; }
+}
+
+/* Dense writing controls; retain touch hit areas as type becomes smaller. */
+@theme { --text-sm: 0.8125rem; --text-base: 0.875rem; }
+body { font-size: 14px; }
+summary { list-style: none; }
+summary::-webkit-details-marker { display: none; }
+summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+@media (max-width: 767px) {
+  .writing-workspace { height: var(--workspace-viewport-height, 100dvh); }
+  .writing-workspace > header { min-height: 44px; padding: 2px 12px; gap: 8px; }
+  .workspace-editor-stage { padding: 0 12px 12px; }
+  .workspace-prose-column { padding: 0; gap: 8px; }
+  .chapter-header { flex-direction: row; align-items: center; gap: 8px; padding-bottom: 0; }
+  .chapter-details { flex: 1; }
+  .chapter-save { justify-content: flex-end; }
+  .chapter-save > span:not([role="alert"]) { display: none; }
+  .chapter-save [role="alert"] { max-width: 140px; }
+  .open-edda-galley { --ge-font-size: 14px; --ge-line-height: 1.55; --ge-h1-size: 1.45em; }
+  .open-edda-galley .cm-content { padding-top: 8px; }
+  .open-edda-galley .ge-toolbar { display: none; }
+  .mobile-formatting[open] ~ .open-edda-galley .ge-toolbar { display: flex; }
+  .open-edda-galley .ge-toolbar-toggle { display: none; }
+  .writing-workspace:has(.cm-focused) > nav { display: none; }
+  .writing-workspace:has(.cm-focused) .mobile-formatting:not([open]) { display: none; }
 }

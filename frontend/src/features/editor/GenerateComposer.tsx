@@ -33,8 +33,8 @@ export function GenerateComposer({ disabled, helperText, onGenerate }: GenerateC
         disabled={disabled}
         className="min-h-24 resize-y bg-background"
       />
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">{helperText}</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="min-w-0 flex-1 text-sm text-muted-foreground">{helperText}</p>
         <Button type="button" disabled={disabled} onClick={onGenerate}>
           <Sparkles data-icon="inline-start" aria-hidden="true" />
           Generate

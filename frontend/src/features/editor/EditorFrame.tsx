@@ -1,7 +1,8 @@
-import { ClipboardCheck, FileText, MessageSquarePlus, PenLine, Save } from "lucide-react";
+import { editorToolbarIcons } from "./editorToolbarIcons";
+import { ClipboardCheck, FileText, MessageSquarePlus, PenLine, Save, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { GalleyEditor, type GalleyMode } from "@inky/galley-editor";
+import { GalleyEditor, type GalleyMode } from "@inkyquill/galley-editor";
 
 import { updateContent } from "../../api";
 import { Button } from "../../shared/ui/button";
@@ -150,7 +151,7 @@ export function EditorFrame({
 
   if (contentLoading) {
     return (
-      <article className="workspace-prose-column flex min-h-80 w-full max-w-3xl items-center justify-center rounded-md border border-border bg-background px-6 py-7 text-sm text-muted-foreground shadow-sm">
+      <article className="workspace-prose-column flex min-h-80 w-full max-w-3xl items-center justify-center bg-background px-6 py-7 text-sm text-muted-foreground">
         Loading content...
       </article>
     );
@@ -159,7 +160,7 @@ export function EditorFrame({
   if (contentError) {
     return (
       <article
-        className="workspace-prose-column flex min-h-80 w-full max-w-3xl items-center justify-center rounded-md border border-border bg-background px-6 py-7 text-sm text-destructive shadow-sm"
+        className="workspace-prose-column flex min-h-80 w-full max-w-3xl items-center justify-center bg-background px-6 py-7 text-sm text-destructive"
         role="alert"
       >
         Could not load content: {contentError}
@@ -169,16 +170,16 @@ export function EditorFrame({
 
   if (!content) {
     return (
-      <article className="workspace-prose-column flex min-h-80 w-full max-w-3xl items-center justify-center rounded-md border border-border bg-background px-6 py-7 text-sm text-muted-foreground shadow-sm">
+      <article className="workspace-prose-column flex min-h-80 w-full max-w-3xl items-center justify-center bg-background px-6 py-7 text-sm text-muted-foreground">
         Select content to start drafting.
       </article>
     );
   }
 
   return (
-    <article className="workspace-prose-column relative flex w-full max-w-3xl flex-col gap-5 rounded-md border border-border bg-background px-4 py-5 shadow-sm sm:px-6 sm:py-7">
-      <header className="flex flex-col gap-2 border-b border-border pb-4">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+    <article className="workspace-prose-column relative flex w-full max-w-3xl flex-col gap-5 bg-background px-4 py-5 sm:px-6 sm:py-7">
+      <header className="chapter-header flex flex-col gap-2 border-b border-border pb-4">
+        <div className="hidden flex-wrap items-center gap-2 text-xs text-muted-foreground md:flex">
           <FileText data-icon="inline-start" aria-hidden="true" />
           <span className="capitalize">{formatKind(content.kind)}</span>
           <span aria-hidden="true">/</span>
@@ -186,8 +187,14 @@ export function EditorFrame({
           <span aria-hidden="true">/</span>
           <span className="capitalize">{mode} mode</span>
         </div>
-        <h2 className="text-2xl font-semibold text-foreground">{content.title}</h2>
-        <div className="flex flex-wrap items-center gap-2">
+        <h2 className="hidden text-xl font-semibold text-foreground md:block">{content.title}</h2>
+        <details className="chapter-details min-w-0 md:hidden">
+          <summary className="flex min-h-10 cursor-pointer items-center gap-1 text-sm font-medium">
+            <span className="min-w-0 flex-1 truncate">{content.title}</span><ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />
+          </summary>
+          <p className="pb-2 text-xs text-muted-foreground">{formatKind(content.kind)} · Revision {content.currentRevision} · {mode} mode</p>
+        </details>
+        <div className="chapter-save flex flex-wrap items-center gap-2">
           <Button
             type="button"
             variant="secondary"
@@ -211,6 +218,9 @@ export function EditorFrame({
       </header>
 
       <div className="relative">
+        <details className="mobile-formatting md:hidden">
+          <summary className="flex min-h-10 cursor-pointer items-center gap-1 text-xs text-muted-foreground"><SlidersHorizontal className="size-3.5" aria-hidden="true" />Formatting</summary>
+        </details>
         {selection ? (
           <SelectionActions className="selection-bubble absolute right-2 top-2 z-10 hidden items-center gap-2 rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-md md:flex" />
         ) : null}
@@ -221,13 +231,16 @@ export function EditorFrame({
           placeholder="No draft text yet."
           ariaLabel={`${content.title} draft text`}
           mode={workspaceModeToGalleyMode[mode]}
+          theme="inherit"
+          toolbar={{ icons: editorToolbarIcons }}
+          footer={{ wordCount: true, characterCount: false, logo: false }}
           minRows={18}
           className="open-edda-galley"
           surface={{
             className: "open-edda-galley-surface",
-            contentPadding: "1rem",
-            toolbarPadding: "0.5rem 0.75rem",
-            footerPadding: "0.5rem 0.75rem",
+            contentPadding: "1.5rem 0",
+            toolbarPadding: "0.5rem 0",
+            footerPadding: "0.5rem 0",
           }}
         />
       </div>

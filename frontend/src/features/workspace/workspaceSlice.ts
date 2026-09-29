@@ -32,9 +32,9 @@ export type WorkspaceState = WorkspaceProjectState & {
 };
 
 export const initialWorkspaceState: WorkspaceState = {
-  mode: "assistant",
+  mode: "draft",
   leftDrawerOpen: true,
-  rightDrawerOpen: true,
+  rightDrawerOpen: false,
   leftDrawerWidth: 304,
   rightDrawerWidth: 380,
   activeLeftTab: "contents",

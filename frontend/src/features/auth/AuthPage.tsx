@@ -53,7 +53,7 @@ export function AuthPage() {
     <main className="app-shell">
       <section className="auth-form-section" aria-labelledby="auth-page-title">
         <header>
-          <h1 id="auth-page-title">Writer</h1>
+          <h1 id="auth-page-title">Edda</h1>
           <p>Sign in to your writing workspace.</p>
         </header>
 

@@ -154,3 +154,8 @@ describe("workspaceSlice", () => {
     });
   });
 });
+
+it("starts a fresh writing workspace with the manuscript and a quiet assistant", () => {
+  expect(initialWorkspaceState.mode).toBe("draft");
+  expect(initialWorkspaceState.rightDrawerOpen).toBe(false);
+});

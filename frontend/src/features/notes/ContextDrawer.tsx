@@ -110,7 +110,7 @@ export function ContextDrawer({
               No content found for this kind.
             </p>
           ) : (
-            <nav className="flex flex-col gap-2" aria-label="Content items">
+            <nav className="flex flex-col gap-0.5" aria-label="Content items">
               {contentItems.map((item) => (
                 <Button
                   key={item.id}
@@ -121,7 +121,6 @@ export function ContextDrawer({
                 >
                   <span className="flex min-w-0 flex-col items-start gap-0.5">
                     <span className="line-clamp-2 text-sm font-medium">{item.title}</span>
-                    <span className="text-xs text-muted-foreground">Revision {item.currentRevision}</span>
                   </span>
                 </Button>
               ))}

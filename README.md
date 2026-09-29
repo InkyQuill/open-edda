@@ -140,3 +140,7 @@ See [docs/agent-tools.md](docs/agent-tools.md) for the current agent tool catalo
 ## Notes
 
 This is designed for self-hosted/local use first. Multi-user collaboration and broader deployment hardening are deferred until the single-author file-first workflow, lightweight checkpoints, and local/server mobility are stable.
+
+## Interface design and appearance
+
+Read [DESIGN.md](DESIGN.md) before changing the interface. Edda uses the published `@inkyquill/galley-editor` and `@inkyquill/galley-themes` packages. The default palette is Thoth Light; Thoth Dark and the other catalog palettes are available in **Settings → Appearance**. The chosen palette applies to the application and editor and is saved to the authenticated author's SQLite-backed profile preferences through `GET` / `PUT /api/auth/preferences`.
