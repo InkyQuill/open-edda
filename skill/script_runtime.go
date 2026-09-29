@@ -20,6 +20,10 @@ const (
 	defaultScriptMaxStdoutBytes int64 = 65536
 	defaultScriptMaxStderrBytes int64 = 16384
 	minScriptMaxStreamBytes     int64 = 1024
+
+	maxContentBodyBytes     int64 = 512 * 1024
+	maxEnvelopeBodyBytes    int64 = 2 * 1024 * 1024
+	contentTruncationMarker       = "\n\n... [truncated; chapter exceeds size limit] ...\n"
 )
 
 func (s *Service) ListScriptAudits(ctx context.Context, projectID, skillID string) ([]ScriptAudit, error) {
@@ -290,28 +294,54 @@ func (s *Service) buildScriptEnvelope(ctx context.Context, project store.StoryPr
 			Arguments:  input.Arguments,
 		},
 	}
+
+	var totalBodyBytes int64
 	for _, contentID := range envelope.Inputs.ContentIDs {
-		if _, err := s.queries.GetContentItem(ctx, store.GetContentItemParams{ID: contentID, ProjectID: input.ProjectID}); err != nil {
+		item, err := s.queries.GetContentItem(ctx, store.GetContentItemParams{ID: contentID, ProjectID: input.ProjectID})
+		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return runtime.Envelope{}, ErrInvalidInput
 			}
 			return runtime.Envelope{}, fmt.Errorf("get content item: %w", err)
 		}
+		body := item.BodyMarkdown
+		truncated := false
+		if int64(len(body)) > maxContentBodyBytes {
+			body = body[:maxContentBodyBytes] + contentTruncationMarker
+			truncated = true
+		}
+		totalBodyBytes += int64(len(body))
+		if totalBodyBytes > maxEnvelopeBodyBytes {
+			return runtime.Envelope{}, fmt.Errorf("total content body size %d bytes exceeds envelope limit %d bytes", totalBodyBytes, maxEnvelopeBodyBytes)
+		}
+		envelope.Inputs.ContentItems = append(envelope.Inputs.ContentItems, runtime.ContentInput{
+			ID:              item.ID,
+			Kind:            item.Kind,
+			Title:           item.Title,
+			BodyMarkdown:    body,
+			MetadataJSON:    item.MetadataJson,
+			CurrentRevision: item.CurrentRevision,
+			Truncated:       truncated,
+		})
 	}
+
 	for _, section := range input.EntrySections {
 		contentID := strings.TrimSpace(section.ContentID)
 		heading := strings.TrimSpace(section.Heading)
 		if contentID == "" || heading == "" {
 			return runtime.Envelope{}, ErrInvalidInput
 		}
-		if err := s.validateEntrySection(ctx, input.ProjectID, contentID, heading); err != nil {
+		sectionBody, err := s.validateEntrySection(ctx, input.ProjectID, contentID, heading)
+		if err != nil {
 			return runtime.Envelope{}, err
 		}
 		envelope.Inputs.EntrySections = append(envelope.Inputs.EntrySections, runtime.EntrySectionRef{
-			ContentID: contentID,
-			Heading:   heading,
+			ContentID:    contentID,
+			Heading:      heading,
+			BodyMarkdown: sectionBody,
 		})
 	}
+
 	for _, assetPath := range dedupeStrings(input.AssetPaths) {
 		file, err := s.queries.GetSkillFile(ctx, store.GetSkillFileParams{
 			ProjectID:    input.ProjectID,
@@ -335,20 +365,20 @@ func (s *Service) buildScriptEnvelope(ctx context.Context, project store.StoryPr
 	return envelope, nil
 }
 
-func (s *Service) validateEntrySection(ctx context.Context, projectID, contentID, heading string) error {
+func (s *Service) validateEntrySection(ctx context.Context, projectID, contentID, heading string) (string, error) {
 	sections, err := s.queries.ListEntrySections(ctx, store.ListEntrySectionsParams{
 		ContentItemID: contentID,
 		ProjectID:     projectID,
 	})
 	if err != nil {
-		return fmt.Errorf("list entry sections: %w", err)
+		return "", fmt.Errorf("list entry sections: %w", err)
 	}
 	for _, section := range sections {
 		if section.Heading == heading {
-			return nil
+			return section.BodyMarkdown, nil
 		}
 	}
-	return ErrInvalidInput
+	return "", ErrInvalidInput
 }
 
 func (s *Service) persistScriptRun(ctx context.Context, input RunScriptInput, skillFileID, approvalID string, envelope runtime.Envelope, result runtime.RunResult) (ScriptRun, error) {
@@ -428,7 +458,7 @@ func runtimeFromScriptPath(path string) string {
 }
 
 func defaultScriptExpectedInputsJSON() string {
-	return `{"contentIds":"optional","entrySections":"optional","assets":"optional","arguments":"optional"}`
+	return `{"contentIds":"optional","contentItems":"auto_populated_from_contentIds","entrySections":"optional","assets":"optional","arguments":"optional"}`
 }
 
 func defaultScriptExpectedOutputsJSON() string {

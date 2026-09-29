@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"net/http"
@@ -9,6 +8,7 @@ import (
 
 	"git.inkyquill.net/inky/writer/agent"
 	"git.inkyquill.net/inky/writer/auth"
+	"git.inkyquill.net/inky/writer/internal/httputil"
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/skill"
 	"github.com/go-chi/chi/v5"
@@ -102,9 +102,7 @@ func projectIDFromPath(path string) (string, bool) {
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
+	httputil.WriteJSON(w, status, value)
 }
 
 func spaHandler(staticFS fs.FS) http.HandlerFunc {

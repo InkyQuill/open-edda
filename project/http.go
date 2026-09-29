@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 	"strings"
 
 	"git.inkyquill.net/inky/writer/auth"
+	"git.inkyquill.net/inky/writer/internal/httputil"
 	"git.inkyquill.net/inky/writer/markdownio"
 	"github.com/go-chi/chi/v5"
 )
@@ -81,8 +81,8 @@ func (h httpHandler) listProjects(w http.ResponseWriter, r *http.Request) {
 
 func (h httpHandler) createProject(w http.ResponseWriter, r *http.Request) {
 	var input createProjectRequest
-	if err := decodeJSON(r, &input); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeMalformedJSON(w, err)
 		return
 	}
 
@@ -186,8 +186,8 @@ func (h httpHandler) listContent(w http.ResponseWriter, r *http.Request) {
 
 func (h httpHandler) createContent(w http.ResponseWriter, r *http.Request) {
 	var input createContentRequest
-	if err := decodeJSON(r, &input); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeMalformedJSON(w, err)
 		return
 	}
 	if !validContentKind(input.Kind) {
@@ -225,8 +225,8 @@ func (h httpHandler) getContent(w http.ResponseWriter, r *http.Request) {
 
 func (h httpHandler) updateContent(w http.ResponseWriter, r *http.Request) {
 	var input updateContentRequest
-	if err := decodeJSON(r, &input); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeMalformedJSON(w, err)
 		return
 	}
 
@@ -394,15 +394,8 @@ func writeZipFile(writer io.Writer, path string) error {
 	return errors.Join(copyErr, closeErr)
 }
 
-func decodeJSON(r *http.Request, value any) error {
-	decoder := json.NewDecoder(r.Body)
-	if err := decoder.Decode(value); err != nil {
-		return err
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return errors.New("trailing JSON data")
-	}
-	return nil
+func decodeJSON(w http.ResponseWriter, r *http.Request, value any) error {
+	return httputil.DecodeJSON(w, r, value, httputil.DefaultJSONBodyLimit)
 }
 
 func validContentKind(kind ContentKind) bool {
@@ -429,8 +422,14 @@ func writeError(w http.ResponseWriter, err error) {
 	}
 }
 
+func writeMalformedJSON(w http.ResponseWriter, err error) {
+	if httputil.IsRequestTooLarge(err) {
+		writeJSON(w, http.StatusRequestEntityTooLarge, errorResponse{Error: "request body too large"})
+		return
+	}
+	writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+}
+
 func writeJSON(w http.ResponseWriter, status int, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
+	httputil.WriteJSON(w, status, value)
 }

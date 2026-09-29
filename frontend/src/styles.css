@@ -69,46 +69,6 @@ select {
   color: var(--app-text);
 }
 
-.project-dashboard {
-  max-width: 960px;
-  margin: 0 auto;
-  display: grid;
-  gap: 24px;
-}
-
-.project-list {
-  display: grid;
-  gap: 12px;
-}
-
-.project-row {
-  appearance: none;
-  text-align: left;
-  border: 1px solid var(--app-border);
-  border-radius: 8px;
-  background: var(--app-surface);
-  color: var(--app-text);
-  padding: 16px;
-  cursor: pointer;
-}
-
-.project-row[data-active="true"] {
-  border-color: #3b82f6;
-}
-
-.project-row-title {
-  display: block;
-  margin: 0 0 4px;
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.project-row-meta {
-  display: block;
-  margin: 0;
-  color: var(--app-text-muted);
-}
-
 .auth-form-section {
   max-width: 400px;
   margin: 80px auto;

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -640,6 +641,54 @@ func TestSearchContentUsesFTSIndex(t *testing.T) {
 	}
 	if items[0].ID != "item-1" {
 		t.Fatalf("SearchContent() item ID = %q, want item-1", items[0].ID)
+	}
+}
+
+func TestSearchContentCandidatesHasSafetyLimit(t *testing.T) {
+	db := openMigratedProjectCoreDB(t)
+	defer db.Close()
+
+	if _, err := db.Exec(`
+		INSERT INTO authors (id, email, password_hash, created_at)
+		VALUES ('author-limit', 'limit@example.com', 'hash', '2026-06-13T00:00:00Z');
+		INSERT INTO story_projects (id, author_id, title, slug, language, created_at, updated_at)
+		VALUES ('project-limit', 'author-limit', 'Project Limit', 'project-limit', 'en', '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z');
+	`); err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
+
+	stmt, err := db.Prepare(`
+		INSERT INTO content_items (
+			id, project_id, kind, title, slug, body_markdown, metadata_json,
+			sort_order, current_revision, created_at, updated_at
+		) VALUES (?, 'project-limit', 'chapter', ?, ?, ?, '{}', ?, 1, '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z');
+	`)
+	if err != nil {
+		t.Fatalf("prepare content insert: %v", err)
+	}
+	defer stmt.Close()
+
+	for i := 0; i < 1005; i++ {
+		if _, err := stmt.Exec(
+			fmt.Sprintf("limit-item-%04d", i),
+			fmt.Sprintf("Needle Item %04d", i),
+			fmt.Sprintf("needle-item-%04d", i),
+			fmt.Sprintf("needle body %04d", i),
+			i,
+		); err != nil {
+			t.Fatalf("insert content item %d: %v", i, err)
+		}
+	}
+
+	items, err := New(db).SearchContentCandidates(context.Background(), SearchContentCandidatesParams{
+		Query:     "needle",
+		ProjectID: "project-limit",
+	})
+	if err != nil {
+		t.Fatalf("SearchContentCandidates() error = %v", err)
+	}
+	if len(items) != 1000 {
+		t.Fatalf("SearchContentCandidates() returned %d items, want 1000", len(items))
 	}
 }
 

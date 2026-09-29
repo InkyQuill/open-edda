@@ -624,6 +624,7 @@ FROM content_search(CAST(?1 AS TEXT))
 JOIN content_items ON content_items.rowid = content_search.rowid
 WHERE content_items.project_id = ?2
 ORDER BY rank
+LIMIT 1000
 `
 
 type SearchContentCandidatesParams struct {

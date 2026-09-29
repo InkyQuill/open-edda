@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { shallowEqual, useDispatch, useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { listContent, listProjects } from "../../api";
+import { createContent, listContent, listProjects } from "../../api";
 import { Button } from "../../shared/ui/button";
 import type { ContentItem, ContentKind, StoryProject } from "../../types";
 import { assistantActions } from "../assistant/assistantSlice";
@@ -24,6 +24,8 @@ type WorkspaceRouteParams = {
   contentId?: string;
 };
 
+type WorkspaceRouteIdentity = WorkspaceRouteParams;
+
 type WorkspaceRootState = {
   workspace: WorkspaceState;
 };
@@ -39,6 +41,14 @@ function toContentKind(value: string): ContentKind {
   return contentKinds.has(value as ContentKind) ? (value as ContentKind) : "chapter";
 }
 
+function isSameRouteIdentity(left: WorkspaceRouteIdentity, right: WorkspaceRouteIdentity): boolean {
+  return (
+    left.projectId === right.projectId &&
+    left.contentKind === right.contentKind &&
+    left.contentId === right.contentId
+  );
+}
+
 export function WorkspacePage() {
   const { projectId, contentKind: routeContentKind, contentId } = useParams<WorkspaceRouteParams>();
   const navigate = useNavigate();
@@ -50,8 +60,13 @@ export function WorkspacePage() {
   const [projectError, setProjectError] = useState<string | null>(null);
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
   const [contentError, setContentError] = useState<string | null>(null);
+  const [contentCreateError, setContentCreateError] = useState<string | null>(null);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(false);
+  const [contentCreating, setContentCreating] = useState(false);
+  const createAbortControllerRef = useRef<AbortController | null>(null);
+  const routeIdentityRef = useRef<WorkspaceRouteIdentity>({ projectId, contentKind: routeContentKind, contentId });
+  routeIdentityRef.current = { projectId, contentKind: routeContentKind, contentId };
   const contentKind = routeContentKind
     ? toContentKind(routeContentKind)
     : toContentKind(workspace.lastContentKind);
@@ -96,6 +111,19 @@ export function WorkspacePage() {
   }, [dispatch, routeContentKind]);
 
   useEffect(() => {
+    abortPendingCreate();
+  }, [routeContentKind, contentId]);
+
+  useEffect(() => {
+    setContentCreating(false);
+
+    return () => {
+      createAbortControllerRef.current?.abort();
+      createAbortControllerRef.current = null;
+    };
+  }, [projectId]);
+
+  useEffect(() => {
     if (!projectId || hydratedProjectId !== projectId) return;
     saveProjectWorkspaceState(projectId, projectWorkspaceState);
   }, [hydratedProjectId, projectId, projectWorkspaceState]);
@@ -109,6 +137,7 @@ export function WorkspacePage() {
     const abortController = new AbortController();
     setContentLoading(true);
     setContentError(null);
+    setContentCreateError(null);
     setContentItems([]);
 
     void listContent(projectId, contentKind, abortController.signal)
@@ -147,8 +176,99 @@ export function WorkspacePage() {
     return contentItems[0] ?? null;
   }, [contentId, contentItems, workspace.fallbackContentId]);
 
+  function contentKindLabel(kind: ContentKind): string {
+    switch (kind) {
+      case "chapter":
+        return "Chapter";
+      case "story_bible_entry":
+        return "Story bible entry";
+      case "writing_brief":
+        return "Writing brief";
+      case "project_note":
+        return "Project note";
+    }
+  }
+
+  function defaultBodyForKind(kind: ContentKind): string {
+    switch (kind) {
+      case "chapter":
+        return "";
+      case "story_bible_entry":
+        return "## Overview\n\n";
+      case "writing_brief":
+        return "## Brief\n\n";
+      case "project_note":
+        return "## Note\n\n";
+    }
+  }
+
+  function abortPendingCreate(): void {
+    const abortController = createAbortControllerRef.current;
+    if (!abortController) return;
+    abortController.abort();
+    createAbortControllerRef.current = null;
+    setContentCreating(false);
+  }
+
+  function isCurrentCreateContext(
+    abortController: AbortController,
+    routeIdentity: WorkspaceRouteIdentity,
+  ): boolean {
+    return (
+      !abortController.signal.aborted &&
+      createAbortControllerRef.current === abortController &&
+      isSameRouteIdentity(routeIdentityRef.current, routeIdentity)
+    );
+  }
+
+  function handleCreateContent(kind: ContentKind): void {
+    if (!projectId || contentLoading || createAbortControllerRef.current) return;
+    const abortController = new AbortController();
+    const routeIdentity = routeIdentityRef.current;
+    createAbortControllerRef.current = abortController;
+    setContentCreating(true);
+    setContentCreateError(null);
+
+    void (async () => {
+      const targetItems = contentKind === kind
+        ? contentItems
+        : await listContent(projectId, kind, abortController.signal);
+      const nextNumber = targetItems.length + 1;
+
+      return createContent(projectId, {
+        kind,
+        title: `${contentKindLabel(kind)} ${nextNumber}`,
+        bodyMarkdown: defaultBodyForKind(kind),
+        metadataJson: "{}",
+        sortOrder: nextNumber,
+        reason: "created from workspace",
+      }, abortController.signal);
+    })()
+      .then((item) => {
+        if (!isCurrentCreateContext(abortController, routeIdentity)) return;
+        createAbortControllerRef.current = null;
+        setContentCreating(false);
+        setContentItems((items) => (item.kind === contentKind ? [...items, item] : items));
+        dispatch(workspaceActions.setLastContentKind(item.kind));
+        dispatch(workspaceActions.setFallbackContentId(item.id));
+        navigate(
+          `/projects/${encodeURIComponent(projectId)}/content/${encodeURIComponent(item.kind)}/${encodeURIComponent(item.id)}`,
+        );
+      })
+      .catch((cause: unknown) => {
+        if (!isCurrentCreateContext(abortController, routeIdentity)) return;
+        setContentCreateError(cause instanceof Error ? cause.message : "Could not create content");
+      })
+      .finally(() => {
+        if (!isCurrentCreateContext(abortController, routeIdentity)) return;
+        createAbortControllerRef.current = null;
+        setContentCreating(false);
+      });
+  }
+
   function handleSelectContent(item: ContentItem): void {
     if (!projectId) return;
+    abortPendingCreate();
     dispatch(workspaceActions.setFallbackContentId(item.id));
     navigate(
       `/projects/${encodeURIComponent(projectId)}/content/${encodeURIComponent(item.kind)}/${encodeURIComponent(item.id)}`,
@@ -157,6 +277,7 @@ export function WorkspacePage() {
 
   function handleContentKindChange(kind: ContentKind): void {
     if (!projectId) return;
+    abortPendingCreate();
     dispatch(workspaceActions.setLastContentKind(kind));
     navigate(`/projects/${encodeURIComponent(projectId)}`);
   }
@@ -205,8 +326,11 @@ export function WorkspacePage() {
       contentItems={contentItems}
       contentLoading={contentLoading}
       contentError={contentError}
+      contentCreateError={contentCreateError}
+      contentCreating={contentCreating}
       activeContentKind={contentKind}
       selectedContent={selectedContent}
+      onCreateContent={handleCreateContent}
       onSelectContent={handleSelectContent}
       onContentKindChange={handleContentKindChange}
       onContentSaved={handleContentSaved}

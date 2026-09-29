@@ -32,8 +32,7 @@ function isDrawerTab(
     value === "notes" ||
     value === "chat" ||
     value === "tools" ||
-    value === "revisions" ||
-    value === "model"
+    value === "revisions"
   );
 }
 

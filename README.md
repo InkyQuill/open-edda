@@ -46,6 +46,7 @@ Run the backend API/server:
 
 ```bash
 OPEN_EDDA_JWT_SECRET="replace-with-at-least-32-bytes-secret" \
+OPEN_EDDA_API_KEY_ENCRYPTION_SECRET="replace-with-another-32-bytes-secret" \
 OPEN_EDDA_BOOTSTRAP_EMAIL="author@example.com" \
 OPEN_EDDA_BOOTSTRAP_PASSWORD="change-this-password" \
 go run -tags sqlite_fts5 .
@@ -60,6 +61,7 @@ cd frontend
 bun run build
 cd ..
 OPEN_EDDA_JWT_SECRET="replace-with-at-least-32-bytes-secret" \
+OPEN_EDDA_API_KEY_ENCRYPTION_SECRET="replace-with-another-32-bytes-secret" \
 go run -tags sqlite_fts5 .
 ```
 
@@ -74,6 +76,7 @@ Environment variables:
 | `OPEN_EDDA_MIGRATIONS_PATH` | `migrations` | Goose migrations directory |
 | `OPEN_EDDA_STATIC_PATH` | `frontend/dist` | Built frontend directory |
 | `OPEN_EDDA_JWT_SECRET` | required | JWT signing secret, at least 32 bytes |
+| `OPEN_EDDA_API_KEY_ENCRYPTION_SECRET` | required | Dedicated provider API-key encryption secret, at least 32 bytes |
 | `OPEN_EDDA_BOOTSTRAP_EMAIL` | optional | Initial single-user email; requires `OPEN_EDDA_BOOTSTRAP_PASSWORD` |
 | `OPEN_EDDA_BOOTSTRAP_PASSWORD` | optional | Initial single-user password; requires `OPEN_EDDA_BOOTSTRAP_EMAIL` |
 

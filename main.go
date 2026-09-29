@@ -52,6 +52,10 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 	if err != nil {
 		return nil, func() {}, err
 	}
+	apiKeyEncryptionSecret, err := apiKeyEncryptionSecret()
+	if err != nil {
+		return nil, func() {}, err
+	}
 
 	db, err := store.Open(dbPath)
 	if err != nil {
@@ -75,6 +79,7 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 	}
 	projectService := project.NewService(db)
 	agentService := agent.NewService(db, projectService, nil)
+	agentService.SetEncryptionSecret(apiKeyEncryptionSecret)
 	skillService := skill.NewService(db)
 	agentService.SetSkillService(skillService)
 
@@ -120,6 +125,16 @@ func jwtSecret() (string, error) {
 		return secret, nil
 	}
 	return "", fmt.Errorf("JWT secret is not configured; set OPEN_EDDA_JWT_SECRET or OPEN_EDDA_SECRET")
+}
+
+func apiKeyEncryptionSecret() (string, error) {
+	if secret := firstEnv("OPEN_EDDA_API_KEY_ENCRYPTION_SECRET", "WRITER_API_KEY_ENCRYPTION_SECRET"); secret != "" {
+		if err := auth.ValidateSecret(secret); err != nil {
+			return "", fmt.Errorf("API key encryption secret: %w", err)
+		}
+		return secret, nil
+	}
+	return "", fmt.Errorf("API key encryption secret is not configured; set OPEN_EDDA_API_KEY_ENCRYPTION_SECRET or WRITER_API_KEY_ENCRYPTION_SECRET")
 }
 
 func validateStaticPath(staticPath string) error {

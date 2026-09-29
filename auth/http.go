@@ -1,28 +1,47 @@
 package auth
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
+	"sync"
+	"time"
 
+	"git.inkyquill.net/inky/writer/internal/httputil"
 	"github.com/go-chi/chi/v5"
 )
 
 func RegisterRoutes(r chi.Router, service *Service) {
+	registerRoutesWithLoginLimiter(r, service, newLoginLimiter(5, 2*time.Second, 1000))
+}
+
+func registerRoutesWithLoginLimiter(r chi.Router, service *Service, limiter *loginLimiter) {
 	if service == nil {
 		return
 	}
-	h := httpHandler{service: service}
+	if limiter == nil {
+		limiter = newLoginLimiter(5, 2*time.Second, 1000)
+	}
+	h := httpHandler{service: service, loginLimiter: limiter}
 	r.Post("/auth/login", h.login)
 }
 
 type httpHandler struct {
-	service *Service
+	service      *Service
+	loginLimiter *loginLimiter
 }
 
 func (h *httpHandler) login(w http.ResponseWriter, r *http.Request) {
+	if !h.loginLimiter.allow(httputil.RemoteIP(r)) {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many login attempts"})
+		return
+	}
+
 	var req LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httputil.DecodeJSON(w, r, &req, httputil.DefaultJSONBodyLimit); err != nil {
+		if httputil.IsRequestTooLarge(err) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "request body too large"})
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
@@ -45,7 +64,108 @@ func (h *httpHandler) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
+	httputil.WriteJSON(w, status, value)
+}
+
+type loginLimiter struct {
+	mu          sync.Mutex
+	burst       int
+	refillEvery time.Duration
+	maxEntries  int
+	entries     map[string]*loginLimitEntry
+}
+
+type loginLimitEntry struct {
+	tokens   int
+	last     time.Time
+	lastSeen time.Time
+}
+
+func newLoginLimiter(burst int, refillEvery time.Duration, maxEntries int) *loginLimiter {
+	return &loginLimiter{
+		burst:       burst,
+		refillEvery: refillEvery,
+		maxEntries:  maxEntries,
+		entries:     make(map[string]*loginLimitEntry),
+	}
+}
+
+func (l *loginLimiter) allow(key string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	now := time.Now()
+	entry, ok := l.entries[key]
+	if !ok {
+		entry = &loginLimitEntry{tokens: l.burst, last: now, lastSeen: now}
+		l.entries[key] = entry
+	}
+	l.refill(entry, now)
+	entry.lastSeen = now
+
+	if l.maxEntries > 0 && len(l.entries) > l.maxEntries {
+		l.prune(now, key)
+	}
+
+	if entry.tokens <= 0 {
+		return false
+	}
+	entry.tokens--
+	return true
+}
+
+func (l *loginLimiter) refill(entry *loginLimitEntry, now time.Time) {
+	if entry.tokens >= l.burst || l.refillEvery <= 0 {
+		entry.tokens = l.burst
+		entry.last = now
+		return
+	}
+
+	refills := int(now.Sub(entry.last) / l.refillEvery)
+	if refills <= 0 {
+		return
+	}
+
+	entry.tokens += refills
+	if entry.tokens >= l.burst {
+		entry.tokens = l.burst
+		entry.last = now
+		return
+	}
+	entry.last = entry.last.Add(time.Duration(refills) * l.refillEvery)
+}
+
+func (l *loginLimiter) prune(now time.Time, activeKey string) {
+	for key, entry := range l.entries {
+		if key == activeKey {
+			continue
+		}
+		if entry.tokens < l.burst {
+			l.refill(entry, now)
+		}
+		if entry.tokens >= l.burst {
+			delete(l.entries, key)
+		}
+		if len(l.entries) <= l.maxEntries {
+			return
+		}
+	}
+
+	for len(l.entries) > l.maxEntries {
+		var oldestKey string
+		var oldestSeen time.Time
+		for key, entry := range l.entries {
+			if key == activeKey {
+				continue
+			}
+			if oldestKey == "" || entry.lastSeen.Before(oldestSeen) {
+				oldestKey = key
+				oldestSeen = entry.lastSeen
+			}
+		}
+		if oldestKey == "" {
+			return
+		}
+		delete(l.entries, oldestKey)
+	}
 }

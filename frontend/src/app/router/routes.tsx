@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthPage } from "../../features/auth/AuthPage";
 import { ProjectsPage } from "../../features/projects/ProjectsPage";
+import { SettingsPage } from "../../features/settings/SettingsPage";
 import { WorkspacePage } from "../../features/workspace/WorkspacePage";
 import { RequireAuth } from "./RequireAuth";
 
@@ -10,6 +11,7 @@ export function AppRoutes() {
       <Route path="/login" element={<AuthPage />} />
       <Route element={<RequireAuth />}>
         <Route path="/projects" element={<ProjectsPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="/projects/:projectId" element={<WorkspacePage />} />
         <Route
           path="/projects/:projectId/content/:contentKind/:contentId"

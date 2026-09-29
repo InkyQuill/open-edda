@@ -1,13 +1,17 @@
 import { AlertCircle, Loader2, Settings2 } from "lucide-react";
 import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { Link } from "react-router-dom";
 
 import type { AppDispatch, RootState } from "../../app/store/store";
 import { Button } from "../../shared/ui/button";
-import { workspaceActions } from "../workspace/workspaceSlice";
 import { loadModelVariants, loadProviderConfigs } from "./modelSettingsThunks";
 
-export function ModelStatus() {
+type ModelStatusProps = {
+  projectId: string;
+};
+
+export function ModelStatus({ projectId }: ModelStatusProps) {
   const dispatch = useDispatch<AppDispatch>();
   const {
     activeModelVariantId,
@@ -46,13 +50,15 @@ export function ModelStatus() {
           <p className="text-xs text-muted-foreground">{selectedProvider?.name ?? "No provider selected"}</p>
         </div>
         <Button
+          asChild
           type="button"
           variant="outline"
           size="icon-sm"
           aria-label="Open model settings"
-          onClick={() => dispatch(workspaceActions.setActiveRightTab("model"))}
         >
-          {isLoading ? <Loader2 className="animate-spin" /> : <Settings2 />}
+          <Link to={`/settings?projectId=${encodeURIComponent(projectId)}`}>
+            {isLoading ? <Loader2 className="animate-spin" /> : <Settings2 />}
+          </Link>
         </Button>
       </div>
 

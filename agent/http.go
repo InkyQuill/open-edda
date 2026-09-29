@@ -4,13 +4,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 
 	"git.inkyquill.net/inky/writer/auth"
+	"git.inkyquill.net/inky/writer/internal/httputil"
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/skill"
 	"github.com/go-chi/chi/v5"
@@ -141,8 +141,8 @@ func (h httpHandler) listProviderConfigs(w http.ResponseWriter, r *http.Request)
 
 func (h httpHandler) createProviderConfig(w http.ResponseWriter, r *http.Request) {
 	var input createProviderConfigRequest
-	if err := decodeJSON(r, &input); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeMalformedJSON(w, err)
 		return
 	}
 	if !validateProviderConfigRequest(w, input.Name, input.BaseURL, input.APIKey, true) {
@@ -164,8 +164,8 @@ func (h httpHandler) createProviderConfig(w http.ResponseWriter, r *http.Request
 
 func (h httpHandler) updateProviderConfig(w http.ResponseWriter, r *http.Request) {
 	var input updateProviderConfigRequest
-	if err := decodeJSON(r, &input); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeMalformedJSON(w, err)
 		return
 	}
 	if !validateProviderConfigRequest(w, "existing provider", input.BaseURL, input.APIKey, false) {
@@ -196,8 +196,8 @@ func (h httpHandler) listModelVariants(w http.ResponseWriter, r *http.Request) {
 
 func (h httpHandler) createModelVariant(w http.ResponseWriter, r *http.Request) {
 	var input createModelVariantRequest
-	if err := decodeJSON(r, &input); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeMalformedJSON(w, err)
 		return
 	}
 	if !validateModelVariantRequest(w, input.Name, input.Model) {
@@ -238,8 +238,8 @@ func (h httpHandler) getPromptProfile(w http.ResponseWriter, r *http.Request) {
 
 func (h httpHandler) upsertPromptProfile(w http.ResponseWriter, r *http.Request) {
 	var input upsertPromptProfileRequest
-	if err := decodeJSON(r, &input); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeMalformedJSON(w, err)
 		return
 	}
 
@@ -273,8 +273,8 @@ func (h httpHandler) listSessions(w http.ResponseWriter, r *http.Request) {
 
 func (h httpHandler) createSession(w http.ResponseWriter, r *http.Request) {
 	var input createSessionRequest
-	if err := decodeJSON(r, &input); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeMalformedJSON(w, err)
 		return
 	}
 	if input.ActionKind == "" {
@@ -318,8 +318,8 @@ func (h httpHandler) listSessionMessages(w http.ResponseWriter, r *http.Request)
 
 func (h httpHandler) createSessionMessage(w http.ResponseWriter, r *http.Request) {
 	var input chatMessageRequest
-	if err := decodeJSON(r, &input); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeMalformedJSON(w, err)
 		return
 	}
 	if strings.TrimSpace(input.BodyMarkdown) == "" {
@@ -341,8 +341,8 @@ func (h httpHandler) createSessionMessage(w http.ResponseWriter, r *http.Request
 
 func (h httpHandler) runContinuation(w http.ResponseWriter, r *http.Request) {
 	var input continuationRequest
-	if err := decodeJSON(r, &input); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeMalformedJSON(w, err)
 		return
 	}
 	if !validateQuickActionRequest(w, input.ContentID, input.ModelVariantID, input.ApplyMode) {
@@ -371,8 +371,8 @@ func (h httpHandler) runContinuation(w http.ResponseWriter, r *http.Request) {
 
 func (h httpHandler) runRewrite(w http.ResponseWriter, r *http.Request) {
 	var input rewriteRequest
-	if err := decodeJSON(r, &input); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeMalformedJSON(w, err)
 		return
 	}
 	if !validateQuickActionRequest(w, input.ContentID, input.ModelVariantID, input.ApplyMode) {
@@ -399,8 +399,8 @@ func (h httpHandler) runRewrite(w http.ResponseWriter, r *http.Request) {
 
 func (h httpHandler) runReadCheck(w http.ResponseWriter, r *http.Request) {
 	var input rewriteRequest
-	if err := decodeJSON(r, &input); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeMalformedJSON(w, err)
 		return
 	}
 	if !validateQuickActionRequest(w, input.ContentID, input.ModelVariantID, input.ApplyMode) {
@@ -551,15 +551,8 @@ func limitFromQuery(r *http.Request) int64 {
 	return value
 }
 
-func decodeJSON(r *http.Request, value any) error {
-	decoder := json.NewDecoder(r.Body)
-	if err := decoder.Decode(value); err != nil {
-		return err
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return errors.New("trailing JSON data")
-	}
-	return nil
+func decodeJSON(w http.ResponseWriter, r *http.Request, value any) error {
+	return httputil.DecodeJSON(w, r, value, httputil.DefaultJSONBodyLimit)
 }
 
 type errorResponse struct {
@@ -579,8 +572,14 @@ func writeError(w http.ResponseWriter, err error) {
 	}
 }
 
+func writeMalformedJSON(w http.ResponseWriter, err error) {
+	if httputil.IsRequestTooLarge(err) {
+		writeJSON(w, http.StatusRequestEntityTooLarge, errorResponse{Error: "request body too large"})
+		return
+	}
+	writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+}
+
 func writeJSON(w http.ResponseWriter, status int, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
+	httputil.WriteJSON(w, status, value)
 }

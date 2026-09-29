@@ -11,11 +11,14 @@ import (
 	"strings"
 	"testing"
 
+	edcrypto "git.inkyquill.net/inky/writer/internal/crypto"
 	"git.inkyquill.net/inky/writer/project"
 	"git.inkyquill.net/inky/writer/skill"
 	"git.inkyquill.net/inky/writer/store"
 	"github.com/pressly/goose/v3"
 )
+
+const testEncryptionSecret = "test-api-key-encryption-secret-32"
 
 func TestContinuationDirectApplyAppendsGeneratedProseAndCreatesRevision(t *testing.T) {
 	db := openMigratedTestDB(t)
@@ -1357,6 +1360,7 @@ func TestRunChatTurnUsesDBProviderConfigWhenProviderNotInjected(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	service := NewService(db, projectService, nil)
+	service.SetEncryptionSecret(testEncryptionSecret)
 	provider, err := service.CreateProviderConfig(ctx, CreateProviderConfigInput{
 		AuthorID: "author-1",
 		Name:     "Runtime Provider",
@@ -1911,6 +1915,7 @@ func TestProviderConfigServiceSavesConfigsWithoutReturningAPIKey(t *testing.T) {
 	db := openMigratedTestDB(t)
 	ctx := context.Background()
 	service := NewService(db, project.NewService(db), nil)
+	service.SetEncryptionSecret(testEncryptionSecret)
 
 	provider, err := service.CreateProviderConfig(ctx, CreateProviderConfigInput{
 		AuthorID: "author-1",
@@ -1952,8 +1957,53 @@ func TestProviderConfigServiceSavesConfigsWithoutReturningAPIKey(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT api_key_encrypted FROM provider_configs WHERE id = ?`, provider.ID).Scan(&storedKey); err != nil {
 		t.Fatalf("read stored key: %v", err)
 	}
-	if storedKey != "secret-key" {
-		t.Fatalf("stored key = %q, want plaintext key for this milestone", storedKey)
+	if storedKey == "secret-key" {
+		t.Fatal("stored API key is plaintext")
+	}
+	if !strings.HasPrefix(storedKey, "edda:v1:") {
+		t.Fatalf("stored API key = %q, want encrypted edda:v1 prefix", storedKey)
+	}
+	decryptedKey, err := edcrypto.DecryptAPIKey(storedKey, testEncryptionSecret)
+	if err != nil {
+		t.Fatalf("decrypt stored API key: %v", err)
+	}
+	if decryptedKey != "secret-key" {
+		t.Fatalf("decrypted API key = %q, want secret-key", decryptedKey)
+	}
+}
+
+func TestProviderConfigLegacyPlaintextKeyStillWorks(t *testing.T) {
+	db := openMigratedTestDB(t)
+	ctx := context.Background()
+	projectService := project.NewService(db)
+	service := NewService(db, projectService, nil)
+
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO provider_configs (id, author_id, name, base_url, api_key_encrypted, created_at, updated_at)
+		VALUES ('provider-legacy', 'author-1', 'Legacy', 'https://api.example.invalid/v1', 'legacy-plaintext-key', '2026-06-20T00:00:00Z', '2026-06-20T00:00:00Z')
+	`); err != nil {
+		t.Fatalf("seed legacy provider: %v", err)
+	}
+	model, err := service.CreateModelVariant(ctx, CreateModelVariantInput{
+		AuthorID:         "author-1",
+		ProviderConfigID: "provider-legacy",
+		Name:             "Legacy model",
+		Model:            "legacy-model",
+		Temperature:      0.7,
+		MaxOutputTokens:  1000,
+	})
+	if err != nil {
+		t.Fatalf("CreateModelVariant() error = %v", err)
+	}
+	providerConfig, err := service.queries.GetProviderConfig(ctx, store.GetProviderConfigParams{
+		ID:       "provider-legacy",
+		AuthorID: "author-1",
+	})
+	if err != nil {
+		t.Fatalf("GetProviderConfig() error = %v", err)
+	}
+	if _, err := service.completionProvider(providerConfig, model); err != nil {
+		t.Fatalf("completionProvider() error = %v", err)
 	}
 }
 
@@ -1963,6 +2013,7 @@ func TestModelVariantServiceSavesPricingCompatibilityAndProjectSelection(t *test
 	projectService := project.NewService(db)
 	storyProject := createTestProject(t, ctx, projectService, "author-1", "Provider Project")
 	service := NewService(db, projectService, nil)
+	service.SetEncryptionSecret(testEncryptionSecret)
 
 	provider, err := service.CreateProviderConfig(ctx, CreateProviderConfigInput{
 		AuthorID: "author-1",
@@ -2163,6 +2214,7 @@ func createChatTurnTestSessionWithModel(t *testing.T, ctx context.Context, servi
 
 func createTestProviderAndModel(t *testing.T, ctx context.Context, service *Service, authorID string) ModelVariant {
 	t.Helper()
+	service.SetEncryptionSecret(testEncryptionSecret)
 
 	provider, err := service.CreateProviderConfig(ctx, CreateProviderConfigInput{
 		AuthorID: authorID,

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -158,7 +159,10 @@ func TestRunScriptPersistsReportRun(t *testing.T) {
 	if request.Input.Script.FileID != scriptFileID(t, installed) || request.Input.Script.RelativePath != "scripts/analyze.sh" {
 		t.Fatalf("script envelope = %#v", request.Input.Script)
 	}
-	if len(request.Input.Inputs.EntrySections) != 1 || request.Input.Inputs.EntrySections[0].Heading != "Opening" {
+	if len(request.Input.Inputs.ContentItems) != 1 || request.Input.Inputs.ContentItems[0].ID != "content-1" || request.Input.Inputs.ContentItems[0].BodyMarkdown != "Original body" || request.Input.Inputs.ContentItems[0].Kind != "chapter" {
+		t.Fatalf("content items = %#v", request.Input.Inputs.ContentItems)
+	}
+	if len(request.Input.Inputs.EntrySections) != 1 || request.Input.Inputs.EntrySections[0].Heading != "Opening" || request.Input.Inputs.EntrySections[0].BodyMarkdown != "Original body" {
 		t.Fatalf("entry sections = %#v", request.Input.Inputs.EntrySections)
 	}
 	if len(request.Input.Inputs.Assets) != 1 || request.Input.Inputs.Assets[0].Path != "templates/rewrite.md" || request.Input.Inputs.Assets[0].BodyText == "" {
@@ -505,5 +509,200 @@ func seedScriptRuntimeContent(t *testing.T, db interface {
 	`)
 	if err != nil {
 		t.Fatalf("seed script runtime content: %v", err)
+	}
+}
+
+func TestBuildEnvelopePopulatesContentItems(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	runner := &fakeScriptRunner{result: runtime.RunResult{
+		Status: runtime.StatusSucceeded,
+		Output: runtime.ScriptOutput{
+			Kind:     runtime.OutputKindReport,
+			Title:    "Test report",
+			Markdown: "ok",
+		},
+		StdoutText: `{"kind":"report","title":"Test report","markdown":"ok"}`,
+		ExitCode:   0,
+		Duration:   1 * time.Millisecond,
+	}}
+	service.SetScriptRunner(runner)
+	ctx := context.Background()
+
+	installed := installRuntimeSkill(t, service)
+	seedScriptRuntimeContent(t, db)
+	approveRuntimeScript(t, service, installed, false, false)
+
+	run, err := service.RunScript(ctx, RunScriptInput{
+		ProjectID:  "project-1",
+		SessionID:  "session-1",
+		SkillID:    installed.ID,
+		ScriptPath: "scripts/analyze.sh",
+		ToolCallID: "tool-call-content-items",
+		ContentIDs: []string{"content-1"},
+	})
+	if err != nil {
+		t.Fatalf("RunScript() error = %v", err)
+	}
+	if run.Status != ScriptRunStatusSucceeded {
+		t.Fatalf("run status = %q, want succeeded", run.Status)
+	}
+	if len(runner.requests) != 1 {
+		t.Fatalf("runner requests = %d, want 1", len(runner.requests))
+	}
+	input := runner.requests[0].Input
+	if len(input.Inputs.ContentIDs) != 1 || input.Inputs.ContentIDs[0] != "content-1" {
+		t.Fatalf("content IDs = %#v", input.Inputs.ContentIDs)
+	}
+	if len(input.Inputs.ContentItems) != 1 {
+		t.Fatalf("content items = %#v, want 1 item", input.Inputs.ContentItems)
+	}
+	item := input.Inputs.ContentItems[0]
+	if item.ID != "content-1" {
+		t.Fatalf("content item ID = %q, want content-1", item.ID)
+	}
+	if item.Kind != "chapter" {
+		t.Fatalf("content item kind = %q, want chapter", item.Kind)
+	}
+	if item.Title != "Opening" {
+		t.Fatalf("content item title = %q, want Opening", item.Title)
+	}
+	if item.BodyMarkdown != "Original body" {
+		t.Fatalf("content item body = %q, want 'Original body'", item.BodyMarkdown)
+	}
+	if item.Truncated {
+		t.Fatal("content item should not be truncated")
+	}
+}
+
+func TestBuildEnvelopePopulatesEntrySectionBody(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	runner := &fakeScriptRunner{result: runtime.RunResult{
+		Status: runtime.StatusSucceeded,
+		Output: runtime.ScriptOutput{
+			Kind:     runtime.OutputKindReport,
+			Title:    "Test report",
+			Markdown: "ok",
+		},
+		StdoutText: `{"kind":"report","title":"Test report","markdown":"ok"}`,
+		ExitCode:   0,
+		Duration:   1 * time.Millisecond,
+	}}
+	service.SetScriptRunner(runner)
+	ctx := context.Background()
+
+	installed := installRuntimeSkill(t, service)
+	seedScriptRuntimeContent(t, db)
+	approveRuntimeScript(t, service, installed, false, false)
+
+	run, err := service.RunScript(ctx, RunScriptInput{
+		ProjectID:  "project-1",
+		SessionID:  "session-1",
+		SkillID:    installed.ID,
+		ScriptPath: "scripts/analyze.sh",
+		ToolCallID: "tool-call-section-body",
+		EntrySections: []ScriptEntrySectionInput{{
+			ContentID: "content-1",
+			Heading:   "Opening",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("RunScript() error = %v", err)
+	}
+	if run.Status != ScriptRunStatusSucceeded {
+		t.Fatalf("run status = %q, want succeeded", run.Status)
+	}
+	input := runner.requests[0].Input
+	if len(input.Inputs.EntrySections) != 1 {
+		t.Fatalf("entry sections = %#v, want 1", input.Inputs.EntrySections)
+	}
+	section := input.Inputs.EntrySections[0]
+	if section.BodyMarkdown != "Original body" {
+		t.Fatalf("entry section body = %q, want 'Original body'", section.BodyMarkdown)
+	}
+}
+
+func TestBuildEnvelopeRejectsUnknownContentID(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	runner := &fakeScriptRunner{result: runtime.RunResult{Status: runtime.StatusSucceeded}}
+	service.SetScriptRunner(runner)
+	ctx := context.Background()
+
+	installed := installRuntimeSkill(t, service)
+	approveRuntimeScript(t, service, installed, false, false)
+
+	_, err := service.RunScript(ctx, RunScriptInput{
+		ProjectID:  "project-1",
+		SkillID:    installed.ID,
+		ScriptPath: "scripts/analyze.sh",
+		ToolCallID: "tool-call-missing-content",
+		ContentIDs: []string{"nonexistent-content"},
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("RunScript() error = %v, want ErrInvalidInput", err)
+	}
+}
+
+func TestBuildEnvelopeTruncatesLargeContentBody(t *testing.T) {
+	db := openMigratedTestDB(t)
+	service := NewService(db)
+	runner := &fakeScriptRunner{result: runtime.RunResult{
+		Status: runtime.StatusSucceeded,
+		Output: runtime.ScriptOutput{
+			Kind:     runtime.OutputKindReport,
+			Title:    "Test report",
+			Markdown: "ok",
+		},
+		StdoutText: `{"kind":"report","title":"Test report","markdown":"ok"}`,
+		ExitCode:   0,
+		Duration:   1 * time.Millisecond,
+	}}
+	service.SetScriptRunner(runner)
+	ctx := context.Background()
+
+	installed := installRuntimeSkill(t, service)
+
+	largeBody := strings.Repeat("a", int(maxContentBodyBytes)+1000)
+	_, err := db.Exec(`
+		INSERT INTO content_items (
+			id, project_id, kind, title, slug, body_markdown, metadata_json,
+			sort_order, current_revision, created_at, updated_at
+		) VALUES (
+			'content-large', 'project-1', 'chapter', 'Big Chapter', 'big-chapter', ?, '{}',
+			1, 1, '2026-06-13T00:00:00Z', '2026-06-13T00:00:00Z'
+		);
+	`, largeBody)
+	if err != nil {
+		t.Fatalf("seed large content: %v", err)
+	}
+
+	approveRuntimeScript(t, service, installed, false, false)
+
+	run, err := service.RunScript(ctx, RunScriptInput{
+		ProjectID:  "project-1",
+		SessionID:  "session-1",
+		SkillID:    installed.ID,
+		ScriptPath: "scripts/analyze.sh",
+		ToolCallID: "tool-call-truncation",
+		ContentIDs: []string{"content-large"},
+	})
+	if err != nil {
+		t.Fatalf("RunScript() error = %v", err)
+	}
+	if run.Status != ScriptRunStatusSucceeded {
+		t.Fatalf("run status = %q, want succeeded", run.Status)
+	}
+	input := runner.requests[0].Input
+	if len(input.Inputs.ContentItems) != 1 {
+		t.Fatalf("content items = %#v, want 1", input.Inputs.ContentItems)
+	}
+	item := input.Inputs.ContentItems[0]
+	if !item.Truncated {
+		t.Fatal("large content item should be truncated")
+	}
+	if int64(len(item.BodyMarkdown)) > maxContentBodyBytes+int64(len(contentTruncationMarker))+1 {
+		t.Fatalf("truncated body length = %d, expected near %d", len(item.BodyMarkdown), maxContentBodyBytes)
 	}
 }
