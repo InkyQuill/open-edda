@@ -71,3 +71,7 @@ and exported privately to the workstation (archive SHA-256
 `f19e1f3bbf620cb7caec046479b82b52c4cd6766b6d3177a37b1fd785f975b24`).
 The previous image `20261007-ignore-rm` is retained. Rolling back to it stops
 refresh support; it does not require dropping the new table or restoring old data.
+
+Live HTTPS acceptance passed: Secure/HttpOnly/SameSite refresh cookie, silent
+access recovery, server-side refresh revocation on logout, invalid-session login
+redirect and distinct appearance/service icons. These checks changed no projects.
