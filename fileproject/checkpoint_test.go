@@ -173,3 +173,87 @@ func TestListCheckpointsSkipsPartialDirectories(t *testing.T) {
 		t.Fatalf("checkpoints = %#v", checkpoints)
 	}
 }
+
+func TestRestoreCheckpointRejectsEscapingParentSymlink(t *testing.T) {
+	root := copyFileProjectFixture(t, filepath.Join("testdata", "partial"))
+	if _, err := InitMetadata(root, InitMetadataInput{Title: "Book"}); err != nil {
+		t.Fatal(err)
+	}
+	checkpoint, err := CreateCheckpoint(root, CreateCheckpointInput{Message: "base"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	target := filepath.Join(outside, "chapter-01.md")
+	if err := os.WriteFile(target, []byte("outside sentinel"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(root, "story"), filepath.Join(root, "original-story")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "story")); err != nil {
+		t.Fatal(err)
+	}
+	_, restoreErr := RestoreCheckpoint(root, checkpoint.ID)
+	body, err := os.ReadFile(target)
+	if err != nil || string(body) != "outside sentinel" {
+		t.Fatalf("external file changed: %q, %v", body, err)
+	}
+	if restoreErr == nil {
+		t.Fatal("restore accepted escaping parent symlink")
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("unexpected external entries: %v, %v", entries, err)
+	}
+}
+
+type checkpointRestoreReaderFunc func([]byte) (int, error)
+
+func (read checkpointRestoreReaderFunc) Read(p []byte) (int, error) { return read(p) }
+
+func TestCheckpointRestoreRejectsParentSwapDuringCopy(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "story"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	external := filepath.Join(outside, "chapter.md")
+	if err := os.WriteFile(external, []byte("outside sentinel"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	confined, err := os.OpenRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer confined.Close()
+	relative, err := filepath.Rel(root, outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := strings.NewReader("restored text")
+	swapped := false
+	reader := checkpointRestoreReaderFunc(func(p []byte) (int, error) {
+		if !swapped {
+			swapped = true
+			if err := os.Rename(filepath.Join(root, "story"), filepath.Join(root, "original-story")); err != nil {
+				return 0, err
+			}
+			if err := os.Symlink(relative, filepath.Join(root, "story")); err != nil {
+				return 0, err
+			}
+		}
+		return source.Read(p)
+	})
+	if err := writeCheckpointRestoreFile(confined, "story/chapter.md", reader, 0644); err == nil {
+		t.Fatal("published through swapped parent")
+	}
+	body, err := os.ReadFile(external)
+	if err != nil || string(body) != "outside sentinel" {
+		t.Fatalf("external file changed: %q, %v", body, err)
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("external temporary files: %v, %v", entries, err)
+	}
+}

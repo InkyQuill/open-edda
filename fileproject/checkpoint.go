@@ -56,7 +56,6 @@ type CheckpointDiffEntry struct {
 type checkpointRestoreFile struct {
 	manifest CheckpointFile
 	source   string
-	target   string
 }
 
 func CreateCheckpoint(root string, input CreateCheckpointInput) (Checkpoint, error) {
@@ -159,7 +158,6 @@ func checkpointRestoreFiles(root string, checkpoint Checkpoint) ([]checkpointRes
 		files = append(files, checkpointRestoreFile{
 			manifest: file,
 			source:   source,
-			target:   filepath.Join(root, filepath.FromSlash(file.Path)),
 		})
 	}
 	return files, nil
@@ -347,6 +345,12 @@ func RestoreCheckpoint(root string, id string) (Checkpoint, error) {
 		return Checkpoint{}, err
 	}
 
+	confined, err := os.OpenRoot(root)
+	if err != nil {
+		return Checkpoint{}, fmt.Errorf("open restore root: %w", err)
+	}
+	defer confined.Close()
+
 	unlock := lockProjectSave(root)
 	defer unlock()
 	layout, err := Scan(root)
@@ -364,16 +368,20 @@ func RestoreCheckpoint(root string, id string) (Checkpoint, error) {
 		if _, keep := restoredPaths[file.Path]; keep {
 			continue
 		}
-		if err := os.Remove(filepath.Join(root, filepath.FromSlash(file.Path))); err != nil && !os.IsNotExist(err) {
+		if err := confined.Remove(filepath.FromSlash(file.Path)); err != nil && !os.IsNotExist(err) {
 			return Checkpoint{}, fmt.Errorf("remove file not present in checkpoint: %w", err)
 		}
 	}
 	for _, file := range restoreFiles {
-		if err := copyFile(file.source, file.target); err != nil {
+		if err := copyCheckpointRestoreFile(confined, file.source, filepath.FromSlash(file.manifest.Path)); err != nil {
 			return Checkpoint{}, err
 		}
 	}
-	if err := WriteIDMap(root, IDMap{SchemaVersion: CurrentSchemaVersion, Items: restoredPaths}); err != nil {
+	data, err := json.MarshalIndent(IDMap{SchemaVersion: CurrentSchemaVersion, Items: restoredPaths}, "", "  ")
+	if err != nil {
+		return Checkpoint{}, fmt.Errorf("marshal restored ids: %w", err)
+	}
+	if err := writeCheckpointRestoreFile(confined, filepath.Join(".edda", "ids.json"), strings.NewReader(string(data)+"\n"), 0o644); err != nil {
 		return Checkpoint{}, err
 	}
 	return checkpoint, nil
@@ -444,4 +452,52 @@ func diffCheckpointMaps(fromFiles map[string]CheckpointFile, toFiles map[string]
 		return entries[i].Path < entries[j].Path
 	})
 	return entries
+}
+
+func copyCheckpointRestoreFile(root *os.Root, source, target string) error {
+	in, err := os.Open(source)
+	if err != nil {
+		return fmt.Errorf("open restore source: %w", err)
+	}
+	defer in.Close()
+	info, err := in.Stat()
+	if err != nil {
+		return fmt.Errorf("stat restore source: %w", err)
+	}
+	return writeCheckpointRestoreFile(root, target, in, info.Mode().Perm())
+}
+
+// Keep every mutation relative to the opened root, including temporary files and
+// publication: a parent swapped for an escaping symlink cannot redirect a write.
+func writeCheckpointRestoreFile(root *os.Root, target string, source io.Reader, mode fs.FileMode) error {
+	if err := root.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return fmt.Errorf("create restore directory: %w", err)
+	}
+	var nonce [16]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return fmt.Errorf("name restore temporary file: %w", err)
+	}
+	tmpName := filepath.Join(filepath.Dir(target), ".edda-restore-"+hex.EncodeToString(nonce[:]))
+	tmp, err := root.OpenFile(tmpName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("create restore temporary file: %w", err)
+	}
+	defer root.Remove(tmpName)
+	defer tmp.Close()
+	if _, err := io.Copy(tmp, source); err != nil {
+		return fmt.Errorf("copy restore file: %w", err)
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		return fmt.Errorf("chmod restore file: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		return fmt.Errorf("sync restore file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close restore file: %w", err)
+	}
+	if err := root.Rename(tmpName, target); err != nil {
+		return fmt.Errorf("publish restore file: %w", err)
+	}
+	return nil
 }
