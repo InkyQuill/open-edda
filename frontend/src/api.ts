@@ -1,4 +1,4 @@
-import { getToken } from "./authApi";
+import { expireSession, getSessionID, getToken, refreshSession, sessionNeedsRefresh } from "./authApi";
 import type { ContentItem, ContentKind, Revision, StoryProject } from "./types";
 
 const maxErrorDetailLength = 300;
@@ -49,13 +49,25 @@ export async function apiError(operation: string, response: Response): Promise<A
 }
 
 export async function authFetch(path: string, init?: RequestInit): Promise<Response> {
-  const token = getToken();
-  const headers = new Headers(init?.headers);
-  if (!headers.has("Content-Type") && init?.body) {
-    headers.set("Content-Type", "application/json");
+  const sessionID = getSessionID();
+  let token = getToken();
+  if (token && sessionNeedsRefresh(token)) {
+    if (!await refreshSession(token, sessionID)) throw new Error("Сессия завершилась. Войдите снова.");
+    token = getToken();
   }
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  return fetch(path, { ...init, headers });
+  const send = (value: string | null) => {
+    const headers = new Headers(init?.headers);
+    if (!headers.has("Content-Type") && init?.body) headers.set("Content-Type", "application/json");
+    if (value) headers.set("Authorization", `Bearer ${value}`);
+    return fetch(path, { ...init, headers });
+  };
+  let response = await send(token);
+  if (response.status === 401 && token && (token === getToken() || (sessionID && sessionID === getSessionID())) && await refreshSession(token, sessionID)) {
+    token = getToken();
+    response = await send(token);
+  }
+  if (response.status === 401) expireSession(token);
+  return response;
 }
 
 export async function listProjects(): Promise<StoryProject[]> {
@@ -191,4 +203,11 @@ export async function restoreRevision(
     throw await apiError("restore revision", response);
   }
   return response.json() as Promise<ContentItem>;
+}
+
+export async function deleteProject(projectId: string, confirmationTitle: string): Promise<void> {
+  const response = await authFetch(`/api/projects/${encodeURIComponent(projectId)}`, {
+    method: "DELETE", body: JSON.stringify({ confirmationTitle }),
+  });
+  if (!response.ok) throw await apiError("Удаление проекта", response);
 }

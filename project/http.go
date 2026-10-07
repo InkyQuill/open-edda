@@ -71,6 +71,7 @@ func RegisterRoutes(r chi.Router, service *Service) {
 	h := httpHandler{service: service}
 	r.Get("/projects", h.listProjects)
 	r.Post("/projects", h.createProject)
+	r.Delete("/projects/{projectID}", h.deleteProject)
 	r.Post("/projects/import/elysium", h.importElysium)
 	r.Get("/projects/{projectID}/export/elysium", h.exportElysium)
 	r.Get("/projects/{projectID}/content", h.listContent)
@@ -483,4 +484,23 @@ func writeMalformedJSON(w http.ResponseWriter, err error) {
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	httputil.WriteJSON(w, status, value)
+}
+
+func (h httpHandler) deleteProject(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		ConfirmationTitle string `json:"confirmationTitle"`
+	}
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeMalformedJSON(w, err)
+		return
+	}
+	if input.ConfirmationTitle == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "project title confirmation is required"})
+		return
+	}
+	if err := h.service.DeleteProject(r.Context(), authorID(r), chi.URLParam(r, "projectID"), input.ConfirmationTitle); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

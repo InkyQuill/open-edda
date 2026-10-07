@@ -32,7 +32,7 @@ export function AuthPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (getToken()) {
-    return <Navigate to="/projects" replace />;
+    return <Navigate to={redirectTargetFromState(location.state)} replace />;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -56,6 +56,7 @@ export function AuthPage() {
         <header>
           <h1 id="auth-page-title">Edda</h1>
           <p>Войдите в своё пространство для работы с текстом.</p>
+          {location.state && typeof location.state === "object" && "sessionExpired" in location.state && location.state.sessionExpired === true && <p role="status">Сессия завершилась. Войдите снова, чтобы продолжить работу.</p>}
         </header>
 
         <form className="auth-form" onSubmit={(event) => void handleSubmit(event)}>

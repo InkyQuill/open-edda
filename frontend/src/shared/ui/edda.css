@@ -20,3 +20,5 @@
 
 .project-row{text-decoration:none;color:var(--ink)}.book-spine{overflow:hidden;overflow-wrap:anywhere}.continue-project>div:nth-child(2){min-width:0}.continue-project h2{overflow-wrap:anywhere}.breadcrumbs>a{color:var(--edda-muted);text-decoration:none;white-space:nowrap}.edda-modal .pending-list{max-height:220px;overflow:auto;padding-left:20px;font-size:13px;line-height:1.8;overflow-wrap:anywhere}.edda-modal .danger-action{color:var(--danger)}.edda-modal .conflict-columns p{white-space:pre-wrap;max-height:300px;overflow:auto}.edda .history-preview .binary-preview{min-height:240px}.edda .history-preview .image-preview{min-height:150px}.edda .source-column .column-label{margin-bottom:12px}
 @media(max-width:1150px){.breadcrumbs>a,.breadcrumbs>svg{display:none}}
+
+.project-list-item{display:flex;align-items:center;gap:8px}.project-list-item .project-row{flex:1;min-width:0}.project-list-item>.icon-button{flex-shrink:0;color:var(--edda-muted)}.project-list-item>.icon-button:hover{color:var(--danger)}

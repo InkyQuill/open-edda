@@ -1,0 +1,35 @@
+import { loginForTest } from './auth';
+import { expect, test } from '@playwright/test';
+
+test('project deletion requires exact confirmation, supports cancel and retry', async ({page,request},info) => {
+  const login = await loginForTest(request);
+  const {token} = await login.json() as {token:string};
+  const headers = {Authorization:`Bearer ${token}`};
+  const title = `Удаление ${info.project.name} ${Date.now()}`;
+  const created = await request.post('/api/projects',{headers,data:{title,language:'ru',storageMode:'files'}});
+  const {id} = await created.json() as {id:string};
+  const endpoint = `/api/projects/${id}`;
+  expect((await request.delete(endpoint,{headers,data:{confirmationTitle:'wrong'}})).status()).toBe(409);
+  expect((await request.delete(endpoint,{headers,data:{}})).status()).toBe(400);
+  expect((await request.delete(endpoint,{data:{confirmationTitle:title}})).status()).toBe(401);
+  await page.addInitScript(value => localStorage.setItem('open_edda_token',value),token);
+  await page.goto('/projects');
+  const trigger = page.getByRole('button',{name:`Удалить проект «${title}»`,exact:true});
+  await trigger.click();
+  const dialog = page.getByRole('dialog');
+  const remove = dialog.getByRole('button',{name:'Удалить проект',exact:true});
+  await expect(remove).toBeDisabled();
+  await dialog.getByLabel('Введите название проекта для подтверждения').fill('wrong');
+  await expect(remove).toBeDisabled();
+  await dialog.getByRole('button',{name:'Отмена',exact:true}).click();
+  await expect(dialog).not.toBeVisible(); await expect(trigger).toBeVisible();
+  await trigger.click();
+  await dialog.getByLabel('Введите название проекта для подтверждения').fill(title);
+  await expect(remove).toBeEnabled();
+  await page.route(`**${endpoint}`, route => route.fulfill({status:503,body:'{}'}),{times:1});
+  await remove.click(); await expect(dialog.getByRole('alert')).toBeVisible();
+  await expect(remove).toBeEnabled();
+  await remove.click(); await expect(dialog).not.toBeVisible(); await expect(trigger).not.toBeVisible();
+  expect((await request.get(`${endpoint}/files/versions/current`,{headers})).status()).toBe(404);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+});

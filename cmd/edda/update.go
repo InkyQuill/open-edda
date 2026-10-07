@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"syscall"
 
 	"github.com/InkyQuill/open-edda/fileproject"
@@ -111,12 +112,36 @@ func runNetworkTake(args []string, output io.Writer) error {
 	if err = validateRemoteSelection(state, remote.Entries); err != nil {
 		return err
 	}
-	inventory, err := fileproject.ScanInventory(ctx, root, state.Excludes)
+	incoming := map[string]bool{}
+	known := entryMap(state.Base.Entries)
+	for _, entry := range remote.Entries {
+		if _, ok := known[entry.Path]; !ok {
+			incoming[entry.Path] = entry.Kind == "directory"
+		}
+	}
+	for _, entry := range remote.Entries {
+		for _, name := range state.Untracked {
+			if entry.Path == name || strings.HasPrefix(entry.Path, name+"/") {
+				if before, ok := known[entry.Path]; !ok || before != entry {
+					return fmt.Errorf("remote changed locally untracked path %q; use edda rm --undo %q, take and reconcile before removing it again", entry.Path, name)
+				}
+			}
+		}
+	}
+	ignored, err := fileproject.IgnoredPaths(root, incoming)
+	if err != nil {
+		return err
+	}
+	if len(ignored) > 0 {
+		return fmt.Errorf("remote paths overlap local ignore rules: %q; adjust .eddaignore before taking updates", ignored)
+	}
+	inventory, err := fileproject.ScanInventory(ctx, root, state.localExclusions(), state.Base.Entries, state.Identity)
 	if err != nil {
 		return err
 	}
 	if len(inventory.Problems) > 0 {
-		return errors.New("unsupported local entries; inspect edda import --dry-run before updating")
+		reportInventoryProblems(inventory, output)
+		return errors.New("exclude these paths in .eddaignore before updating")
 	}
 	directory, err := os.MkdirTemp(filepath.Join(root, ".edda"), "update-")
 	if err != nil {
@@ -150,7 +175,7 @@ func runNetworkTake(args []string, output io.Writer) error {
 	if !reflect.DeepEqual(current, snapshot) {
 		return errors.New("local files changed while preparing; retry take")
 	}
-	verify, err := fileproject.ScanInventory(ctx, root, state.Excludes)
+	verify, err := fileproject.ScanInventory(ctx, root, state.localExclusions(), state.Base.Entries, state.Identity)
 	if err != nil {
 		return err
 	}

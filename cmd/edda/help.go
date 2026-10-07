@@ -9,6 +9,14 @@ import (
 )
 
 var commandHelp = map[string]string{
+	"rm": `Stop tracking files or directories, keeping their local contents.
+  edda rm PATH [PATH...]
+  edda rm --undo PATH [PATH...]
+Run inside a connected project; paths are relative to the current directory.
+The next send removes these paths from the current server tree. Earlier versions
+remain available. Directories include their whole subtree. Local-only paths stay
+excluded from later sends; --undo removes this exclusion (other ignore rules still apply).
+Finish any pending send, move or update first.`,
 	"login": `Log in and save the connection for future commands.
   edda login [--server URL] [--email EMAIL]
   edda login --server URL --email EMAIL --password-stdin
@@ -72,8 +80,11 @@ Missing paths are requested. Destination parents must exist; existing files are
 never replaced. Run edda send afterwards. Repeating move resumes an interrupted move.`,
 	"import": `Upload files into an EMPTY server project and save its binding in .edda.
   edda import [FOLDER] [--project ID] [--server URL] [--exclude relative/path] [--json]
-  edda import [FOLDER] --dry-run [--exclude relative/path] [--json]
---dry-run previews inventory and exclusions without uploading. --exclude is repeatable.
+  edda import [FOLDER] --dry-run [--verbose] [--exclude relative/path] [--json]
+--dry-run prints counts and problems without uploading. --verbose lists every path.
+.eddaignore in the project root adds ignore patterns; --exclude is repeatable.
+Defaults skip .remember, .creative-writing and .agents/skills, plus local caches.
+Already tracked files remain synchronized even when an ignore pattern matches.
 Omitted project is selected from a list. Later use send/take from any subfolder.
 Use edda send FOLDER to create a new project and upload it in one guided workflow.`,
 	"backup": `Create a verified backup on the machine holding the server data.

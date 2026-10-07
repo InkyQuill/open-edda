@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -20,8 +21,11 @@ import (
 )
 
 type connection struct {
-	Server string `json:"server"`
-	Token  string `json:"token,omitempty"`
+	SessionID        string `json:"sessionID,omitempty"`
+	RefreshToken     string `json:"refreshToken,omitempty"`
+	RefreshExpiresAt int64  `json:"refreshExpiresAt,omitempty"`
+	Server           string `json:"server"`
+	Token            string `json:"token,omitempty"`
 }
 
 func connectionPath() (string, error) {
@@ -108,7 +112,7 @@ func resolveConnection(server string) (connection, error) {
 	if _, err := newImportClient(server, "_", token); err != nil {
 		return connection{}, fmt.Errorf("connection unavailable; run edda login first: %w", err)
 	}
-	return connection{server, token}, nil
+	return connection{Server: server, Token: token}, nil
 }
 func runLogin(args []string, input io.Reader, output io.Writer) error {
 	flags := flag.NewFlagSet("login", flag.ContinueOnError)
@@ -207,14 +211,17 @@ func runLogin(args []string, input io.Reader, output io.Writer) error {
 	}
 	client.root = strings.TrimRight(*server, "/") + "/api/"
 	client.token = ""
+	unlock, err := lockSession()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	response, err := client.request(context.Background(), "POST", "auth/login", bytes.NewReader(body), int64(len(body)))
 	if err != nil {
 		return err
 	}
 	defer response.Body.Close()
-	var result struct {
-		Token string `json:"token"`
-	}
+	var result connection
 	if err = json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&result); err != nil {
 		return err
 	}
@@ -228,7 +235,7 @@ func runLogin(args []string, input io.Reader, output io.Writer) error {
 	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
-	if err = writePrivateJSON(path, connection{strings.TrimRight(*server, "/"), result.Token}); err != nil {
+	if err = writePrivateJSON(path, connection{SessionID: rand.Text(), Server: strings.TrimRight(*server, "/"), Token: result.Token, RefreshToken: result.RefreshToken, RefreshExpiresAt: result.RefreshExpiresAt}); err != nil {
 		return err
 	}
 	fmt.Fprintf(output, "Connected to %s as %s.\nRun edda projects to see your projects.\n", strings.TrimRight(*server, "/"), *email)
@@ -298,11 +305,35 @@ func runProjects(args []string, output io.Writer) error {
 }
 
 func runLogout(output io.Writer) error {
+	unlock, err := lockSession()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	c, err := readConnection()
 	if err != nil {
 		return err
 	}
+	if c.RefreshToken != "" {
+		client, err := newImportClient(c.Server, "_", c.Token)
+		if err != nil {
+			return err
+		}
+		client.root = c.Server + "/api/"
+		body, err := json.Marshal(map[string]string{"refreshToken": c.RefreshToken})
+		if err != nil {
+			return err
+		}
+		response, err := client.request(context.Background(), "POST", "auth/logout", bytes.NewReader(body), int64(len(body)))
+		if err != nil {
+			return err
+		}
+		response.Body.Close()
+	}
+	c.SessionID = ""
 	c.Token = ""
+	c.RefreshToken = ""
+	c.RefreshExpiresAt = 0
 	path, err := connectionPath()
 	if err != nil {
 		return err

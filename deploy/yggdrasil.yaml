@@ -38,7 +38,7 @@ spec:
         fsGroup: 10001
       containers:
         - name: open-edda
-          image: docker.io/library/open-edda:20261007-quiet-ui-v1
+          image: docker.io/library/open-edda:20261007-sessions-secure
           imagePullPolicy: Never
           ports: [{containerPort: 8080}]
           envFrom:

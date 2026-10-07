@@ -23,6 +23,8 @@ func registerRoutesWithLoginLimiter(r chi.Router, service *Service, limiter *log
 	}
 	h := httpHandler{service: service, loginLimiter: limiter}
 	r.Post("/auth/login", h.login)
+	r.Post("/auth/refresh", h.refresh)
+	r.Post("/auth/logout", h.logout)
 }
 
 type httpHandler struct {
@@ -60,7 +62,7 @@ func (h *httpHandler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	writeSession(w, r, resp)
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

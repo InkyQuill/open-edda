@@ -33,7 +33,7 @@ type InventoryNotice struct {
 	Reason string `json:"reason"`
 }
 
-func ScanInventory(ctx context.Context, directory string, exclusions []string) (Inventory, error) {
+func ScanInventory(ctx context.Context, directory string, exclusions []string, tracked ...[]project.TreeEntry) (Inventory, error) {
 	result := Inventory{Entries: []project.TreeEntry{}, Excluded: []InventoryNotice{}, Problems: []InventoryNotice{}}
 	for _, name := range exclusions {
 		if name == "." || !fs.ValidPath(name) || strings.Contains(name, "\\") {
@@ -50,6 +50,18 @@ func ScanInventory(ctx context.Context, directory string, exclusions []string) (
 		return result, err
 	}
 	defer root.Close()
+	rules, err := readIgnoreRules(root)
+	if err != nil {
+		return result, err
+	}
+	known := map[string]bool{}
+	for _, entries := range tracked {
+		for _, entry := range entries {
+			for name := entry.Path; name != "."; name = path.Dir(name) {
+				known[name] = true
+			}
+		}
+	}
 	err = fs.WalkDir(root.FS(), ".", func(name string, entry fs.DirEntry, walkErr error) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -61,6 +73,9 @@ func ScanInventory(ctx context.Context, directory string, exclusions []string) (
 			return nil
 		}
 		reason := excludedInventoryPath(name, exclusions)
+		if reason == "" && !known[name] && ignoredByRules(name, entry.IsDir(), rules) {
+			reason = ".eddaignore or default ignore rule"
+		}
 		if reason != "" {
 			result.Excluded = append(result.Excluded, InventoryNotice{name, reason})
 			if entry.IsDir() {
@@ -72,7 +87,15 @@ func ScanInventory(ctx context.Context, directory string, exclusions []string) (
 			return fmt.Errorf("project exceeds 10000 entries")
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
-			result.Problems = append(result.Problems, InventoryNotice{name, "symbolic link; exclude this path explicitly"})
+			external, err := externalInventoryLink(abs, name)
+			if err != nil {
+				return err
+			}
+			if external {
+				result.Excluded = append(result.Excluded, InventoryNotice{name, "symbolic link outside the project"})
+				return nil
+			}
+			result.Problems = append(result.Problems, InventoryNotice{name, "internal or unresolved symbolic link; exclude this path explicitly"})
 			return nil
 		}
 		id := sha256.Sum256([]byte("import:" + name))
@@ -215,7 +238,7 @@ func StageInventory(ctx context.Context, inventory Inventory, exclusions []strin
 		}
 	}
 	// Detect additions/deletions and directory changes as well as altered bytes.
-	current, err := ScanInventory(ctx, inventory.Root, exclusions)
+	current, err := ScanInventory(ctx, inventory.Root, exclusions, inventory.Entries)
 	if err != nil {
 		return err
 	}

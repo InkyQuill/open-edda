@@ -22,14 +22,15 @@ import (
 )
 
 type checkout struct {
-	Excludes []string               `json:"excludes,omitempty"`
-	Identity []project.TreeEntry    `json:"identity,omitempty"`
-	Move     *pendingMove           `json:"move,omitempty"`
-	Update   string                 `json:"update,omitempty"`
-	Schema   int                    `json:"schema"`
-	Server   string                 `json:"server"`
-	Base     project.ProjectVersion `json:"base"`
-	Pending  *pendingSend           `json:"pending,omitempty"`
+	Untracked []string               `json:"untracked,omitempty"`
+	Excludes  []string               `json:"excludes,omitempty"`
+	Identity  []project.TreeEntry    `json:"identity,omitempty"`
+	Move      *pendingMove           `json:"move,omitempty"`
+	Update    string                 `json:"update,omitempty"`
+	Schema    int                    `json:"schema"`
+	Server    string                 `json:"server"`
+	Base      project.ProjectVersion `json:"base"`
+	Pending   *pendingSend           `json:"pending,omitempty"`
 }
 type pendingSend struct {
 	Operation string                `json:"operation"`
@@ -239,4 +240,8 @@ func validateRemoteSelection(state checkout, entries []project.TreeEntry) error 
 		}
 	}
 	return nil
+}
+
+func (s checkout) localExclusions() []string {
+	return append(append([]string{}, s.Excludes...), s.Untracked...)
 }

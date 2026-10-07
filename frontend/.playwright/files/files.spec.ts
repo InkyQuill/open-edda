@@ -1,10 +1,11 @@
+import { loginForTest } from './auth';
 import { createHash } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import type { ProjectVersion } from '../../src/features/files/fileApi';
 
 test('real workspace retains drafts, resolves conflicts and retries lost save receipts', async ({ page, request, isMobile }, info) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
-  const response = await request.post('/api/auth/login', { data: { email: 'browser@example.invalid', password: 'browser-test-password' } });
+  const response = await loginForTest(request);
   const { token } = await response.json() as { token: string }; const headers = { Authorization: `Bearer ${token}` };
   await page.addInitScript(value => localStorage.setItem('open_edda_token', value), token);
   await page.goto('/projects');
@@ -57,7 +58,7 @@ test('real workspace retains drafts, resolves conflicts and retries lost save re
 });
 
 test('imports previewable and binary files, preserves move identity and restores history',async ({page,request,isMobile},info) => {
-  const response=await request.post('/api/auth/login',{data:{email:'browser@example.invalid',password:'browser-test-password'}});
+  const response=await loginForTest(request);
   const {token}=await response.json() as {token:string}; const headers={Authorization:`Bearer ${token}`};
   await page.addInitScript(value=>localStorage.setItem('open_edda_token',value),token);
   const projectTitle = `Files ${info.project.name} ${Date.now()}`;

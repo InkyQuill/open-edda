@@ -96,12 +96,15 @@ func runNetworkStatus(root string, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	inventory, err := fileproject.ScanInventory(context.Background(), root, state.Excludes)
+	inventory, err := fileproject.ScanInventory(context.Background(), root, state.localExclusions(), state.Base.Entries, state.Identity)
 	if err != nil {
 		return err
 	}
 	reportSyncExclusions(inventory, output)
 	fmt.Fprintf(output, "Server: %s\nProject: %s\nBase version: %s\n", state.Server, state.Base.ProjectID, state.Base.ID)
+	for _, name := range state.Untracked {
+		fmt.Fprintf(output, "Local only (edda rm): %q\n", name)
+	}
 	if state.Move != nil {
 		fmt.Fprintln(output, "Unfinished move; run edda move CHECKOUT to recover.")
 	}
@@ -183,7 +186,7 @@ func runNetworkSend(args []string, output io.Writer) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if state.Pending == nil {
-		inventory, err := fileproject.ScanInventory(ctx, root, state.Excludes)
+		inventory, err := fileproject.ScanInventory(ctx, root, state.localExclusions(), state.Base.Entries, state.Identity)
 		if err != nil {
 			return err
 		}
@@ -215,7 +218,7 @@ func runNetworkSend(args []string, output io.Writer) error {
 				os.RemoveAll(stage)
 			}
 		}()
-		if err = fileproject.StageInventory(ctx, inventory, state.Excludes, stage); err != nil {
+		if err = fileproject.StageInventory(ctx, inventory, state.localExclusions(), stage); err != nil {
 			return err
 		}
 		for _, entry := range inventory.Entries {
@@ -325,9 +328,7 @@ func acknowledgeSend(root string, state checkout, receipt project.ProjectVersion
 }
 
 func reportSyncExclusions(inventory fileproject.Inventory, output io.Writer) {
-	for _, item := range inventory.Excluded {
-		if item.Path != ".edda" {
-			fmt.Fprintf(output, "Not synchronized: %q (%s)\n", item.Path, item.Reason)
-		}
+	if len(inventory.Excluded) > 0 {
+		fmt.Fprintf(output, "Excluded %d paths/subtrees (.eddaignore, defaults and --exclude). Use edda import --dry-run --verbose to list them.\n", len(inventory.Excluded))
 	}
 }

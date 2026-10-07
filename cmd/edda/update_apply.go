@@ -27,7 +27,7 @@ func buildUpdateResult(ctx context.Context, root string, state checkout, p updat
 	if !reflect.DeepEqual(localNodes, p.Snapshot) {
 		return errors.New("local recovery snapshot changed")
 	}
-	remoteInventory, err := fileproject.ScanInventory(ctx, filepath.Join(dir, "remote"), nil)
+	remoteInventory, err := fileproject.ScanInventory(ctx, filepath.Join(dir, "remote"), nil, p.Remote.Entries)
 	if err != nil {
 		return err
 	}

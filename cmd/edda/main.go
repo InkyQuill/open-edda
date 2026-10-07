@@ -14,6 +14,8 @@ import (
 	"github.com/InkyQuill/open-edda/fileproject"
 )
 
+var version = "dev"
+
 func main() {
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -22,6 +24,10 @@ func main() {
 }
 
 func run(args []string, stdout io.Writer, stderr io.Writer) error {
+	if len(args) == 1 && (args[0] == "version" || args[0] == "--version") {
+		fmt.Fprintln(stdout, "edda "+version)
+		return nil
+	}
 	if len(args) == 0 {
 		printUsage(stdout)
 		return nil
@@ -64,6 +70,8 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return runCreateProject(args[1:], stdout)
 	case "attach":
 		return runAttach(args[1:], stdout)
+	case "rm":
+		return runRemove(args[1:], stdout)
 	case "move":
 		return runMove(args[1:], stdout)
 	case "get":
@@ -615,6 +623,7 @@ Other project commands:
   conflicts   List conflicts
   resolve     Choose a conflict resolution
   move        Move a file while preserving its identity
+  rm          Stop tracking a path while keeping local files
   logout      Remove the saved login
 
 Server administration: backup, verify-backup, restore-backup

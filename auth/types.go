@@ -6,8 +6,10 @@ type LoginRequest struct {
 }
 
 type AuthResponse struct {
-	Token  string       `json:"token"`
-	Author AuthorPublic `json:"author"`
+	RefreshToken     string       `json:"refreshToken,omitempty"`
+	RefreshExpiresAt int64        `json:"refreshExpiresAt"`
+	Token            string       `json:"token"`
+	Author           AuthorPublic `json:"author"`
 }
 
 type AuthorPublic struct {
