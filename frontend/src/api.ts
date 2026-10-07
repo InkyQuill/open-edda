@@ -47,7 +47,7 @@ export async function apiError(operation: string, response: Response): Promise<A
   return new ApiError(operation, response.status, await responseBody(response));
 }
 
-async function authFetch(path: string, init?: RequestInit): Promise<Response> {
+export async function authFetch(path: string, init?: RequestInit): Promise<Response> {
   const token = getToken();
   const headers = new Headers(init?.headers);
   if (!headers.has("Content-Type") && init?.body) {
@@ -66,6 +66,7 @@ export async function listProjects(): Promise<StoryProject[]> {
 }
 
 export type CreateProjectInput = {
+  storageMode?: "legacy" | "files";
   title: string;
   language: string;
 };

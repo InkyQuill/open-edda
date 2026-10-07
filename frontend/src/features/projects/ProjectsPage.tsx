@@ -1,263 +1,31 @@
-import type React from "react";
-import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, LogOut, Plus, Settings2, Upload } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
-
-import { createProject, importElysiumProject } from "../../api";
-import { clearToken } from "../../authApi";
-import { Button } from "../../shared/ui/button";
-import { useProjects } from "./projectHooks";
+import { useState, useRef } from 'react';
+import { ArrowRight, LogOut, Plus, RefreshCw, Settings2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { createProject } from '../../api';
+import { clearToken } from '../../authApi';
+import { IconButton, Modal } from '../../shared/ui/edda';
+import { AppearanceButton } from '../appearance/Appearance';
+import { useProjects } from './projectHooks';
 
 export function ProjectsPage() {
   const navigate = useNavigate();
   const { projects, loading, error, reload } = useProjects();
-  const importInputRef = useRef<HTMLInputElement>(null);
-  const mountedRef = useRef(true);
-  const operationIdRef = useRef(0);
-  const operationInFlightRef = useRef(false);
-  const [title, setTitle] = useState("");
-  const [language, setLanguage] = useState("en");
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [operationLabel, setOperationLabel] = useState<"create" | "import" | null>(null);
-
-  useEffect(() => {
-    mountedRef.current = true;
-
-    return () => {
-      mountedRef.current = false;
-      operationInFlightRef.current = false;
-      operationIdRef.current += 1;
-    };
-  }, []);
-
-  function isCurrentOperation(operationId: number): boolean {
-    return mountedRef.current && operationIdRef.current === operationId;
+  const [open, setOpen] = useState(false), [title, setTitle] = useState(''), [language, setLanguage] = useState('ru');
+  const [creating, setCreating] = useState(false), [createError, setCreateError] = useState('');
+  const inFlight = useRef(false);
+  let lastProject = '';
+  try { lastProject = localStorage.getItem('edda.last-project') ?? ''; } catch { /* Empty resume state. */ }
+  const resume = projects.find(project => project.id === lastProject) ?? projects[0];
+  const route = (project: typeof projects[number]) => `/projects/${encodeURIComponent(project.id)}${project.storageMode === 'files' ? '/files' : ''}`;
+  async function create(event: React.FormEvent) {
+    event.preventDefault(); if (!title.trim() || inFlight.current) return;
+    inFlight.current = true; setCreating(true); setCreateError('');
+    try { const project = await createProject({ title: title.trim(), language: language.trim() || 'ru', storageMode: 'files' }); navigate(route(project)); }
+    catch (cause) { setCreateError(cause instanceof Error ? cause.message : 'Не удалось создать проект. Повторите попытку.'); }
+    finally { inFlight.current = false; setCreating(false); }
   }
-
-  function handleCreateProject(event: React.FormEvent<HTMLFormElement>): void {
-    event.preventDefault();
-    const trimmedTitle = title.trim();
-    if (!trimmedTitle || operationInFlightRef.current) return;
-    operationInFlightRef.current = true;
-    const operationId = operationIdRef.current + 1;
-    operationIdRef.current = operationId;
-
-    setCreating(true);
-    setOperationLabel("create");
-    setCreateError(null);
-    void createProject({ title: trimmedTitle, language: language.trim() || "en" })
-      .then((project) => {
-        if (isCurrentOperation(operationId)) {
-          navigate(`/projects/${encodeURIComponent(project.id)}`);
-        }
-      })
-      .catch((cause: unknown) => {
-        if (isCurrentOperation(operationId)) {
-          setCreateError(cause instanceof Error ? cause.message : "Could not create project");
-        }
-      })
-      .finally(() => {
-        if (isCurrentOperation(operationId)) {
-          operationInFlightRef.current = false;
-          setCreating(false);
-          setOperationLabel(null);
-        }
-      });
-  }
-
-  function handleImportClick(): void {
-    importInputRef.current?.click();
-  }
-
-  function handleImportProject(event: React.ChangeEvent<HTMLInputElement>): void {
-    const input = event.currentTarget;
-    const file = event.target.files?.[0];
-    if (!file || operationInFlightRef.current) return;
-    operationInFlightRef.current = true;
-    const operationId = operationIdRef.current + 1;
-    operationIdRef.current = operationId;
-
-    setCreating(true);
-    setOperationLabel("import");
-    setCreateError(null);
-    void importElysiumProject(file)
-      .then((project) => {
-        if (isCurrentOperation(operationId)) {
-          navigate(`/projects/${encodeURIComponent(project.id)}`);
-        }
-      })
-      .catch((cause: unknown) => {
-        if (isCurrentOperation(operationId)) {
-          setCreateError(cause instanceof Error ? cause.message : "Could not import project");
-        }
-      })
-      .finally(() => {
-        if (isCurrentOperation(operationId)) {
-          operationInFlightRef.current = false;
-          setCreating(false);
-          setOperationLabel(null);
-          input.value = "";
-        }
-      });
-  }
-
-  function handleLogout(): void {
-    operationInFlightRef.current = false;
-    operationIdRef.current += 1;
-    clearToken();
-    navigate("/login", { replace: true });
-  }
-
-  return (
-    <main className="app-shell">
-      <section className="mx-auto flex w-full max-w-6xl flex-col gap-8" aria-labelledby="projects-page-title">
-        <header className="flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <p className="mb-1 text-sm font-medium text-muted-foreground">Open Edda</p>
-            <h1 id="projects-page-title" className="text-3xl font-semibold tracking-normal text-foreground">
-              Projects
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              Create a new writing workspace or open an existing story project.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button asChild variant="outline">
-              <Link to="/settings">
-                <Settings2 data-icon="inline-start" aria-hidden="true" />
-                Settings
-              </Link>
-            </Button>
-            <Button type="button" variant="outline" onClick={handleLogout}>
-              <LogOut data-icon="inline-start" aria-hidden="true" />
-              Logout
-            </Button>
-          </div>
-        </header>
-
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
-          <section className="rounded-lg border border-border bg-background p-5 shadow-sm" aria-labelledby="create-project-title">
-            <div className="mb-5">
-              <h2 id="create-project-title" className="text-lg font-semibold text-foreground">
-                Start a project
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">Name the workspace and set its default language.</p>
-            </div>
-
-            <form className="grid gap-4" onSubmit={handleCreateProject}>
-              <label className="grid gap-1.5 text-sm font-medium text-foreground">
-                Title
-                <input
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/30"
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  placeholder="The Glass Archive"
-                  disabled={creating}
-                />
-              </label>
-              <label className="grid gap-1.5 text-sm font-medium text-foreground">
-                Language
-                <input
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/30"
-                  value={language}
-                  onChange={(event) => setLanguage(event.target.value)}
-                  placeholder="en"
-                  disabled={creating}
-                />
-              </label>
-              {createError ? (
-                <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
-                  {createError}
-                </p>
-              ) : null}
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Button type="submit" className="w-full sm:w-auto" disabled={!title.trim() || creating}>
-                  <Plus data-icon="inline-start" aria-hidden="true" />
-                  {operationLabel === "create" ? "Creating..." : "Create project"}
-                </Button>
-                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={handleImportClick} disabled={creating}>
-                  <Upload data-icon="inline-start" aria-hidden="true" />
-                  {operationLabel === "import" ? "Importing..." : "Import Elysium"}
-                </Button>
-                <input
-                  id="project-import-input"
-                  ref={importInputRef}
-                  className="sr-only"
-                  type="file"
-                  accept=".zip,application/zip"
-                  onChange={handleImportProject}
-                  disabled={creating}
-                  tabIndex={-1}
-                  aria-hidden="true"
-                />
-              </div>
-            </form>
-          </section>
-
-          <section className="min-w-0" aria-labelledby="story-workspaces-title">
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <h2 id="story-workspaces-title" className="text-lg font-semibold text-foreground">
-                  Story workspaces
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  {projects.length === 1 ? "1 project available" : `${projects.length} projects available`}
-                </p>
-              </div>
-              <Button type="button" variant="outline" onClick={reload} disabled={loading}>
-                {loading ? "Loading..." : "Refresh"}
-              </Button>
-            </div>
-
-            {loading ? (
-              <div className="rounded-lg border border-dashed border-border bg-background p-6 text-sm text-muted-foreground" aria-live="polite">
-                Loading story projects...
-              </div>
-            ) : error ? (
-              <div className="grid gap-3 rounded-lg border border-destructive/30 bg-background p-6">
-                <p className="text-sm text-destructive" role="alert">
-                  Could not load story projects: {error}
-                </p>
-                <Button type="button" variant="outline" onClick={reload} className="w-fit">
-                  Try again
-                </Button>
-              </div>
-            ) : projects.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border bg-background p-6">
-                <h3 className="text-base font-semibold text-foreground">No story projects yet</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Create a project with the form or import an Elysium archive to begin.
-                </p>
-              </div>
-            ) : (
-              <nav className="grid gap-3 sm:grid-cols-2" aria-label="Story projects">
-                {projects.map((project) => (
-                  <Link
-                    key={project.id}
-                    to={`/projects/${encodeURIComponent(project.id)}`}
-                    className="group grid min-h-36 gap-4 rounded-lg border border-border bg-background p-4 text-left shadow-sm transition hover:border-ring hover:bg-muted/40 focus:outline-none focus:ring-3 focus:ring-ring/30"
-                  >
-                    <span className="flex min-w-0 items-start justify-between gap-3">
-                      <span className="min-w-0">
-                        <span className="block truncate text-base font-semibold text-foreground">{project.title}</span>
-                        <span className="mt-1 block truncate text-sm text-muted-foreground">{project.slug}</span>
-                      </span>
-                      <ArrowUpRight className="mt-0.5 size-4 shrink-0 text-muted-foreground transition group-hover:text-foreground" aria-hidden="true" />
-                    </span>
-                    <span className="flex flex-wrap items-end justify-between gap-3 text-sm">
-                      <span className="rounded-md border border-border bg-muted px-2 py-1 font-medium text-foreground">
-                        {project.language || "Language not set"}
-                      </span>
-                      <span className="text-muted-foreground">Open workspace</span>
-                    </span>
-                  </Link>
-                ))}
-              </nav>
-            )}
-          </section>
-        </div>
-      </section>
-    </main>
-  );
+  return <div className="edda"><div className="dashboard"><header className="dashboard-header"><Link to="/projects" className="wordmark">edda<span className="brand-dot" /></Link><div className="header-actions"><AppearanceButton /><Link className="icon-button" title="Настройки сервиса" aria-label="Настройки сервиса" to="/settings"><Settings2 size={18} /></Link><IconButton icon={LogOut} label="Выйти" onClick={() => { clearToken(); navigate('/login', { replace: true }); }} /></div></header><main className="project-main"><div className="project-heading"><div><h1>Место для ваших историй</h1><p>Рукописи, переводы и всё, что помогает им появиться.</p></div><IconButton icon={Plus} label="Создать проект" onClick={() => setOpen(true)} /></div>
+    {error && <div className="error-banner" role="alert">{error}<IconButton icon={RefreshCw} label="Повторить загрузку" onClick={reload} /></div>}
+    {loading ? <p className="muted" role="status">Загружаем проекты…</p> : resume ? <><div className="continue-project"><div className="book-spine" aria-hidden="true"><span>{resume.title}</span></div><div><span className="muted">Продолжить работу</span><h2>{resume.title}</h2><p>Текст, материалы и сохранённые версии</p><Link className="text-action" to={route(resume)}>Открыть проект <ArrowRight size={17} /></Link></div></div><div className="list-heading"><h2>Ваши проекты</h2><span>{projects.length}</span></div><nav className="project-list" aria-label="Ваши проекты">{projects.map(project => <Link key={project.id} className="project-row" to={route(project)}><span className="project-monogram" aria-hidden="true">{project.title.slice(0, 1)}</span><span><strong>{project.title}</strong><small>{project.language || 'Язык не указан'}</small></span><ArrowRight size={18} aria-hidden="true" /></Link>)}</nav></> : !error && <div className="empty-workspace"><h2>Ваша первая история</h2><p>Создайте проект, затем добавьте текст или перенесите файлы с компьютера.</p><button className="quiet-button" onClick={() => setOpen(true)}><Plus size={17} />Создать проект</button></div>}
+  </main></div><Modal open={open} onClose={() => setOpen(false)} title="Новая история" description="Дайте проекту имя. Структуру можно выбрать позже." busy={creating}><form onSubmit={event => void create(event)}><label className="field-label">Название проекта<input autoFocus value={title} onChange={event => setTitle(event.target.value)} required disabled={creating} /></label><label className="field-label">Язык текста<select value={language} onChange={event => setLanguage(event.target.value)} disabled={creating}><option value="ru">Русский</option><option value="en">English</option><option value="ja">日本語</option><option value="">Другой</option></select></label>{createError && <p className="form-error" role="alert">{createError}</p>}<div className="dialog-actions"><button className="quiet-button" disabled={creating} type="submit">{creating ? 'Создаём…' : 'Создать проект'}<ArrowRight size={16} /></button></div></form></Modal></div>;
 }

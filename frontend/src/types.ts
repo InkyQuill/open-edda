@@ -1,4 +1,5 @@
 export type StoryProject = {
+  storageMode?: "legacy" | "files";
   id: string;
   title: string;
   slug: string;

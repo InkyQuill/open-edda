@@ -1,3 +1,4 @@
+import { AppearanceButton } from "../appearance/Appearance";
 import { AlertCircle, Boxes, ChevronLeft, Loader2, RefreshCw, ServerCog } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -107,7 +108,7 @@ export function SettingsPage() {
                 Projects
               </Link>
             </Button>
-            <h1 className="text-2xl font-semibold tracking-normal text-foreground">System settings</h1>
+            <h1 className="text-2xl font-semibold tracking-normal text-foreground">Настройки сервиса</h1><AppearanceButton />
             <p className="mt-1 text-sm text-muted-foreground">
               Configure providers, model defaults, skills, and script runtime controls.
             </p>

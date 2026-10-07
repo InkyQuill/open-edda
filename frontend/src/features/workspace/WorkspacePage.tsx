@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { shallowEqual, useDispatch, useSelector } from "react-redux";
-import { useNavigate, useParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
 
 import { createContent, listContent, listProjects } from "../../api";
 import { Button } from "../../shared/ui/button";
@@ -294,6 +294,10 @@ export function WorkspacePage() {
         <p className="text-sm text-muted-foreground">Project route is missing.</p>
       </main>
     );
+  }
+
+  if (activeProject?.storageMode === "files") {
+    return <Navigate to={`/projects/${encodeURIComponent(projectId)}/files`} replace />;
   }
 
   if (projectsLoading) {

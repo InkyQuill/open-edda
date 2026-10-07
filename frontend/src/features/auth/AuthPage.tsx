@@ -1,3 +1,4 @@
+import { AppearanceButton } from "../appearance/Appearance";
 import { FormEvent, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
@@ -50,11 +51,11 @@ export function AuthPage() {
   }
 
   return (
-    <main className="app-shell">
+    <main className="app-shell"><div className="appearance-corner"><AppearanceButton /></div>
       <section className="auth-form-section" aria-labelledby="auth-page-title">
         <header>
-          <h1 id="auth-page-title">Writer</h1>
-          <p>Sign in to your writing workspace.</p>
+          <h1 id="auth-page-title">Edda</h1>
+          <p>Войдите в своё пространство для работы с текстом.</p>
         </header>
 
         <form className="auth-form" onSubmit={(event) => void handleSubmit(event)}>
@@ -73,7 +74,7 @@ export function AuthPage() {
           </label>
 
           <label>
-            Password
+            Пароль
             <Input
               id="auth-password"
               name="password"
@@ -94,7 +95,7 @@ export function AuthPage() {
           ) : null}
 
           <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Please wait..." : "Login"}
+            {isSubmitting ? "Входим…" : "Войти"}
           </Button>
         </form>
       </section>
