@@ -47,7 +47,7 @@ Publication verifies objects before opening a short SQL write transaction. Its f
 
 `store.Open` explicitly requests SQLite `synchronous=FULL` on connections. Publication also checks the actual transaction connection and refuses weaker modes. Interrupted uploads/publications can leave unreferenced objects or crash-left staging files; they cannot expose a partial committed tree. Automatic collection/retention is deliberately absent until pins and in-flight operations have a defined policy.
 
-SQLite and referenced objects are both authoritative. Search may be rebuilt; version manifests cannot be reconstructed from bytes alone. Full backup/restore tooling and actual volume/PVC durability qualification remain required before deployment.
+SQLite and referenced objects are both authoritative. Search may be rebuilt; version manifests cannot be reconstructed from bytes alone. Consistent online backup, integrity verification and restore into a new directory are implemented. Container and deployed-PVC acceptance are recorded in [deployment and backup](deployment-and-backup.md) and [files/sync acceptance](../audit/2026-10-06-files-sync-acceptance.md); these checks do not establish physical power-loss or arbitrary CSI failure safety.
 
 ## Verification and limits
 
@@ -63,7 +63,7 @@ SQLite and referenced objects are both authoritative. Search may be rebuilt; ver
 - child-process exit inside the publication transaction and immediately after commit, followed by recovery/retry;
 - weak durability rejection, concurrent object deduplication, and schema upgrade preserving existing content and revision history.
 
-All Go packages pass the race-enabled suite and `go vet`; sqlc models were regenerated. Follow-up cases were checked separately after addition. Process-exit tests demonstrate process-crash recovery, **not** a physical power-loss simulation. Actual disk-full/CSI fault injection, performance at production scale, backup/restore tooling, deployment, multi-instance coordination and web/local round-trips remain unverified or unimplemented. No author folders were modified.
+All Go packages pass the race-enabled suite and `go vet`; sqlc models were regenerated. Follow-up cases were checked separately after addition. Process-exit tests demonstrate process-crash recovery, **not** a physical power-loss simulation. Later acceptance covered real ENOSPC in an isolated container, backup/restore, single-instance deployment and web/local round-trips; see [files/sync acceptance](../audit/2026-10-06-files-sync-acceptance.md). Physical power loss, CSI fault injection and performance at production scale remain unverified. Multi-instance coordination is not implemented. No author folders were modified.
 
 ## First web/API slice
 
@@ -81,9 +81,9 @@ All routes below require authentication and project ownership:
 | `POST /api/projects/{id}/files/versions` | Publish complete entries with expectedVersion and operationId |
 | `GET /api/projects/{id}/files/versions/{version}/entries/{entry}` | Download verified bytes, attachment/no-sniff, no raw-hash reads |
 
-The browser offers folder/file creation with explicit paths, tree navigation and a plain UTF-8 text editor (opening limit 1 MiB). Larger/binary files remain downloadable. Parents must exist. Specialized Markdown/timeline/review editing, arbitrary file uploads/import, rename/delete and history/restore controls are follow-ups. Versions are retained server-side but not yet browsable in UI.
+The browser offers folder/file creation with explicit paths, tree navigation and a plain UTF-8 text editor (opening limit 1 MiB). Larger/binary files remain downloadable. Parents must exist. File/folder import, rename/delete, history browsing and whole-project restore are implemented. Image/audio/video and browser-supported PDF previews are available. Specialized Markdown/timeline/review editing remains later work.
 
-A single unsaved draft per project is retained in the current tab's session storage, including its pinned version and retry operation ID. Navigation never silently switches an unsaved file. Reload restores the draft after authenticated project access; conflicts leave text intact with download and explicit discard/reload actions. This is tab recovery, not a durable backup; quota errors are shown and tab closure may lose unsaved text. A lost save response can be retried with the same operation ID without duplicating a version. Editing again creates a new operation and still requires the original base version.
+Unsaved drafts are retained per file in the current tab's session storage, including pinned version and retry operation identity. Switching files preserves their individual drafts. Reload restores the draft after authenticated project access; conflicts preserve text and offer explicit local/remote/both choices. This is tab recovery, not a durable backup; quota errors are shown and tab closure may lose unsaved text. A lost save response can be retried with the same operation ID without duplicating a version. Editing again creates a new operation and still requires the original base version.
 
 `OPEN_EDDA_DATA_DIR` defaults to the parent of the configured DB path. It controls only immutable objects; set both paths when mounting a volume. Neither existing DB files nor legacy content move automatically.
 

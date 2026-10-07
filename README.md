@@ -6,7 +6,7 @@ Open Edda is a self-hosted web workspace and versioned project repository for wr
 
 The immediate priority is projects and local-computer synchronization, then Pocket Editor. Web Galley Desk/Timeline Helper capabilities and local-agent skill parity follow later. See the [verified audit](docs/audit/2026-10-06-project-direction.md), [roadmap](docs/roadmap.md) and [delivery plan](docs/plans/2026-10-06-projects-and-sync.md).
 
-CWS is the project baseline, with a flexible directory tree and a preference for flat organization where useful. Elysium is legacy only. Planned distribution is a Docker image with data on a volume or Kubernetes PVC; [ADR 0015](docs/adr/0015-storage-and-container-deployment.md) compares storage options and recommends immutable files plus transactional SQLite version metadata. No container release is claimed yet.
+CWS is the project baseline, with a flexible directory tree and a preference for flat organization where useful. Elysium is legacy only. Distribution uses a Docker image with data on a volume or Kubernetes PVC; [ADR 0015](docs/adr/0015-storage-and-container-deployment.md) compares storage options and recommends immutable files plus transactional SQLite version metadata. Container build and volume/PVC instructions are in [deployment and backup](docs/architecture/deployment-and-backup.md).
 
 ## Stack
 
@@ -93,7 +93,7 @@ Environment variables:
 | `OPEN_EDDA_BOOTSTRAP_EMAIL` | optional | Initial single-user email; requires `OPEN_EDDA_BOOTSTRAP_PASSWORD` |
 | `OPEN_EDDA_BOOTSTRAP_PASSWORD` | optional | Initial single-user password; requires `OPEN_EDDA_BOOTSTRAP_EMAIL` |
 
-Legacy `WRITER_*` equivalents remain accepted for earlier settings; `OPEN_EDDA_DATA_DIR` is new. Persist **both** the database and the objects directory: for a shared data volume set `OPEN_EDDA_DB_PATH=/data/edda.db` and `OPEN_EDDA_DATA_DIR=/data`. This is not yet a packaged Docker/PVC deployment.
+Legacy `WRITER_*` equivalents remain accepted for earlier settings; `OPEN_EDDA_DATA_DIR` is new. Persist **both** the database and the objects directory: for a shared data volume set `OPEN_EDDA_DB_PATH=/data/edda.db` and `OPEN_EDDA_DATA_DIR=/data`. Docker Compose and Kubernetes manifests are provided in [deployment and backup](docs/architecture/deployment-and-backup.md).
 
 ## Verification
 

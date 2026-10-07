@@ -2,7 +2,7 @@
 
 Open Edda is a self-hosted web writing and translation workspace with portable, versioned projects. Authors work in the browser or use local Writing Tools and synchronize back. The short in-app name is Edda.
 
-Before working on the interface, read [DESIGN.md](DESIGN.md) and [PRODUCT.md](PRODUCT.md). The approved design is currently demonstrated in the isolated `frontend/design.html` prototype; it is not yet the production UI. Scope and verification are in [the prototype brief](docs/design/prototype.md).
+Before working on the interface, read [DESIGN.md](DESIGN.md) and [PRODUCT.md](PRODUCT.md). The approved design is integrated into the production project and file workspace. The isolated `frontend/design.html` prototype remains a design reference; scope and verification are in [production acceptance](docs/design/production-acceptance.md).
 
 Current product direction: [ADR 0014](docs/adr/0014-portable-projects-and-transactional-sync.md). Delivery order: projects and local synchronization, then Pocket Editor, then Writing Tools feature parity and agent-skill parity. CWS is the baseline; primarily flat organization is preferred, arbitrary directory trees remain valid, and Elysium is legacy only. Docker volume/PVC deployment and physical storage are covered by [ADR 0015](docs/adr/0015-storage-and-container-deployment.md). This glossary describes product intent; consult the [audit](docs/audit/2026-10-06-project-direction.md) for actual implementation status.
 
@@ -93,7 +93,7 @@ A conservative process that creates a story project from an Elysium Layout folde
 _Avoid_: Live sync, merge import
 
 **Local Sync Tool**:
-A planned authenticated workflow that exchanges complete selected project files with a server, using transactional versions, acknowledged transfers and preserved conflicts. Current CLI network commands explicitly report unsupported operations without mutating local state.
+An authenticated workflow that exchanges project files with a server using transactional versions, acknowledged transfers and preserved conflicts. CLI get/send/take, folder attachment, exclusions and recovery are implemented; see [CLI synchronization](docs/architecture/cli-sync.md).
 _Avoid_: Git client, successful transfer without a server receipt
 
 **Markdown-Based Content**:
