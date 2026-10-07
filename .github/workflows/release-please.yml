@@ -8,6 +8,7 @@ permissions:
 concurrency:
   group: release-please
   cancel-in-progress: false
+  queue: max
 jobs:
   checks:
     uses: ./.github/workflows/checks.yml
@@ -19,7 +20,6 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
-      actions: write
     outputs:
       created: ${{ steps.identity.outputs.created }}
       tag: ${{ steps.identity.outputs.tag }}
@@ -27,16 +27,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 2
+          fetch-depth: 0
       - name: Detect merged version change
         id: version
         env:
           BEFORE: ${{ github.event.before }}
         run: |
-          changed=false
-          if [ "$GITHUB_EVENT_NAME" = push ] && previous=$(git show "$BEFORE:version.txt" 2>/dev/null); then
-            if [ "$(cat version.txt)" != "$previous" ]; then changed=true; fi
-          fi
+          changed=$(bash scripts/release-version-changed.sh)
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
       - id: release
         if: steps.version.outputs.changed != 'true'
@@ -44,17 +41,8 @@ jobs:
         with:
           target-branch: main
           skip-github-release: true
-      # GITHUB_TOKEN-created PRs do not trigger pull_request workflows.
-      - name: Dispatch checks for the release PR
-        if: steps.release.outputs.pr != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_PR: ${{ steps.release.outputs.pr }}
-        run: |
-          number=$(jq -er '.number' <<< "$RELEASE_PR")
-          head=$(gh pr view "$number" --json headRefName --jq .headRefName)
-          case "$head" in release-please--branches--main*) ;; *) exit 1;; esac
-          gh workflow run checks.yml --ref "$head"
+      # Bot PRs use the normal pull_request checks. GitHub requires a writer
+      # to approve those workflow runs; workflow_dispatch cannot satisfy them.
       - name: Prepare immutable tag and draft release
         if: steps.version.outputs.changed == 'true'
         id: identity

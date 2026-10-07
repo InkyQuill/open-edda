@@ -29,6 +29,8 @@ jobs:
           test -z "$(git ls-files -z '*.go' | xargs -0 gofmt -l)"
           go vet -tags sqlite_fts5 ./...
           go test -race -tags sqlite_fts5 ./...
+      - name: Release retry and history regression tests
+        run: python3 scripts/test-release-workflows.py
       - name: Install frontend dependencies
         working-directory: frontend
         run: bun install --frozen-lockfile
