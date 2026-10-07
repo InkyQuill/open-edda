@@ -55,7 +55,7 @@ type CheckpointDiffEntry struct {
 
 type checkpointRestoreFile struct {
 	manifest CheckpointFile
-	source   string
+	source   *os.File
 }
 
 func CreateCheckpoint(root string, input CreateCheckpointInput) (Checkpoint, error) {
@@ -134,50 +134,62 @@ func validateCheckpointPath(rel string) error {
 }
 
 func verifyCheckpointSnapshots(root string, checkpoint Checkpoint) error {
-	_, err := checkpointRestoreFiles(root, checkpoint)
+	confined, err := os.OpenRoot(root)
+	if err != nil {
+		return fmt.Errorf("open restore root: %w", err)
+	}
+	defer confined.Close()
+	files, err := checkpointRestoreFiles(confined, checkpoint)
+	defer closeCheckpointRestoreFiles(files)
 	return err
 }
 
-func checkpointRestoreFiles(root string, checkpoint Checkpoint) ([]checkpointRestoreFile, error) {
+// The caller owns the validated, rewound handles on success. On failure, all
+// handles are closed before returning, and no working-tree files are changed.
+func checkpointRestoreFiles(root *os.Root, checkpoint Checkpoint) ([]checkpointRestoreFile, error) {
 	files := make([]checkpointRestoreFile, 0, len(checkpoint.Files))
+	validated := false
+	defer func() {
+		if !validated {
+			closeCheckpointRestoreFiles(files)
+		}
+	}()
 	for _, file := range checkpoint.Files {
 		if err := validateCheckpointPath(file.Path); err != nil {
 			return nil, err
 		}
-		source := filepath.Join(checkpointDir(root, checkpoint.ID), "files", filepath.FromSlash(file.Path))
-		sum, size, err := hashFile(source)
+		source := filepath.Join(checkpointDir("", checkpoint.ID), "files", filepath.FromSlash(file.Path))
+		in, err := root.Open(source)
 		if err != nil {
-			return nil, err
+			if os.IsNotExist(err) {
+				return nil, fs.ErrNotExist
+			}
+			return nil, fmt.Errorf("open checkpoint snapshot: %w", err)
 		}
-		if sum != file.SHA256 {
+		files = append(files, checkpointRestoreFile{manifest: file, source: in})
+		hash := sha256.New()
+		size, err := io.Copy(hash, in)
+		if err != nil {
+			return nil, fmt.Errorf("hash checkpoint snapshot: %w", err)
+		}
+		if hex.EncodeToString(hash.Sum(nil)) != file.SHA256 {
 			return nil, fmt.Errorf("checkpoint snapshot %s hash mismatch", file.Path)
 		}
 		if size != file.Size {
 			return nil, fmt.Errorf("checkpoint snapshot %s size mismatch", file.Path)
 		}
-		files = append(files, checkpointRestoreFile{
-			manifest: file,
-			source:   source,
-		})
+		if _, err := in.Seek(0, io.SeekStart); err != nil {
+			return nil, fmt.Errorf("rewind checkpoint snapshot: %w", err)
+		}
 	}
+	validated = true
 	return files, nil
 }
 
-func hashFile(path string) (string, int64, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", 0, fs.ErrNotExist
-		}
-		return "", 0, fmt.Errorf("open checkpoint snapshot: %w", err)
+func closeCheckpointRestoreFiles(files []checkpointRestoreFile) {
+	for _, file := range files {
+		_ = file.source.Close()
 	}
-	defer file.Close()
-	hash := sha256.New()
-	size, err := io.Copy(hash, file)
-	if err != nil {
-		return "", 0, fmt.Errorf("hash checkpoint snapshot: %w", err)
-	}
-	return hex.EncodeToString(hash.Sum(nil)), size, nil
 }
 
 func writeCheckpointManifestAt(dir string, checkpoint Checkpoint) error {
@@ -340,16 +352,16 @@ func RestoreCheckpoint(root string, id string) (Checkpoint, error) {
 	if err != nil {
 		return Checkpoint{}, err
 	}
-	restoreFiles, err := checkpointRestoreFiles(root, checkpoint)
-	if err != nil {
-		return Checkpoint{}, err
-	}
-
 	confined, err := os.OpenRoot(root)
 	if err != nil {
 		return Checkpoint{}, fmt.Errorf("open restore root: %w", err)
 	}
 	defer confined.Close()
+	restoreFiles, err := checkpointRestoreFiles(confined, checkpoint)
+	if err != nil {
+		return Checkpoint{}, err
+	}
+	defer closeCheckpointRestoreFiles(restoreFiles)
 
 	unlock := lockProjectSave(root)
 	defer unlock()
@@ -454,12 +466,7 @@ func diffCheckpointMaps(fromFiles map[string]CheckpointFile, toFiles map[string]
 	return entries
 }
 
-func copyCheckpointRestoreFile(root *os.Root, source, target string) error {
-	in, err := os.Open(source)
-	if err != nil {
-		return fmt.Errorf("open restore source: %w", err)
-	}
-	defer in.Close()
+func copyCheckpointRestoreFile(root *os.Root, in *os.File, target string) error {
 	info, err := in.Stat()
 	if err != nil {
 		return fmt.Errorf("stat restore source: %w", err)
