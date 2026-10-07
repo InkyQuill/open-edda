@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +16,15 @@ func TestLogoutClearsLocalCredentialsBeforeServerRevocation(t *testing.T) {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost || r.URL.Path != "/api/auth/logout" {
+					t.Errorf("unexpected revocation request: %s %s", r.Method, r.URL.Path)
+				}
+				var body struct {
+					RefreshToken string `json:"refreshToken"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.RefreshToken != "test-refresh" {
+					t.Error("wrong revocation token or invalid JSON", err)
+				}
 				saved, err := readConnection()
 				if err != nil || saved.Token != "" || saved.RefreshToken != "" || saved.SessionID != "" {
 					t.Error("credentials still saved during network request", err)

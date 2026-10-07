@@ -55,6 +55,7 @@ class ReleaseScripts(unittest.TestCase):
         state_file.write_text(json.dumps(dict(published=False, pending=True, tagged=False, calls=[])))
         for arch in ['amd64', 'arm64']:
             (self.work / f'edda-v0.1.0-linux-{arch}.tar.gz').write_bytes(arch.encode())
+        (self.work / 'unrelated.tar.gz').write_bytes(b'not a release asset')
         env = dict(PATH=str(self.work)+os.pathsep+os.environ['PATH'], TAG='v0.1.0',
                    GH_REPO='example/edda', FAKE_STATE=str(state_file), FAIL_AT=fail)
         first = self.run_script('publish-cli-release.sh', env)
@@ -65,6 +66,8 @@ class ReleaseScripts(unittest.TestCase):
         self.assertEqual(retry.returncode, 0, retry.stderr)
         state = json.loads(state_file.read_text())
         self.assertTrue(state['published'])
+        self.assertNotIn('unrelated.tar.gz', (self.work / 'SHA256SUMS').read_text())
+        self.assertFalse(any('unrelated.tar.gz' in call for call in state['calls']))
         self.assertTrue(state['tagged'])
         self.assertFalse(state['pending'])
         self.assertIn('release edit', state['calls'][-1])
