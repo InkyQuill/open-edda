@@ -1,0 +1,17 @@
+.git
+.remember
+.agents
+.impeccable
+frontend/node_modules
+frontend/dist
+frontend/.playwright
+frontend/tsconfig.tsbuildinfo
+*.db
+*.db-wal
+*.db-shm
+objects
+.artifacts
+open-edda
+edda
+.env
+.env.*

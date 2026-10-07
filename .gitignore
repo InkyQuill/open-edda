@@ -11,5 +11,12 @@ frontend/test-results/
 frontend/tsconfig.tsbuildinfo
 web/dist/
 writer
+/open-edda
+/edda
 *.db-shm
 *.db-wal
+
+/objects/
+
+__pycache__/
+*.py[cod]
