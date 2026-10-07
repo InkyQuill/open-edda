@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
+	"time"
 	"unicode"
 
 	"github.com/InkyQuill/open-edda/project"
@@ -314,22 +315,7 @@ func runLogout(output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if c.RefreshToken != "" {
-		client, err := newImportClient(c.Server, "_", c.Token)
-		if err != nil {
-			return err
-		}
-		client.root = c.Server + "/api/"
-		body, err := json.Marshal(map[string]string{"refreshToken": c.RefreshToken})
-		if err != nil {
-			return err
-		}
-		response, err := client.request(context.Background(), "POST", "auth/logout", bytes.NewReader(body), int64(len(body)))
-		if err != nil {
-			return err
-		}
-		response.Body.Close()
-	}
+	previous := c
 	c.SessionID = ""
 	c.Token = ""
 	c.RefreshToken = ""
@@ -347,8 +333,32 @@ func runLogout(output io.Writer) error {
 	if err = writePrivateJSON(path, c); err != nil {
 		return err
 	}
+	if previous.RefreshToken != "" {
+		if err := revokeSavedSession(previous); err != nil {
+			fmt.Fprintf(output, "Warning: local login removed, but server revocation failed: %v\n", err)
+		}
+	}
 	fmt.Fprintln(output, "Saved login removed. Environment tokens are unchanged.")
 	return nil
+}
+
+func revokeSavedSession(c connection) error {
+	client, err := newImportClient(c.Server, "_", c.Token)
+	if err != nil {
+		return err
+	}
+	client.root = c.Server + "/api/"
+	body, err := json.Marshal(map[string]string{"refreshToken": c.RefreshToken})
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	response, err := client.request(ctx, "POST", "auth/logout", bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		return err
+	}
+	return response.Body.Close()
 }
 
 // Read one line without buffering ahead into the subsequent hidden password.

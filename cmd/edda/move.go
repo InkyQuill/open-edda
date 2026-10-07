@@ -79,6 +79,16 @@ func runMove(args []string, output io.Writer) error {
 	if *from == *to || strings.HasPrefix(*to, *from+"/") {
 		return errors.New("usage: edda move CHECKOUT --from PATH --to PATH (existing destination parents required)")
 	}
+	for _, name := range state.Untracked {
+		// Exclusions below the source travel with it; all other exclusions must
+		// remain disjoint from the destination, including its parents/children.
+		if name == *from || strings.HasPrefix(name, *from+"/") {
+			continue
+		}
+		if name == *to || strings.HasPrefix(*to, name+"/") || strings.HasPrefix(name, *to+"/") {
+			return fmt.Errorf("destination overlaps untracked path %q; use edda rm --undo first", name)
+		}
+	}
 	inventory, err := fileproject.ScanInventory(context.Background(), root, state.localExclusions(), state.Base.Entries, state.Identity)
 	if err != nil {
 		return err
