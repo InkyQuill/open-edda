@@ -32,7 +32,7 @@ const revision = {
   createdAt: "2026-07-01T00:00:00.000Z",
 };
 
-async function mockOpenEddaApi(page: Page): Promise<void> {
+async function mockOpenEddaApi(page: Page, currentRevision = 1, onRevisions = () => {}): Promise<void> {
   await page.addInitScript(() => {
     window.localStorage.setItem("open_edda_token", "smoke-token");
   });
@@ -47,7 +47,7 @@ async function mockOpenEddaApi(page: Page): Promise<void> {
     } else if (path === "/api/provider-configs") {
       body = [];
     } else if (path === "/api/projects/project-1/content") {
-      body = url.searchParams.get("kind") === "chapter" ? [chapter] : [];
+      body = url.searchParams.get("kind") === "chapter" ? [{ ...chapter, currentRevision }] : [];
     } else if (path === "/api/projects/project-1/agent/sessions") {
       body = [];
     } else if (path === "/api/projects/project-1/agent/activity") {
@@ -55,6 +55,7 @@ async function mockOpenEddaApi(page: Page): Promise<void> {
     } else if (path === "/api/projects/project-1/agent/prompt-records") {
       body = [];
     } else if (path === "/api/projects/project-1/content/content-1/revisions") {
+      onRevisions();
       body = [revision];
     } else {
       await route.fulfill({ status: 404, body: `unmocked route: ${path}` });
@@ -123,4 +124,16 @@ test.describe("workspace smoke", () => {
     const errors = consoleErrorsByPage.get(page) ?? [];
     expect(errors).toEqual([]);
   });
+});
+
+
+test("stale revision response does not trigger an automatic request loop", async ({ page }) => {
+  let requests = 0;
+  await mockOpenEddaApi(page, 2, () => { requests++; });
+  await page.goto("/projects/project-1/content/chapter/content-1");
+  await page.getByRole("button", {name: "Review", exact: true}).first().click();
+  await expect.poll(() => requests).toBe(1);
+  // Leave enough event-loop turns for the old pending/succeeded effect loop to repeat.
+  await page.waitForTimeout(400);
+  expect(requests).toBe(1);
 });

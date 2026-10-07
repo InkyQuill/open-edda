@@ -204,7 +204,6 @@ const reviewSlice = createSlice({
         }
         state.projectId = action.meta.arg.projectId;
         state.contentId = action.meta.arg.contentId;
-        state.selectedRevisionNumber = action.meta.arg.revisionNumber;
         state.restoreStatus = "pending";
         state.restoreRequestId = action.meta.requestId;
         state.restoreError = null;
@@ -222,7 +221,7 @@ const reviewSlice = createSlice({
         state.restoreRequestId = null;
         state.restoreError = null;
         state.restoreErrorCode = null;
-        state.selectedRevisionNumber = action.payload.currentRevision;
+        state.selectedRevisionNumber = null; // Select the newest result after the explicit history reload.
       })
       .addCase(restoreContentRevision.rejected, (state, action) => {
         if (

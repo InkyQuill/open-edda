@@ -10,7 +10,10 @@ test('real workspace retains drafts, resolves conflicts and retries lost save re
   await page.goto('/projects');
   await page.getByRole('button', { name: 'Создать проект', exact: true }).first().click();
   await page.getByLabel('Название проекта', { exact: true }).fill(`Тетрадь ${info.project.name} ${Date.now()}`);
+  await page.getByRole('combobox', {name:/^Язык текста/}).selectOption('');
+  const created = page.waitForResponse(response => response.url().endsWith('/api/projects') && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Создать проект', exact: true }).click();
+  expect((await (await created).json()).language).toBe('');
   await expect(page).toHaveURL(/\/files$/);
   const root = `/api/projects/${page.url().split('/').at(-2)}/files`;
   const files = async () => { if(isMobile && !await page.getByRole('button',{name:'Создать файл',exact:true}).isVisible()) await page.getByRole('button',{name:'Файлы проекта',exact:true}).click(); };

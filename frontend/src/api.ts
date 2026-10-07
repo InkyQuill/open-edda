@@ -9,7 +9,7 @@ export class ApiError extends Error {
   readonly code: string;
 
   constructor(operation: string, status: number, body: string) {
-    const detail = errorDetail(body);
+    const detail = status < 500 ? errorDetail(body) : "";
     super(`${operation} failed: ${status}${detail ? `: ${detail}` : ""}`);
     this.name = "ApiError";
     this.status = status;
@@ -26,12 +26,13 @@ function errorDetail(body: string): string {
   try {
     const parsed = JSON.parse(trimmed) as { error?: unknown };
     if (typeof parsed.error === "string" && parsed.error.trim()) {
-      return parsed.error.trim();
+      const detail = parsed.error.trim();
+      return detail.length > maxErrorDetailLength ? `${detail.slice(0, maxErrorDetailLength)}...` : detail;
     }
   } catch {
-    // Non-JSON error bodies are surfaced as plain text.
+    // Unexpected responses can contain proxy or server internals.
   }
-  return trimmed.length > maxErrorDetailLength ? `${trimmed.slice(0, maxErrorDetailLength)}...` : trimmed;
+  return "";
 }
 
 async function responseBody(response: Response): Promise<string> {

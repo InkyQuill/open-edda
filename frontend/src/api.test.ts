@@ -153,14 +153,14 @@ describe("api createContent", () => {
     expect((init.headers as Headers).get("Content-Type")).toBe("application/json");
   });
 
-  it("includes server failure details when listing revisions fails", async () => {
+  it("omits unstructured server details when listing revisions fails", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("content missing", { status: 404 }));
 
     await expect(listRevisions("project-1", "content-1")).rejects.toMatchObject({
       name: "ApiError",
       status: 404,
       code: "HTTP_404",
-      message: "list revisions failed: 404: content missing",
+      message: "list revisions failed: 404",
     } satisfies Partial<ApiError>);
   });
 
@@ -184,22 +184,27 @@ describe("api createContent", () => {
     } satisfies Partial<ApiError>);
   });
 
-  it("falls back to raw JSON bodies without an error field", async () => {
+  it("omits JSON bodies without an error field", async () => {
     const error = await apiError("list revisions", new Response(JSON.stringify({ message: "missing" }), { status: 404 }));
 
-    expect(error.message).toBe('list revisions failed: 404: {"message":"missing"}');
+    expect(error.message).toBe("list revisions failed: 404");
   });
 
-  it("uses plain text error bodies in apiError", async () => {
+  it("omits plain text internal error bodies", async () => {
     const error = await apiError("list revisions", new Response("plain failure", { status: 500 }));
 
-    expect(error.message).toBe("list revisions failed: 500: plain failure");
+    expect(error.message).toBe("list revisions failed: 500");
   });
 
-  it("truncates long plain text error bodies in apiError", async () => {
+  it("omits long internal error bodies", async () => {
     const error = await apiError("list revisions", new Response("x".repeat(320), { status: 500 }));
 
-    expect(error.message).toBe(`list revisions failed: 500: ${"x".repeat(300)}...`);
+    expect(error.message).toBe("list revisions failed: 500");
+  });
+
+  it("omits structured internal failures and bounds expected error details", () => {
+    expect(new ApiError("save", 500, JSON.stringify({error: "private diagnostics"})).message).toBe("save failed: 500");
+    expect(new ApiError("save", 400, JSON.stringify({error: "x".repeat(320)})).message).toBe(`save failed: 400: ${"x".repeat(300)}...`);
   });
 
   it("stores status code and response body on direct ApiError instances", () => {

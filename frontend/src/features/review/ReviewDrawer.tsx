@@ -1,5 +1,5 @@
 import { Activity, AlertCircle, FileText, GitCompareArrows, MessageSquareText, RotateCcw } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 
 import type { AppDispatch, RootState } from "../../app/store/store";
@@ -7,6 +7,7 @@ import type { ActivityEvent, PromptRecord } from "../../agentTypes";
 import type { ContentItem, Revision } from "../../types";
 import { Button } from "../../shared/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../shared/ui/tabs";
+import { diffLines } from "./lineDiff";
 import { reviewActions } from "./reviewSlice";
 import { loadContentRevisions, loadPromptRecords, loadReviewActivity, restoreContentRevision } from "./reviewThunks";
 
@@ -50,52 +51,6 @@ function restoreConflictMessage(error: string | null, code: string | null): stri
     return "Content changed before this checkpoint was restored. Review the latest draft, then try again.";
   }
   return error;
-}
-
-function diffLines(current: string, selected: string): Array<{ kind: "same" | "added" | "removed"; text: string }> {
-  const currentLines = current.split("\n");
-  const selectedLines = selected.split("\n");
-  const lengths = Array.from({ length: currentLines.length + 1 }, () => Array<number>(selectedLines.length + 1).fill(0));
-
-  for (let currentIndex = currentLines.length - 1; currentIndex >= 0; currentIndex -= 1) {
-    for (let selectedIndex = selectedLines.length - 1; selectedIndex >= 0; selectedIndex -= 1) {
-      lengths[currentIndex][selectedIndex] =
-        currentLines[currentIndex] === selectedLines[selectedIndex]
-          ? lengths[currentIndex + 1][selectedIndex + 1] + 1
-          : Math.max(lengths[currentIndex + 1][selectedIndex], lengths[currentIndex][selectedIndex + 1]);
-    }
-  }
-
-  const lines: Array<{ kind: "same" | "added" | "removed"; text: string }> = [];
-  let currentIndex = 0;
-  let selectedIndex = 0;
-
-  while (currentIndex < currentLines.length && selectedIndex < selectedLines.length) {
-    if (currentLines[currentIndex] === selectedLines[selectedIndex]) {
-      lines.push({ kind: "same", text: currentLines[currentIndex] });
-      currentIndex += 1;
-      selectedIndex += 1;
-      continue;
-    }
-
-    if (lengths[currentIndex + 1][selectedIndex] >= lengths[currentIndex][selectedIndex + 1]) {
-      lines.push({ kind: "removed", text: currentLines[currentIndex] });
-      currentIndex += 1;
-    } else {
-      lines.push({ kind: "added", text: selectedLines[selectedIndex] });
-      selectedIndex += 1;
-    }
-  }
-  while (currentIndex < currentLines.length) {
-    lines.push({ kind: "removed", text: currentLines[currentIndex] });
-    currentIndex += 1;
-  }
-  while (selectedIndex < selectedLines.length) {
-    lines.push({ kind: "added", text: selectedLines[selectedIndex] });
-    selectedIndex += 1;
-  }
-
-  return lines;
 }
 
 function ActivityEventItem({ event }: { event: ActivityEvent }) {
@@ -182,6 +137,7 @@ function RevisionItem({
 
 export function ReviewDrawer({ projectId, content, onContentSaved }: ReviewDrawerProps) {
   const dispatch = useDispatch<AppDispatch>();
+  const lastAutomaticRevisionRequest = useRef<string | null>(null);
   const {
     activityEvents,
     activityStatus,
@@ -236,12 +192,15 @@ export function ReviewDrawer({ projectId, content, onContentSaved }: ReviewDrawe
 
   useEffect(() => {
     if (!content) return;
+    const target = JSON.stringify([projectId, content.id, content.currentRevision]);
+    if (lastAutomaticRevisionRequest.current === target) return;
     if (
       reviewProjectId !== projectId ||
       contentId !== content.id ||
       revisionsStatus === "idle" ||
       (revisionsStatus === "succeeded" && loadedThroughRevision < content.currentRevision)
     ) {
+      lastAutomaticRevisionRequest.current = target;
       void dispatch(loadContentRevisions({ projectId, contentId: content.id }));
     }
   }, [content, contentId, dispatch, loadedThroughRevision, projectId, reviewProjectId, revisionsStatus]);

@@ -20,7 +20,7 @@ export function ProjectsPage() {
   async function create(event: React.FormEvent) {
     event.preventDefault(); if (!title.trim() || inFlight.current) return;
     inFlight.current = true; setCreating(true); setCreateError('');
-    try { const project = await createProject({ title: title.trim(), language: language.trim() || 'ru', storageMode: 'files' }); navigate(route(project)); }
+    try { const project = await createProject({ title: title.trim(), language: language.trim(), storageMode: 'files' }); navigate(route(project)); }
     catch (cause) { setCreateError(cause instanceof Error ? cause.message : 'Не удалось создать проект. Повторите попытку.'); }
     finally { inFlight.current = false; setCreating(false); }
   }

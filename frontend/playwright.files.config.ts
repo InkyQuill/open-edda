@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
+  forbidOnly: !!process.env.CI,
   testDir: "./.playwright/files", outputDir: "./.playwright/test-results/files",
   timeout: 45_000, reporter: "list", workers: 1,
   use: { baseURL: process.env.EDDA_TEST_BASE_URL ?? "http://127.0.0.1:4187", trace: "retain-on-failure" },

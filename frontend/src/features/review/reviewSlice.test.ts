@@ -449,7 +449,7 @@ describe("reviewSlice", () => {
     expect(restored.restoreStatus).toBe("succeeded");
     expect(restored.restoreRequestId).toBeNull();
     expect(restored.restoreError).toBeNull();
-    expect(restored.selectedRevisionNumber).toBe(restoredContent.currentRevision);
+    expect(restored.selectedRevisionNumber).toBeNull();
     expect(restored.revisions).toEqual([revision]);
   });
 
@@ -459,6 +459,7 @@ describe("reviewSlice", () => {
         ...initialReviewState,
         projectId: "project-1",
         contentId: "content-1",
+        selectedRevisionNumber: 7,
       },
       restoreContentRevision.pending("request-1", {
         projectId: "project-1",
@@ -478,6 +479,8 @@ describe("reviewSlice", () => {
       }),
     );
 
+    expect(loading.selectedRevisionNumber).toBe(7);
+    expect(failed.selectedRevisionNumber).toBe(7);
     expect(failed.restoreStatus).toBe("failed");
     expect(failed.restoreRequestId).toBeNull();
     expect(failed.restoreError).toBe("restore revision failed: 409");

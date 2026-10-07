@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
+  forbidOnly: !!process.env.CI,
   testDir: "./.playwright/tests",
   outputDir: "./.playwright/test-results",
   timeout: 30_000,

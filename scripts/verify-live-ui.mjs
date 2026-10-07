@@ -20,10 +20,10 @@ try {
   const page = await context.newPage();const errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto(`${account.server}/projects/${report.project}/files`);
   await page.getByRole('heading',{name:report.title,exact:true}).waitFor();
-  if(name==='mobile')await page.getByRole('button',{name:'Files',exact:true}).click();
+  if(name==='mobile')await page.getByRole('button',{name:'Файлы проекта',exact:true}).click();
   await page.getByRole('button',{name:'chapter.md',exact:true}).click();
-  await page.getByLabel('File text',{exact:true}).waitFor();
-  const text=await page.getByLabel('File text',{exact:true}).inputValue();
+  await page.getByLabel('Текст файла',{exact:true}).waitFor();
+  const text=await page.getByLabel('Текст файла',{exact:true}).inputValue();
   if(!text.includes('Проверочная глава'))throw new Error('Wrong downloaded chapter');
   if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw new Error('Horizontal overflow');
   if(errors.length)throw new Error(errors.join('\n'));
