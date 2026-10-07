@@ -1,5 +1,7 @@
 # Edda Project Layout for Markdown Interoperability
 
+> Superseded on 2026-10-06 by [ADR 0014](0014-portable-projects-and-transactional-sync.md). The fixed layout below records the earlier decision only; existing CWS structures must now be preserved without conversion.
+
 Open Edda defines one comfortable Markdown project layout instead of trying to support arbitrary folder shapes. The target layout is based on the stronger `alchemist` project structure:
 
 ```text

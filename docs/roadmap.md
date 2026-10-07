@@ -1,184 +1,91 @@
 # Open Edda Roadmap
 
-This roadmap tracks product milestones separately from implementation plans. Detailed task plans live in `docs/superpowers/plans/`.
+Updated 2026-10-06 after [implementation audit](audit/2026-10-06-project-direction.md). Product authority: [ADR 0014](adr/0014-portable-projects-and-transactional-sync.md). The [previous milestone tracker](archive/roadmap-2026-07-01.md) is retained as history; its “Implemented” labels are not proof of end-to-end readiness.
 
-## Milestone Status
+## Direction and order
 
-| Milestone | Name | Status | Tracking Plan |
-| --- | --- | --- | --- |
-| 1 | Project Core | Implemented | `docs/superpowers/plans/2026-06-13-writer-project-core.md` |
-| 2 | Agent Core | Implemented | `docs/superpowers/plans/2026-06-13-writer-agent-core.md` |
-| 3 | Skill Core | Implemented | `docs/superpowers/plans/2026-06-13-writer-skill-core.md` |
-| 3.5 | Elysium Skill Library Rewrite | Implemented | `docs/superpowers/plans/2026-06-14-writer-skill-library-rewrite.md` |
-| 3.6 | Skill Script Runtime | Implemented | `docs/superpowers/plans/2026-06-14-open-edda-skill-script-runtime.md` |
-| 4 | Daily Writing Polish | In progress | See phase tracker below |
-| 5 | File-First Projects And Checkpoints | Implemented | See phase tracker below |
-| Later | Collaboration | Deferred | Needs specs after single-author file-first workflow is stable |
+Open Edda is a web writing and translation workspace with versioned, portable projects. The author can work in the browser or take the same project to local Writing Tools and synchronize it back, without adopting git commit workflows or rearranging CWS folders.
 
-## Milestone 1: Project Core
+CWS is the compatibility authority; Elysium is an obsolete legacy conversion, not a template. Prefer flat organization while permitting arbitrary directory trees. Distribution will be a Docker image with persistent volume/PVC data. [Storage recommendation and deployment contract](adr/0015-storage-and-container-deployment.md) separate the public file tree from physical server storage.
 
-Auth, Story Projects, Chapters, Story Bible Entries, Entry Sections, Entry Relations, Writing Briefs, Project Notes, Attached Notes, Per-Item Revisions, diffs, and Elysium Layout import/export. This milestone was implemented under the earlier database-backed content model.
+Delivery order: **projects → local synchronization → Pocket Editor → web Writing Tools and skill parity**. Basic usable UI and preservation of tool files belong to the first delivery; broad tool-feature and skill expansion do not.
 
-Acceptance target:
+## Verified baseline
 
-- A self-hosted author can create/import/export a Story Project.
-- Markdown content is currently database-backed, revisioned, and exportable through the Elysium layout.
-- Chapters, Story Bible Entries, Writing Briefs, Project Notes, and Attached Notes exist as first-class content.
+| Existing area | Current status |
+| --- | --- |
+| Milestone 1: project core | Legacy content CRUD/revisions and Elysium import/export remain; new projects can use generic versioned file trees |
+| Milestones 2–3.6: assistant and skills | Substantial implementation exists; not evidence of parity with current local CWS skills |
+| Milestone 4: writing UI | Routed UI, editor adapter, assistant and review surfaces exist; baseline build restored; checkpoint labels still wrap item revisions |
+| Milestone 5: file-first projects | **Partial foundation**, not completed integration: scanner, IDs, index, local drafts/saves, snapshots, conflicts and CLI state helpers exist |
+| Milestone 5: network sync and web integration | **Local delivery implemented**: create/attach/get/send/take/move/history/restore, explicit conflicts and verified container backups; agent adaptation and Pocket provider integration are later stages |
+| Go module identity | Renamed to `github.com/InkyQuill/open-edda` in the baseline slice |
+| Pocket Editor, Galley Desk, Timeline Helper integration | No implemented Open Edda round-trip or equivalent web feature set established |
 
-## Milestone 2: Agent Core
+## P0 — Restore an honest, reproducible baseline
 
-OpenAI-compatible provider configuration, model variants, prompt assembly, project map, structured retrieval/read tools, Continuation, Rewrite, Read and Check, Direct Apply, preview mode, Structured Writes, conflict handling, Activity Trails, and Prompt Records.
+Build/module/CLI safety slice implemented on 2026-10-06; see [verification](audit/2026-10-06-baseline-repair.md). Revision/checkpoint UI terminology remains a separate follow-up before file-version integration.
 
-Acceptance target:
+- [x] Fix the Go compile failure and make Galley Editor dependency installation/build reproducible.
+- [x] Rename the Go module and imports/generated references to `github.com/InkyQuill/open-edda`; verify tests, build and tooling. Preserve legacy configuration aliases intentionally rather than mixing them with module identity.
+- [x] Until real transfer exists, CLI commands must not acknowledge an upload or clear its pending state; expose unsupported network operations truthfully.
+- [x] New file projects expose project version history/restore directly; the older item-revision UI is outside the file-project flow.
 
-- An author can configure a model variant and run project-aware chat plus Continuation, Rewrite, and Read and Check.
-- The agent can inspect project context through structured tools instead of receiving the whole project in prompt.
-- Writes are revision-safe, conflicts are detected, and Prompt Records/Activity Trails explain what happened.
+Exit: current-source server/frontend run, checks pass, unreachable-server tests cannot report successful transfer. This gate is part of the project/sync delivery, not a new feature detour.
 
-## Milestone 3: Skill Core
+## P1 — Create and preserve portable projects (implemented)
 
-Skill import/install, skill browsing, routing/selecting skills for Agent Sessions, exposing skill instructions/assets to the agent, and clear handling for script-disabled skills.
+Development policy (user clarification, 2026-10-06): no installed legacy projects exist. Do not spend delivery work on old-data conversion or backward compatibility. CWS and Writing Tools file interoperability remain required.
 
-Acceptance target:
+Internal storage foundation implemented on 2026-10-06: generic manifests, immutable objects, transactional versions/receipts and restore. See [implementation and verification](architecture/project-versions.md). The first web slice now creates blank file projects, browses folders, edits UTF-8 text and downloads files through the version API. The file UI now also imports selected files/folders, moves/removes entries, previews history and restores saved trees. CLI folder import into an empty project is implemented; see [import contract](architecture/folder-import.md).
 
-- An author can import project skills from zip archives or server-local skill folders.
-- The UI can browse installed skills, files, routing hints, and script-disabled status.
-- Agent Sessions and quick actions can select skills.
-- The model sees available/selected skill guidance and can load full skill content through a bounded `skill` tool.
-- Skill scripts are imported with clear disabled status until the Skill Script Runtime milestone defines auditing, permissions, and service-prepared execution scaffolding.
+- Create a blank project in the browser and register/import an existing folder/archive without forcing the old Edda layout.
+- Separate complete file inventory from optional CWS role mapping. Preserve arbitrary nested paths, source languages, frontmatter, binary assets and tool metadata; show exclusions and unsupported entries before acceptance.
+- Connect web reads/writes to one server project storage service (recommended: immutable bytes plus authoritative SQLite version manifests) and stable file/project identity. No legacy-project migration or backward-compatibility layer is required: the user confirmed on 2026-10-06 that no old Open Edda projects exist.
+- Publish recoverable project transactions with automatic versions; support history, comparison and non-destructive restore.
+- Expose a usable projects list and file/directory browser. Unknown formats remain downloadable and transferable even without a specialized editor.
 
-## Milestone 3.5: Elysium Skill Library Rewrite
+Exit: browser-created and imported projects can be retrieved with matching paths/hashes; web changes appear in canonical storage; restart/reindex preserve content and history. Test sanitized snapshots shaped like current `alchemist` and `only-sense-online`, not only the old `alchemist-lite` fixture.
 
-After Skill Core exists and before Daily Writing Polish, rewrite the current Elysium project skills from:
+## P2 — Local-computer synchronization (implemented on Linux)
 
-`/home/inky/Документы/elysium/.agents/skills`
+First network slice implemented: login/logout, project discovery, verified fresh checkout, offline status and transactional send with durable retry state. Real-server tests cover two independent copies, stale sends, exact binary/text bytes and a lost response followed by later local edits. [CLI contract and limits](architecture/cli-sync.md). Existing-copy `take` now merges independent file changes and records explicit conflict choices, with journaled application and process-exit recovery tests. The remaining local delivery is now implemented: CLI project creation/attachment, explicit stable-ID moves, history/restore, Docker/Compose, a Kubernetes template and verified online backup/fresh-volume restore. P2 is complete for the tested Linux/single-instance topology; production PVC and other operating systems are not qualified.
 
-The rewrite should make these skills first-class Open Edda skills instead of terminal-agent skills. The work is not just import cleanup: each skill needs an importance decision, routing metadata, updated tool names, and structure aligned with Open Edda's exposed agent tools.
+- Configure a base URL and credentials, discover/select/create the remote project and attach a local folder.
+- Implement actual authenticated `get`/`send` and update retrieval, manifest comparison, staged transfer, receipts and idempotent retry.
+- Preserve previous versions automatically; no required checkpoint note or manual commit step.
+- Handle concurrent web/local edits, rename/delete conflicts, interrupted publication and edits from local tools during transfer.
+- Make status clear: local changes, last confirmed server version, pending operations, offline/error and conflict resolution.
 
-### Rewrite Goals
+- Package the usable delivery as a reproducible Docker image with volume/PVC examples, single-instance storage requirements and a verified backup/restore procedure.
 
-- Convert each `SKILL.md` to Open Edda-compatible frontmatter: `name`, `description`, `route.actionKinds`, `route.contentKinds`, `route.tags`, and `route.priority`.
-- Replace terminal/file-operation instructions with Open Edda tools:
-  - `project_map`
-  - `search_content`
-  - `read_content`
-  - `read_chapter`
-  - `read_story_bible_entry`
-  - `read_entry_section`
-  - `list_revisions`
-  - `append_to_chapter`
-  - `insert_into_chapter`
-  - `replace_selection`
-  - `update_story_bible_entry`
-  - `update_entry_section`
-  - `skill`
-- Remove or rewrite references to shell commands, local script execution, direct filesystem edits, and terminal-agent-only assumptions.
-- Move reusable examples/checklists into `templates/`, `references/`, or `data/` where useful.
-- Preserve script files only when they are useful as reference algorithms; mark them as disabled and rewrite instructions so the model does not ask to execute them.
-- Audit every bundled script for destructive behavior, filesystem assumptions, runtime requirements, and whether it remains useful through Open Edda's service-prepared script inputs.
-- Defer any skill whose core value depends on running scripts until the Skill Script Runtime exists.
-- Keep a script-bearing skill in Milestone 3.5 only when the script is an optional accelerator and the skill can provide clear value through Edda-native agent instructions, data, templates, or references without executing the script.
-- Keep scripts only when they are safe, useful, and can be made runnable through Open Edda's Skill Script Runtime.
-- Decide which skills should ship with Open Edda as default authoring aids, which should be optional, and which should be archived.
+Verification: [P1/P2 acceptance record](audit/2026-10-06-files-sync-acceptance.md), [container/backup acceptance](architecture/deployment-and-backup.md), CLI HTTP and process-exit tests, and desktop/mobile browser tests pass. Remaining platform qualification is stated explicitly; no migration gate exists.
 
-### Skill Library Decisions
+Exit: local → web → second local copy → web → first copy passes real network tests and path/hash comparisons. Timeout-after-commit retry creates no duplicate version; rejected/interrupted transfer leaves both sides recoverable. See [delivery plan and acceptance matrix](plans/2026-10-06-projects-and-sync.md).
 
-The accepted Default Skill, Optional Skill, Archived Skill, rename, merge, and script-dependence decisions live in `docs/superpowers/plans/2026-06-14-writer-skill-library-rewrite.md`.
+## P3 — Pocket Editor synchronization
 
-The high-level policy is:
+- Provider-independent source/account/project/directory selection in Pocket Editor; retain existing Yandex books and offline cache.
+- Implement Open Edda adapter after the P2 protocol is stable. Keep Seafile and Dropbox as explicit follow-up adapters, not prerequisites to the first Edda round-trip.
+- Transfer manifests and review sidecars with source/hash/anchor checks, preserving IDs and conflict states. Chapters remain read-only from Pocket Editor.
+- Support several book directories inside one writing/translation project and concurrent review from desktop/mobile.
 
-- Daily fiction-writing skills are enabled by default.
-- Specialized but useful writing skills are installed as optional skills and disabled by default.
-- Skills outside Open Edda's fiction-writing focus, or skills whose core value depends on scripts, are archived or deferred.
-- `$` is the skill mention prefix, `/` remains a command prefix, and `@` is reserved for entity mentions.
+Exit: Edda book directory → offline Pocket review → Edda → local Galley Desk → Edda/Pocket round-trip retains edits, signals, comments, order and unresolved anchors without modifying source Markdown during review synchronization.
 
-### Required Output
+## P4 — Writing Tools in the browser, deferred
 
-- A rewritten skill library under a Open Edda-compatible source folder.
-- A manifest documenting default, optional, and archived skills.
-- Tests or fixture imports proving every rewritten skill imports through Milestone 3 Skill Core.
-- A short compatibility note for each script-heavy skill explaining whether the script was removed, retained for the Skill Script Runtime, converted to data/template/reference material, or deferred until Skill Script Runtime scaffolding exists.
-- Skill browser disclosure for script-bearing skills, including whether script support is deferred and whether the skill still works through Edda-native agent guidance.
+- Galley Desk equivalent reading/editing/review, chapter ordering/management, metadata and compatible review application; continue round-trip with the desktop app.
+- Timeline Helper equivalent event/plotline/temporal editing, shared timeline/calendar projections and compatible file preservation; continue round-trip with the desktop app.
+- Reuse shared Galley themes and domain contracts, not Electron-specific shell/IPC code. Establish a feature-parity matrix against the tool versions selected when this phase starts.
 
-## Milestone 3.6: Skill Script Runtime
+## P5 — Local-agent skill mechanics through Edda, deferred
 
-Add a safe runtime for audited skill helper scripts after the built-in skill library has been reviewed. The runtime should let useful scripts run against service-prepared Open Edda project data without giving scripts direct write access to project files or `.edda/` metadata.
+- Inventory current local CWS skills and source versions; map each operation to Edda storage/tools.
+- Preserve semantics, source authority, review gates, supporting assets and outputs. Test matching local/web scenarios; explicitly label unsupported helpers.
+- Resolve built-in/global/project scopes and script capabilities as part of this phase.
 
-Acceptance target:
+P4 and P5 are later work; their relative implementation order can be selected after P3 without delaying projects or synchronization. Multi-author collaboration and a consistency dashboard remain deferred until the single-author round-trip is reliable.
 
-- Each runnable skill script has an audit record covering destructive operations, filesystem access, network access, runtime dependencies, expected inputs, and expected outputs.
-- Scripts run through Open Edda-provided scaffolding that can fetch chapters, Story Bible Entries, Entry Sections, Project Notes, Attached Notes, and skill assets from indexed project data.
-- Scripts cannot directly mutate Story Text, Story Bible content, project files, or `.edda/` metadata. They return structured proposals, reports, generated data, or draft outputs that the author can review before applying.
-- Admin controls can enable, disable, and inspect runnable scripts per built-in or imported skill.
-- Skills with missing or disabled script support degrade clearly in the agent session instead of asking the author to run terminal commands.
+## Completion policy
 
-## Milestone 4: Daily Writing Polish
-
-Status: Implemented.
-
-Editor ergonomics, mobile-friendly layouts, system settings, project/content creation flows, side-panel Attached Notes, better diff/restore UI, export polish, provider disclosure polish, and assistant chat UX.
-
-Acceptance target:
-
-- The Writing Workspace feels usable for daily chapter work, not just API validation.
-- Selection/cursor workflows are comfortable on desktop and tablet, with phone support for reading, chat, small edits, and triggering actions.
-- Revision review, attached notes, model availability, and provider disclosure are visible without dominating the writing surface.
-- Provider configuration, model catalog selection, and skill administration live in system/project settings, not in the writing workspace's assistant drawer.
-- Assistant mode keeps the right panel focused on chat only.
-
-### Milestone 4 Phase Tracker
-
-Detailed design context lives in `docs/superpowers/specs/2026-06-14-milestone-4-daily-writing-polish-design.md`.
-
-| Phase | Scope | Status | Plan |
-| --- | --- | --- | --- |
-| 1 | Routed workspace foundation: React Router, Redux, Tailwind v4, shadcn/ui, responsive shell, editor-local action shells | Implemented | `docs/superpowers/plans/2026-06-14-milestone-4-workspace-foundation.md` |
-| 2 | Behavior parity and data slices: move old monolithic assistant/settings/skills/activity behavior into routed vertical slices | Implemented | `docs/superpowers/plans/2026-06-14-milestone-4-behavior-parity.md` |
-| 3 | Editor adapter: replace read-only textarea assumptions with an editor boundary prepared for Galley integration and mutation-safe cursor/selection APIs | Implemented | `docs/superpowers/plans/2026-06-17-milestone-4-editor-adapter.md` |
-| 3.5 | Information architecture correction: move provider/model/skill administration to settings, make assistant drawer chat-only, add project/content creation controls, and redesign the projects page | Implemented | `docs/superpowers/plans/2026-06-17-milestone-4-system-settings-and-ia.md` |
-| 4 | Assistant actions: wire Generate, Rewrite, Check, preview, accept/reject, and version-safe conflict handling from the editor-local controls | Implemented | `docs/superpowers/plans/2026-06-17-milestone-4-assistant-actions.md` |
-| 5 | Review surfaces: checkpoints/history, diff/restore, attached notes, activity, prompt records, and review-oriented drawer workflows | Implemented | `docs/superpowers/plans/2026-07-01-milestone-4-review-surfaces.md` |
-| 6 | Mobile and browser smoke hardening: sheet behavior, persistence, responsive ergonomics, and Playwright/browser coverage | Implemented | `docs/superpowers/plans/2026-07-01-milestone-4-mobile-browser-smoke.md` |
-
-## Milestone 5: File-First Projects And Checkpoints
-
-Move Open Edda from database-owned prose toward the defined Edda project layout plus `.edda/` metadata. Add the local CLI and lightweight linear checkpoint model described in `docs/superpowers/specs/2026-07-01-file-first-checkpoints-design.md`.
-
-Acceptance target:
-
-- A writer can start from the web app or from a local folder that already follows, or is converted into, the `alchemist`-style Edda layout.
-- Story prose, storyline/planning material, characters, worldbuilding, drafts, project guidance, and project-local skills are ordinary files in the defined layout.
-- SQLite indexes and caches project data, but project content and checkpoint history can be rebuilt from the folder plus `.edda/`.
-- `edda get`, `edda status`, `edda save`, `edda send`, `edda take`, `edda checkpoint`, `edda history`, `edda diff`, and `edda restore` cover the main local workflow.
-- Checkpoints provide project-wide history, comparison, restore, recovery, and sync without exposing git branches, staging, rebases, or remote-management concepts.
-- Conflicts preserve base/local/server versions and resolve back into normal saved files.
-
-### Milestone 5 Phase Tracker
-
-| Phase | Scope | Status | Plan |
-| --- | --- | --- | --- |
-| 1 | File-first layout foundation: scan the `alchemist`-style Edda folder structure, read/write `.edda/project.json`, and add `edda init/status` CLI skeleton | Implemented | `docs/superpowers/plans/2026-07-01-milestone-5-layout-foundation.md` |
-| 2 | File index and stable IDs: rebuild SQLite index rows from files, hash saved content, and preserve IDs across renames via `.edda/ids.json` | Implemented | `docs/superpowers/plans/2026-07-01-milestone-5-file-index.md` |
-| 3 | Draft/save model: separate browser/server draft autosaves from canonical file writes and update web Save semantics | Implemented | `docs/superpowers/plans/2026-07-01-milestone-5-draft-save-model.md` |
-| 4 | Linear checkpoints: create, list, diff, and restore project-wide snapshots using `.edda/checkpoints/` | Implemented | `docs/superpowers/plans/2026-07-01-milestone-5-checkpoints.md` |
-| 5 | CLI sync workflow: implement `edda get`, `send`, `take`, server connection metadata, pending upload state, and retry behavior | Implemented | `docs/superpowers/plans/2026-07-01-milestone-5-sync-workflow.md` |
-| 6 | Conflict preservation and resolution: detect divergent saved file edits, preserve base/local/server versions, and resolve back to normal files | Implemented | `docs/superpowers/plans/2026-07-01-milestone-5-conflicts.md` |
-| 7 | Agent/write migration: move structured writes and review surfaces from database revisions toward saved file hashes and checkpoints | Implemented | `docs/superpowers/plans/2026-07-01-milestone-5-agent-write-migration.md` |
-
-## Later: Collaboration
-
-Add multi-author collaboration only after the single-author file-first workflow is stable.
-
-Acceptance target:
-
-- Collaboration is considered only after single-author privacy, checkpoints, agent activity, file mobility, and recovery flows are stable.
-
-## Later: Story Consistency Dashboard
-
-Adapt the useful parts of the deferred `story-zoom` skill into an Edda-native consistency dashboard after the main writing workflow is stable. The dashboard should help authors see drift between the Writing Brief, Story Text, Story Bible Entries, Entry Sections, Project Notes, and recent checkpoints without relying on raw file watchers or script execution.
-
-Acceptance target:
-
-- Open Edda can surface likely inconsistencies across story levels using indexed file-backed project state and agent-readable summaries.
-- Authors can review suggested consistency fixes before any Story Text or Story Bible changes are applied.
-- The workflow remains optional and does not block ordinary drafting or revision.
+A helper, route stub, passing unit test or renamed UI label is not a completed workflow. Mark a phase complete only with current-source runtime evidence, adversarial recovery tests appropriate to its data risks, and a real cross-client round-trip. Record environment blockers and unverified behavior separately from confirmed defects.

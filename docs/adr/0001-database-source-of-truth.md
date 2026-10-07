@@ -1,5 +1,7 @@
 # Project Folder as the Story Source of Truth
 
+> Historical storage proposal, reopened 2026-10-06. The mandatory layout is superseded by [ADR 0014](0014-portable-projects-and-transactional-sync.md). The DB-as-cache/rebuild promise below is superseded by accepted [ADR 0015](0015-storage-and-container-deployment.md), which specifies authoritative SQLite manifests plus immutable file bytes. Do not implement the old recovery claim as current policy.
+
 Open Edda treats an Edda project folder as the authoritative home for story prose, story bible material, writing briefs, project notes, local skills, and other author-owned Markdown files. The service reads and writes one defined project layout, so an author can work in the web app or in normal editors on their computers without turning Open Edda into a git client.
 
 SQLite remains part of the architecture, but it is not the canonical store for author prose. It stores indexes, search rows, project maps, prompt records, activity, session state, assistant caches, script runtime records, and mirrors of checkpoint metadata. If the database is lost, Open Edda should be able to rebuild project content and checkpoint history from the folder plus `.edda/` metadata. Data that only exists in operational tables may be lost unless a later ADR explicitly persists it into `.edda/`.

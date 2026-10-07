@@ -2,6 +2,8 @@
 
 This directory tracks Edda skill source material, rewrite staging, and policy notes for the Built-In Skill Library.
 
+The existing shelf is not evidence of parity with current local CWS skills. That future requirement is defined in [ADR 0014](../adr/0014-portable-projects-and-transactional-sync.md) and deferred to [roadmap P5](../roadmap.md). Projects/local sync and Pocket Editor come first.
+
 Agent-facing mechanics and authoring standards:
 
 - [Open Edda Skill Mechanics](open-edda-skill-mechanics.md) records how Skill Core imports, stores, routes, and exposes skills to the model.
@@ -9,7 +11,7 @@ Agent-facing mechanics and authoring standards:
 
 ## Milestone 3.5 Scope
 
-Milestone 3.5 follows the accepted library rewrite plan in [docs/superpowers/plans/2026-06-14-writer-skill-library-rewrite.md](/home/inky/Development/writer/.worktrees/milestone-3-5-skill-library/docs/superpowers/plans/2026-06-14-writer-skill-library-rewrite.md). The goal is to curate a Edda-native built-in skill shelf, not to import every copied prompt as an installed skill.
+Historical Milestone 3.5 follows the [library rewrite plan](../superpowers/plans/2026-06-14-writer-skill-library-rewrite.md). Its goal was to curate an Edda-native built-in skill shelf, not to import every copied prompt as an installed skill.
 
 ## Mention And Command Policy
 

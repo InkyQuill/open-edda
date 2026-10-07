@@ -1,5 +1,7 @@
 # Linear Checkpoints Instead of Git
 
+> Extended on 2026-10-06 by [ADR 0014](0014-portable-projects-and-transactional-sync.md): ordinary accepted saves/transfers retain previous versions automatically; a named checkpoint or note is optional. Current local snapshots are foundations, not completed transactional network sync.
+
 Open Edda provides simple linear checkpoints for project history instead of exposing git concepts. A checkpoint is a named project-wide snapshot of saved files and syncable `.edda/` metadata. Authors use checkpoints to compare changes, restore earlier states, recover from mistakes, and move saved work between a local folder and the server.
 
 The product should use writing-oriented commands and labels, such as `edda save "Note"`, `edda history`, `edda diff`, and `edda restore`. It should not require branches, staging, rebases, remotes, merge commits, or git terminology in the main workflow.

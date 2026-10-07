@@ -1,6 +1,10 @@
 # Open Edda
 
-Open Edda is a self-hosted AI writing studio for hobby novelists who want AI assistance over an entire story project, not only the currently selected text. The short in-app name is Edda.
+Open Edda is a self-hosted web writing and translation workspace with portable, versioned projects. Authors work in the browser or use local Writing Tools and synchronize back. The short in-app name is Edda.
+
+Before working on the interface, read [DESIGN.md](DESIGN.md) and [PRODUCT.md](PRODUCT.md). The approved design is currently demonstrated in the isolated `frontend/design.html` prototype; it is not yet the production UI. Scope and verification are in [the prototype brief](docs/design/prototype.md).
+
+Current product direction: [ADR 0014](docs/adr/0014-portable-projects-and-transactional-sync.md). Delivery order: projects and local synchronization, then Pocket Editor, then Writing Tools feature parity and agent-skill parity. CWS is the baseline; primarily flat organization is preferred, arbitrary directory trees remain valid, and Elysium is legacy only. Docker volume/PVC deployment and physical storage are covered by [ADR 0015](docs/adr/0015-storage-and-container-deployment.md). This glossary describes product intent; consult the [audit](docs/audit/2026-10-06-project-direction.md) for actual implementation status.
 
 ## Language
 
@@ -16,12 +20,12 @@ _Avoid_: Writer, Open Edda when space is tight
 Major subsystems and internal product surfaces should use names drawn from Scandinavian myth, literature, and history when a distinctive name helps authors and developers understand the boundary. Use the name only after the subsystem has a clear responsibility; avoid decorative renames for ordinary packages, database tables, or simple implementation details.
 _Avoid_: Generic subsystem names, premature mythology theming, unclear aliases
 
-**Self-Hosted AI Writing Studio**:
-A private workspace where an author develops story text, story-world material, and AI-assisted revisions as one connected project.
+**Self-Hosted Writing Workspace**:
+A private workspace for writing and translation projects, with optional AI assistance. Core project work and synchronization do not require an AI provider.
 _Avoid_: Generic writing app, AI text editor
 
 **Story Project**:
-The complete body of material for one fiction work or series, including draft prose, story bible material, notes, and collaboration history.
+The complete portable file tree for a writing or translation work or series, including prose, sources, reference material, plans, tool metadata and retained versions. Existing folder organization is preserved.
 _Avoid_: File folder, document, workspace
 
 **Project Dashboard**:
@@ -77,23 +81,23 @@ The authoritative version of a story project's text, reference material, version
 _Avoid_: File source, sync folder
 
 **Markdown Export**:
-A portable representation of a story project for local editing, backup, and use with external text-based agent tools.
-_Avoid_: Canonical files, filesystem database
+The existing Elysium conversion/export operation for database content. It is not a lossless transfer of an arbitrary project tree.
+_Avoid_: Full-project synchronization
 
 **Elysium Layout**:
-The initial Markdown folder convention for importing and exporting story projects, with folders such as `story/`, `characters/`, `worldbuilding/`, and `braindump/`.
-_Avoid_: Arbitrary layout, sync profile
+A legacy Markdown import/export convention with folders such as `story/`, `characters/`, `worldbuilding/`, and `braindump/`. It is not a required project layout.
+_Avoid_: Mandatory Edda structure
 
 **Markdown Import**:
 A conservative process that creates a story project from an Elysium Layout folder while preserving Markdown content, metadata, entry sections, relations, and chapters.
 _Avoid_: Live sync, merge import
 
 **Local Sync Tool**:
-A future command-line workflow that detects local Markdown changes and replays them into the service database with merge handling.
-_Avoid_: V1 import, filesystem source of truth
+A planned authenticated workflow that exchanges complete selected project files with a server, using transactional versions, acknowledged transfers and preserved conflicts. Current CLI network commands explicitly report unsupported operations without mutating local state.
+_Avoid_: Git client, successful transfer without a server receipt
 
 **Markdown-Based Content**:
-Story project content stored in the database as Markdown-compatible text so it can be edited in a Markdown editor and exported cleanly to Markdown files.
+Legacy content is editable through the Markdown editor and remains database-backed. New file projects have a plain UTF-8 editor over immutable file objects and authoritative SQLite version manifests, alongside downloadable unknown/binary formats. CLI folder import, get/send/take, explicit file conflict choices and journaled recovery are available. History/restore UI, explicit rename identity, folder attachment, Docker and verified online backup/fresh-volume restore are implemented for Linux single-instance deployment. Pocket provider integration remains a later stage. The user confirmed no old deployed projects exist, so legacy migration/backward compatibility are not requirements.
 _Avoid_: Rich text document, proprietary document model
 
 **Galley Editor**:
@@ -109,8 +113,8 @@ The service layer used for Open Edda's API, persistence, agent tooling, provider
 _Avoid_: Python backend, Next.js backend
 
 **SQLite Store**:
-The first-version relational database for story projects, revisions, story bible metadata, agent sessions, and settings in a single-author self-hosted deployment.
-_Avoid_: Postgres-first database, file storage
+The current database for web content/revisions and operational records. The recommended hybrid model also makes project/version manifests authoritative in SQLite; only derived indexes are rebuildable. Backups must include DB and referenced immutable file objects.
+_Avoid_: Claiming the migration is already complete
 
 **Mobile-Friendly Web**:
 A responsive browser experience that supports reading, chat, small edits, and agent actions on phones without requiring a native mobile app.
