@@ -55,6 +55,10 @@ func RebuildIndex(ctx context.Context, db *sql.DB, projectID string, root string
 			staleIDs = append(staleIDs, id)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return IndexResult{}, fmt.Errorf("iterate existing file index rows: %w", err)
+	}
 	if err := rows.Close(); err != nil {
 		return IndexResult{}, fmt.Errorf("close existing file index rows: %w", err)
 	}

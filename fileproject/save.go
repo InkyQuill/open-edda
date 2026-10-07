@@ -17,6 +17,8 @@ import (
 var (
 	ErrInvalidFileID = errors.New("invalid file id")
 	ErrFileConflict  = errors.New("saved file hash conflict")
+	// ErrDraftCleanup means the canonical save succeeded but the draft remains.
+	ErrDraftCleanup = errors.New("content saved; draft cleanup failed")
 )
 
 var fileIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
@@ -248,7 +250,7 @@ func PromoteDraft(root string, input SaveDraftInput) (SavedFile, error) {
 		return SavedFile{}, err
 	}
 	if err := DeleteDraft(root, input.FileID); err != nil {
-		return saved, fmt.Errorf("promote saved canonical file but failed to delete draft: %w", err)
+		return saved, fmt.Errorf("%w: %w", ErrDraftCleanup, err)
 	}
 	return saved, nil
 }

@@ -49,6 +49,19 @@ func PreserveConflict(root string, input PreserveConflictInput) (ConflictRecord,
 	if err := validateFileID(input.FileID); err != nil {
 		return ConflictRecord{}, err
 	}
+	// Serialize preservation and resolution across processes before checking the record.
+	unlock, err := lockSyncStateFile(root)
+	if err != nil {
+		return ConflictRecord{}, err
+	}
+	defer unlock()
+	if existing, err := ReadConflict(root, input.FileID); err == nil {
+		if existing.ResolvedAt == nil {
+			return ConflictRecord{}, fmt.Errorf("conflict %s already exists and is unresolved", input.FileID)
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return ConflictRecord{}, err
+	}
 	record := ConflictRecord{
 		SchemaVersion: CurrentSchemaVersion,
 		FileID:        input.FileID,
@@ -136,6 +149,11 @@ func ListConflicts(root string) ([]ConflictRecord, error) {
 }
 
 func ResolveConflict(root string, input ResolveConflictInput) (ConflictRecord, SavedFile, error) {
+	unlock, err := lockSyncStateFile(root)
+	if err != nil {
+		return ConflictRecord{}, SavedFile{}, err
+	}
+	defer unlock()
 	record, err := ReadConflict(root, input.FileID)
 	if err != nil {
 		return ConflictRecord{}, SavedFile{}, err

@@ -84,7 +84,7 @@ func Scan(root string) (ProjectLayout, error) {
 
 	rootSeen := map[string]bool{}
 	rootIndexSeen := map[string]bool{}
-	hasLayoutIdentity := false
+	hasLayoutIdentity := layout.Metadata != nil
 
 	err = filepath.WalkDir(absRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {

@@ -228,7 +228,7 @@ func runInit(args []string, stdout io.Writer) error {
 	title := flags.String("title", "", "project title")
 	id := flags.String("id", "", "project id")
 	serverURL := flags.String("server-url", "", "server URL")
-	root, flagArgs := splitExistingOptionalPath(args)
+	root, flagArgs := splitOptionalPath(args)
 	if err := flags.Parse(flagArgs); err != nil {
 		return err
 	}
@@ -316,7 +316,13 @@ func runSave(args []string, stdout io.Writer) error {
 	}
 	if err != nil {
 		if errors.Is(err, fileproject.ErrFileConflict) {
-			return fmt.Errorf("saved file changed since draft base: %w", err)
+			if *fromDraft {
+				return fmt.Errorf("saved file changed since draft base: %w", err)
+			}
+			return fmt.Errorf("saved file changed since expected hash: %w", err)
+		}
+		if errors.Is(err, fileproject.ErrDraftCleanup) {
+			fmt.Fprintf(stdout, "Saved %s (%s, %d bytes)\n", saved.Path, saved.SHA256, saved.Size)
 		}
 		return err
 	}

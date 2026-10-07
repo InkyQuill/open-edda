@@ -471,3 +471,56 @@ func copyFixture(t *testing.T, source string) string {
 	}
 	return root
 }
+
+func TestInitNewDirectoryBeforeAndAfterFlags(t *testing.T) {
+	for _, before := range []bool{true, false} {
+		root := filepath.Join(t.TempDir(), "new-project")
+		args := []string{"init", "--title", "New book", "--id", "new-id", "--server-url", "https://example.invalid"}
+		if before {
+			args = append([]string{"init", root}, args[1:]...)
+		} else {
+			args = append(args, root)
+		}
+		if err := run(args, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+			t.Fatal(err)
+		}
+		metadata, err := fileproject.ReadMetadata(root)
+		if err != nil || metadata.ID != "new-id" || metadata.Title != "New book" || metadata.ServerURL != "https://example.invalid" {
+			t.Fatalf("metadata=%#v err=%v", metadata, err)
+		}
+		var out bytes.Buffer
+		if err := run([]string{"status", root}, &out, &bytes.Buffer{}); err != nil || strings.Contains(out.String(), "missing_metadata") {
+			t.Fatalf("status=%s err=%v", out.String(), err)
+		}
+	}
+}
+
+func TestSaveReportsCanonicalSuccessWhenDraftCleanupFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses directory permissions")
+	}
+	root := copyFixture(t, filepath.Join("..", "..", "fileproject", "testdata", "partial"))
+	_, files, err := fileproject.SyncStableIDs(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := files[0]
+	_, err = fileproject.WriteDraft(root, fileproject.WriteDraftInput{FileID: file.ID, BasePath: file.Path, BaseSHA256: file.SHA256, BodyMarkdown: "Saved body\n"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root, ".edda", "drafts")
+	if err := os.Chmod(dir, 0500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0700) })
+	var out bytes.Buffer
+	err = run([]string{"save", root, "--id", file.ID, "--from-draft"}, &out, &bytes.Buffer{})
+	if !errors.Is(err, fileproject.ErrDraftCleanup) || !strings.Contains(out.String(), "Saved "+file.Path) {
+		t.Fatalf("output=%s err=%v", out.String(), err)
+	}
+	body, err := os.ReadFile(filepath.Join(root, file.Path))
+	if err != nil || string(body) != "Saved body\n" {
+		t.Fatalf("body=%q err=%v", body, err)
+	}
+}

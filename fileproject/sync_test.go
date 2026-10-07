@@ -132,6 +132,18 @@ func TestSyncStateMutatorsSerializeConcurrentUpdates(t *testing.T) {
 	if state.PendingUpload == nil {
 		t.Fatalf("pending upload is nil")
 	}
+	seen := map[string]bool{}
+	for _, upload := range state.PendingUploads {
+		seen[upload.CheckpointID] = true
+	}
+	if len(state.PendingUploads) != 10 || len(seen) != 10 {
+		t.Fatalf("lost or duplicate uploads: %#v", state.PendingUploads)
+	}
+	for i := 0; i < 10; i++ {
+		if !seen["checkpoint-"+string(rune('a'+i))] {
+			t.Fatalf("missing checkpoint %d", i)
+		}
+	}
 }
 
 func TestRecordTakeStoresCursorTime(t *testing.T) {

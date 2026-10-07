@@ -324,7 +324,8 @@ func DiffCheckpoint(root string, fromID string, toID string) ([]CheckpointDiffEn
 	if toID == "" {
 		toFiles, err = workingTreeCheckpointFiles(root)
 	} else {
-		to, err := ReadCheckpoint(root, toID)
+		var to Checkpoint
+		to, err = ReadCheckpoint(root, toID)
 		if err != nil {
 			return nil, err
 		}

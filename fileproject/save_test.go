@@ -171,6 +171,9 @@ func TestPromoteDraftSavesAndDeletesDraft(t *testing.T) {
 }
 
 func TestPromoteDraftReturnsSavedFileWhenCleanupFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses directory permissions")
+	}
 	root := copyFileProjectFixture(t, filepath.Join("testdata", "partial"))
 	mustWriteIDMap(t, root, map[string]string{"story/chapter-01.md": "story-1"})
 	before := mustLayoutFile(t, root, "story/chapter-01.md")

@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sync"
 	"syscall"
 	"time"
 )
@@ -28,8 +27,6 @@ type PendingUpload struct {
 	LastError    string     `json:"lastError,omitempty"`
 	UpdatedAt    *time.Time `json:"updatedAt,omitempty"`
 }
-
-var syncStateMu sync.Mutex
 
 func ReadSyncState(root string) (SyncState, error) {
 	data, err := os.ReadFile(syncStatePath(root))
@@ -121,8 +118,6 @@ func WriteSyncState(root string, state SyncState) error {
 }
 
 func RecordPendingUpload(root string, checkpointID string) (SyncState, error) {
-	syncStateMu.Lock()
-	defer syncStateMu.Unlock()
 	unlock, err := lockSyncStateFile(root)
 	if err != nil {
 		return SyncState{}, err
@@ -146,8 +141,6 @@ func RecordPendingUpload(root string, checkpointID string) (SyncState, error) {
 }
 
 func CompletePendingUpload(root string) (SyncState, error) {
-	syncStateMu.Lock()
-	defer syncStateMu.Unlock()
 	unlock, err := lockSyncStateFile(root)
 	if err != nil {
 		return SyncState{}, err
@@ -160,7 +153,6 @@ func CompletePendingUpload(root string) (SyncState, error) {
 	if len(state.PendingUploads) == 0 {
 		return state, nil
 	}
-	state.PendingUploads[0].Attempts++
 	state.LastSentCheckpointID = state.PendingUploads[0].CheckpointID
 	state.PendingUploads = state.PendingUploads[1:]
 	state.PendingUpload = nil
@@ -172,8 +164,6 @@ func CompletePendingUpload(root string) (SyncState, error) {
 }
 
 func RecordPendingUploadFailure(root string, message string) (SyncState, error) {
-	syncStateMu.Lock()
-	defer syncStateMu.Unlock()
 	unlock, err := lockSyncStateFile(root)
 	if err != nil {
 		return SyncState{}, err
@@ -198,8 +188,6 @@ func RecordPendingUploadFailure(root string, message string) (SyncState, error) 
 }
 
 func RecordTake(root string) (SyncState, error) {
-	syncStateMu.Lock()
-	defer syncStateMu.Unlock()
 	unlock, err := lockSyncStateFile(root)
 	if err != nil {
 		return SyncState{}, err

@@ -85,18 +85,21 @@ func InitMetadata(root string, input InitMetadataInput) (ProjectMetadata, error)
 		return ProjectMetadata{}, fmt.Errorf("create .edda directory: %w", err)
 	}
 	path := filepath.Join(eddaDir, "project.json")
-	if _, err := os.Stat(path); err == nil {
-		return ProjectMetadata{}, fmt.Errorf("project metadata already exists")
-	} else if !os.IsNotExist(err) {
-		return ProjectMetadata{}, fmt.Errorf("stat project metadata: %w", err)
-	}
 	data, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
 		return ProjectMetadata{}, fmt.Errorf("marshal project metadata: %w", err)
 	}
 	data = append(data, '\n')
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	tmp, err := writeTempFile(eddaDir, "project-*.json", data, 0o644)
+	if err != nil {
 		return ProjectMetadata{}, fmt.Errorf("write project metadata: %w", err)
+	}
+	defer os.Remove(tmp)
+	if err := os.Link(tmp, path); err != nil {
+		if os.IsExist(err) {
+			return ProjectMetadata{}, fmt.Errorf("project metadata already exists")
+		}
+		return ProjectMetadata{}, fmt.Errorf("publish project metadata: %w", err)
 	}
 	return metadata, nil
 }
