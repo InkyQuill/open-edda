@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"git.inkyquill.net/inky/writer/project"
-	"git.inkyquill.net/inky/writer/skill"
-	"git.inkyquill.net/inky/writer/store"
+	"github.com/InkyQuill/open-edda/project"
+	"github.com/InkyQuill/open-edda/skill"
+	"github.com/InkyQuill/open-edda/store"
 )
 
 func TestPromptProfileStoresAndRetrievesProjectPreferences(t *testing.T) {

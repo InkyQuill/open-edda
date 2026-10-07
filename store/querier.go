@@ -47,6 +47,7 @@ type Querier interface {
 	GetPromptProfile(ctx context.Context, projectID string) (PromptProfile, error)
 	GetProviderConfig(ctx context.Context, arg GetProviderConfigParams) (ProviderConfig, error)
 	GetProviderConfigForProjectModel(ctx context.Context, arg GetProviderConfigForProjectModelParams) (ProviderConfig, error)
+	GetRevisionByNumber(ctx context.Context, arg GetRevisionByNumberParams) (Revision, error)
 	GetSkillByProjectID(ctx context.Context, arg GetSkillByProjectIDParams) (Skill, error)
 	GetSkillByProjectName(ctx context.Context, arg GetSkillByProjectNameParams) (Skill, error)
 	GetSkillFile(ctx context.Context, arg GetSkillFileParams) (SkillFile, error)

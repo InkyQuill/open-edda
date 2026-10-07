@@ -1,0 +1,368 @@
+package fileproject
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestCreateCheckpointSnapshotsStableFilesAndIgnoresOperationalDrafts(t *testing.T) {
+	root := copyFileProjectFixture(t, filepath.Join("testdata", "partial"))
+	if _, err := WriteDraft(root, WriteDraftInput{FileID: "story-1", BodyMarkdown: "operational draft"}); err != nil {
+		t.Fatalf("WriteDraft error = %v", err)
+	}
+
+	checkpoint, err := CreateCheckpoint(root, CreateCheckpointInput{Message: "first save"})
+	if err != nil {
+		t.Fatalf("CreateCheckpoint error = %v", err)
+	}
+	if checkpoint.Message != "first save" {
+		t.Fatalf("message = %q", checkpoint.Message)
+	}
+	if len(checkpoint.Files) != 1 {
+		t.Fatalf("checkpoint files = %d, want 1", len(checkpoint.Files))
+	}
+	if checkpoint.Files[0].Path != "story/chapter-01.md" {
+		t.Fatalf("checkpoint path = %q", checkpoint.Files[0].Path)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".edda", "checkpoints", checkpoint.ID, "files", "story", "chapter-01.md")); err != nil {
+		t.Fatalf("snapshot file missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".edda", "checkpoints", checkpoint.ID, "files", ".edda", "drafts", "story-1.md")); !os.IsNotExist(err) {
+		t.Fatalf("operational draft was checkpointed, stat error = %v", err)
+	}
+}
+
+func TestDiffCheckpointReportsWorkingTreeChanges(t *testing.T) {
+	root := copyFileProjectFixture(t, filepath.Join("testdata", "partial"))
+	checkpoint, err := CreateCheckpoint(root, CreateCheckpointInput{Message: "base"})
+	if err != nil {
+		t.Fatalf("CreateCheckpoint error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "story", "chapter-01.md"), []byte("# Chapter 1\n\nChanged.\n"), 0o644); err != nil {
+		t.Fatalf("write changed file: %v", err)
+	}
+
+	diff, err := DiffCheckpoint(root, checkpoint.ID, "")
+	if err != nil {
+		t.Fatalf("DiffCheckpoint error = %v", err)
+	}
+	if len(diff) != 1 {
+		t.Fatalf("diff length = %d, want 1: %#v", len(diff), diff)
+	}
+	if diff[0].Status != CheckpointDiffModified || diff[0].Path != "story/chapter-01.md" {
+		t.Fatalf("diff entry = %#v", diff[0])
+	}
+}
+
+func TestRestoreCheckpointRollsBackFilesAndIDs(t *testing.T) {
+	root := copyFileProjectFixture(t, filepath.Join("testdata", "partial"))
+	checkpoint, err := CreateCheckpoint(root, CreateCheckpointInput{Message: "base"})
+	if err != nil {
+		t.Fatalf("CreateCheckpoint error = %v", err)
+	}
+	originalID := checkpoint.Files[0].ID
+	if err := os.WriteFile(filepath.Join(root, "story", "chapter-01.md"), []byte("# Chapter 1\n\nChanged.\n"), 0o644); err != nil {
+		t.Fatalf("write changed file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "story", "extra.md"), []byte("# Extra\n"), 0o644); err != nil {
+		t.Fatalf("write extra file: %v", err)
+	}
+
+	if _, err := RestoreCheckpoint(root, checkpoint.ID); err != nil {
+		t.Fatalf("RestoreCheckpoint error = %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(root, "story", "chapter-01.md"))
+	if err != nil {
+		t.Fatalf("read restored file: %v", err)
+	}
+	if strings.Contains(string(body), "Changed") {
+		t.Fatalf("file was not restored:\n%s", string(body))
+	}
+	if _, err := os.Stat(filepath.Join(root, "story", "extra.md")); !os.IsNotExist(err) {
+		t.Fatalf("extra file still exists, stat error = %v", err)
+	}
+	stable, err := ResolveStableFile(root, originalID)
+	if err != nil {
+		t.Fatalf("ResolveStableFile restored id error = %v", err)
+	}
+	if stable.Path != "story/chapter-01.md" {
+		t.Fatalf("restored id path = %q", stable.Path)
+	}
+}
+
+func TestRestoreCheckpointValidatesSnapshotsBeforeMutatingTree(t *testing.T) {
+	root := copyFileProjectFixture(t, filepath.Join("testdata", "partial"))
+	checkpoint, err := CreateCheckpoint(root, CreateCheckpointInput{Message: "base"})
+	if err != nil {
+		t.Fatalf("CreateCheckpoint error = %v", err)
+	}
+	if err := os.Remove(filepath.Join(root, ".edda", "checkpoints", checkpoint.ID, "files", "story", "chapter-01.md")); err != nil {
+		t.Fatalf("remove checkpoint snapshot: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "story", "chapter-01.md"), []byte("# Chapter 1\n\nChanged.\n"), 0o644); err != nil {
+		t.Fatalf("write changed file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "story", "extra.md"), []byte("# Extra\n"), 0o644); err != nil {
+		t.Fatalf("write extra file: %v", err)
+	}
+
+	if _, err := RestoreCheckpoint(root, checkpoint.ID); err == nil {
+		t.Fatalf("RestoreCheckpoint succeeded with missing snapshot")
+	}
+	body, err := os.ReadFile(filepath.Join(root, "story", "chapter-01.md"))
+	if err != nil {
+		t.Fatalf("read changed file: %v", err)
+	}
+	if !strings.Contains(string(body), "Changed") {
+		t.Fatalf("restore mutated target before validation:\n%s", string(body))
+	}
+	if _, err := os.Stat(filepath.Join(root, "story", "extra.md")); err != nil {
+		t.Fatalf("restore removed extra file before validation: %v", err)
+	}
+}
+
+func TestListCheckpointsSortsByCreation(t *testing.T) {
+	root := copyFileProjectFixture(t, filepath.Join("testdata", "partial"))
+	first, err := CreateCheckpoint(root, CreateCheckpointInput{Message: "first"})
+	if err != nil {
+		t.Fatalf("first checkpoint error = %v", err)
+	}
+	second, err := CreateCheckpoint(root, CreateCheckpointInput{Message: "second"})
+	if err != nil {
+		t.Fatalf("second checkpoint error = %v", err)
+	}
+	first.CreatedAt = time.Unix(1, 0).UTC()
+	second.CreatedAt = time.Unix(2, 0).UTC()
+	if err := writeCheckpointManifest(root, first); err != nil {
+		t.Fatalf("rewrite first checkpoint manifest: %v", err)
+	}
+	if err := writeCheckpointManifest(root, second); err != nil {
+		t.Fatalf("rewrite second checkpoint manifest: %v", err)
+	}
+
+	checkpoints, err := ListCheckpoints(root)
+	if err != nil {
+		t.Fatalf("ListCheckpoints error = %v", err)
+	}
+	if len(checkpoints) != 2 {
+		t.Fatalf("checkpoint count = %d", len(checkpoints))
+	}
+	if checkpoints[0].ID != first.ID || checkpoints[1].ID != second.ID {
+		t.Fatalf("checkpoint order = %#v", checkpoints)
+	}
+}
+
+func TestListCheckpointsSkipsPartialDirectories(t *testing.T) {
+	root := copyFileProjectFixture(t, filepath.Join("testdata", "partial"))
+	checkpoint, err := CreateCheckpoint(root, CreateCheckpointInput{Message: "base"})
+	if err != nil {
+		t.Fatalf("CreateCheckpoint error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".edda", "checkpoints", "checkpoint-20260702T000000Z-partial"), 0o755); err != nil {
+		t.Fatalf("create partial checkpoint: %v", err)
+	}
+
+	checkpoints, err := ListCheckpoints(root)
+	if err != nil {
+		t.Fatalf("ListCheckpoints error = %v", err)
+	}
+	if len(checkpoints) != 1 || checkpoints[0].ID != checkpoint.ID {
+		t.Fatalf("checkpoints = %#v", checkpoints)
+	}
+}
+
+func TestRestoreCheckpointRejectsEscapingParentSymlink(t *testing.T) {
+	root := copyFileProjectFixture(t, filepath.Join("testdata", "partial"))
+	if _, err := InitMetadata(root, InitMetadataInput{Title: "Book"}); err != nil {
+		t.Fatal(err)
+	}
+	checkpoint, err := CreateCheckpoint(root, CreateCheckpointInput{Message: "base"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	target := filepath.Join(outside, "chapter-01.md")
+	if err := os.WriteFile(target, []byte("outside sentinel"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(root, "story"), filepath.Join(root, "original-story")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "story")); err != nil {
+		t.Fatal(err)
+	}
+	_, restoreErr := RestoreCheckpoint(root, checkpoint.ID)
+	body, err := os.ReadFile(target)
+	if err != nil || string(body) != "outside sentinel" {
+		t.Fatalf("external file changed: %q, %v", body, err)
+	}
+	if restoreErr == nil {
+		t.Fatal("restore accepted escaping parent symlink")
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("unexpected external entries: %v, %v", entries, err)
+	}
+}
+
+type checkpointRestoreReaderFunc func([]byte) (int, error)
+
+func (read checkpointRestoreReaderFunc) Read(p []byte) (int, error) { return read(p) }
+
+func TestCheckpointRestoreRejectsParentSwapDuringCopy(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "story"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	external := filepath.Join(outside, "chapter.md")
+	if err := os.WriteFile(external, []byte("outside sentinel"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	confined, err := os.OpenRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer confined.Close()
+	relative, err := filepath.Rel(root, outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := strings.NewReader("restored text")
+	swapped := false
+	reader := checkpointRestoreReaderFunc(func(p []byte) (int, error) {
+		if !swapped {
+			swapped = true
+			if err := os.Rename(filepath.Join(root, "story"), filepath.Join(root, "original-story")); err != nil {
+				return 0, err
+			}
+			if err := os.Symlink(relative, filepath.Join(root, "story")); err != nil {
+				return 0, err
+			}
+		}
+		return source.Read(p)
+	})
+	if err := writeCheckpointRestoreFile(confined, "story/chapter.md", reader, 0644); err == nil {
+		t.Fatal("published through swapped parent")
+	}
+	body, err := os.ReadFile(external)
+	if err != nil || string(body) != "outside sentinel" {
+		t.Fatalf("external file changed: %q, %v", body, err)
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("external temporary files: %v, %v", entries, err)
+	}
+}
+
+func TestRestoreCheckpointRejectsInvalidSnapshotBeforeMutatingTree(t *testing.T) {
+	for _, damage := range []string{"file symlink", "parent symlink", "hash mismatch", "size mismatch"} {
+		t.Run(damage, func(t *testing.T) {
+			root := copyFileProjectFixture(t, filepath.Join("testdata", "partial"))
+			checkpoint, err := CreateCheckpoint(root, CreateCheckpointInput{Message: "base"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			snapshot := filepath.Join(checkpointDir(root, checkpoint.ID), "files", "story", "chapter-01.md")
+			original, err := os.ReadFile(snapshot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch damage {
+			case "file symlink", "parent symlink":
+				outside := t.TempDir()
+				external := filepath.Join(outside, "chapter-01.md")
+				// Matching bytes ensure rejection is due to confinement.
+				if err := os.WriteFile(external, original, 0o644); err != nil {
+					t.Fatal(err)
+				}
+				link, target := snapshot, external
+				if damage == "parent symlink" {
+					link, target = filepath.Dir(snapshot), outside
+				}
+				if err := os.RemoveAll(link); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(target, link); err != nil {
+					t.Fatal(err)
+				}
+			case "hash mismatch":
+				if err := os.WriteFile(snapshot, []byte(strings.Repeat("x", len(original))), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			case "size mismatch":
+				checkpoint.Files[0].Size++
+				if err := writeCheckpointManifest(root, checkpoint); err != nil {
+					t.Fatal(err)
+				}
+			}
+			working := filepath.Join(root, "story", "chapter-01.md")
+			if err := os.WriteFile(working, []byte("changed working file"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			extra := filepath.Join(root, "story", "extra.md")
+			if err := os.WriteFile(extra, []byte("extra file"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			idsPath := filepath.Join(root, ".edda", "ids.json")
+			ids, err := os.ReadFile(idsPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := RestoreCheckpoint(root, checkpoint.ID); err == nil {
+				t.Fatal("restore accepted invalid snapshot")
+			}
+			for path, want := range map[string]string{working: "changed working file", extra: "extra file", idsPath: string(ids)} {
+				body, err := os.ReadFile(path)
+				if err != nil || string(body) != want {
+					t.Fatalf("restore mutated %s before validation: %q, %v", path, body, err)
+				}
+			}
+		})
+	}
+}
+
+func TestCheckpointRestoreCopiesValidatedHandleAfterSourceReplacement(t *testing.T) {
+	root := copyFileProjectFixture(t, filepath.Join("testdata", "partial"))
+	checkpoint, err := CreateCheckpoint(root, CreateCheckpointInput{Message: "base"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	confined, err := os.OpenRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer confined.Close()
+	files, err := checkpointRestoreFiles(confined, checkpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeCheckpointRestoreFiles(files)
+	for _, file := range files {
+		snapshot := filepath.Join(checkpointDir(root, checkpoint.ID), "files", filepath.FromSlash(file.manifest.Path))
+		original, err := os.ReadFile(snapshot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Remove(snapshot); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(snapshot, []byte("unvalidated replacement"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		target := filepath.FromSlash(file.manifest.Path)
+		if err := os.WriteFile(filepath.Join(root, target), []byte("changed working file"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := copyCheckpointRestoreFile(confined, file.source, target); err != nil {
+			t.Fatal(err)
+		}
+		body, err := os.ReadFile(filepath.Join(root, target))
+		if err != nil || string(body) != string(original) {
+			t.Fatalf("restore did not copy validated bytes: %q, %v", body, err)
+		}
+	}
+}

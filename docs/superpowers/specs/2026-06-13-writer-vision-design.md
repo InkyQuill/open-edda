@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Open Edda is a private, self-hosted AI writing studio for hobby novelists. Its core promise is that an author can work with an AI agent over the whole Story Project, not only the current text selection, while keeping ownership, privacy, Markdown portability, and revision safety. It also allows to not be tied to any human language, as models became good enough to produce good results in common ones. No more English-only like in Sudowrite/NovelAI.
+Open Edda is a private, self-hosted AI writing studio for hobby novelists. Its core promise is that an author can work with an AI agent over the whole Story Project, not only the current text selection, while keeping ownership, privacy, Markdown portability, local file ownership, and version safety. It also allows the author to write in any human language the configured model handles well. No more English-only like in Sudowrite/NovelAI.
 
 This matters because the target workflow already proved itself in local terminal-agent editing: an AI assistant can navigate story text, story bible material, and project-specific skills, then perform large coherent revisions that current hosted writing products do not handle well. Open Edda preserves that breakthrough and makes it available through a browser-friendly writing environment.
 
@@ -10,16 +10,18 @@ This matters because the target workflow already proved itself in local terminal
 
 The first version targets a Single-Author Instance with support for multiple Story Projects. It is responsive from day one: desktop and tablet layouts prioritize full chapter editing, while phone-sized layouts support reading, chat, small edits, and triggering agent actions.
 
-In scope for the first vertical slice:
+In scope for the first vertical slice and file-first migration:
 
 - Create and manage Story Projects.
-- Import and export Markdown using the Elysium Layout.
+- Open or create Markdown project folders using the defined Edda layout.
+- Import and export Markdown using the Edda layout, with conversion helpers for Elysium and other existing projects.
 - Edit Markdown-based Chapters through Galley Editor.
 - Manage Story Bible Entries with types, sections, and optional typed relations.
 - Manage layered Writing Briefs.
 - Configure OpenAI-compatible providers and model variants.
 - Run project-aware chat and the first three agent actions: Continuation, Rewrite, and Read and Check.
-- Preserve meaningful changes through Per-Item Revisions, diffs, Activity Trails, and Prompt Records.
+- Preserve meaningful changes through explicit saves, project-wide checkpoints, diffs, Activity Trails, and Prompt Records.
+- Support a small local CLI for `edda get`, `edda save`, status, `edda send`, `edda take`, diff, history, and restore.
 - Install/import Skills as instructions, routing metadata, templates, and data files.
 
 Out of scope for the first version:
@@ -29,7 +31,8 @@ Out of scope for the first version:
 - Native Android or desktop apps.
 - Publishing workflows.
 - Marketplace/community features.
-- Live local-folder sync.
+- Keystroke-level local-folder sync.
+- Git-compatible branching, staging, rebasing, remote management, or merge commits.
 - Arbitrary skill script execution.
 - Vector embeddings as a required retrieval dependency.
 
@@ -37,17 +40,17 @@ Out of scope for the first version:
 
 ### Story Projects
 
-A Story Project is the complete body of material for one fiction work or series. It includes Chapters, Story Bible Entries, Writing Briefs, Project Notes, Attached Notes, Agent Sessions, Skills, revisions, and settings.
+A Story Project is the complete body of material for one fiction work or series. In the target model it is an Edda project folder plus `.edda/` metadata. It includes story prose files, story bible files, writing briefs, project notes, attached-note records, Agent Sessions, Skills, checkpoints, and settings.
 
-The Project Dashboard is the entry point for choosing, creating, importing, exporting, and configuring Story Projects. The Writing Workspace is the project-level surface where the author edits chapters, manages reference material, reviews notes/reports, works with skills, and runs agent sessions.
+The Project Dashboard is the entry point for choosing, creating, fetching, importing, exporting, and configuring Story Projects. The Writing Workspace is the project-level surface where the author edits chapters, manages reference material, reviews notes/reports, works with skills, and runs agent sessions.
 
 ### Chapters
 
-Chapters are the primary Story Text unit in v1. A Chapter is a continuous Markdown document with cursor and selection-aware agent actions. Scenes can be represented through Markdown headings or markers, but v1 does not model scenes as separate database entities.
+Chapters are the primary Story Text unit in v1. A Chapter is a continuous Markdown file in the Edda layout with cursor and selection-aware agent actions. Scenes can be represented through Markdown headings or markers, but v1 does not model scenes as separate entities.
 
 ### Story Bible Entries
 
-Story Bible Entries are typed, Markdown-based reference entries. Each entry has a title, type, metadata, optional tags, optional status, optional typed Entry Relations, and a rich Markdown body.
+Story Bible Entries are typed, Markdown-based reference files in the Edda layout. Each entry has a title, type, metadata, optional tags, optional status, optional typed Entry Relations, and a rich Markdown body.
 
 Entry Sections are freeform named sections inside an entry. They are addressable independently so the agent can retrieve focused context such as `Dwarves > Player Perspective` without reading the full entry.
 
@@ -71,7 +74,7 @@ Skills are project-installable agent procedures. A Skill can include instruction
 
 ## Architecture
 
-Open Edda is one self-hosted deployable. The Go backend serves the API and the built React frontend. During development, the frontend and backend can run separately with a dev proxy.
+Open Edda is one self-hosted deployable plus a small local CLI. The Go backend serves the API and the built React frontend. During development, the frontend and backend can run separately with a dev proxy. The CLI works with Edda project folders and talks to the service for connected projects.
 
 The React frontend is required because Galley Editor is the intended Markdown-native editing foundation. Galley Editor is used for Chapters and other Markdown-based content.
 
@@ -83,18 +86,20 @@ The backend baseline is:
 - `goose` for migrations.
 - SQLite for the first database.
 
-SQLite fits the single-author self-hosted workload if the implementation uses WAL mode, short transactions, and avoids long-running provider or agent work inside database transactions. Postgres remains a later option if collaboration or heavier concurrency demands it.
+SQLite fits the single-author self-hosted workload if the implementation uses WAL mode, short transactions, and avoids long-running provider or agent work inside database transactions. In the file-first model, SQLite stores indexes, operational state, prompt/activity records, and cache data; story files and `.edda/` metadata remain rebuildable source material. Postgres remains a later option if collaboration or heavier concurrency demands it.
 
 The backend owns:
 
 - Auth and session handling.
 - Persistence and migrations.
-- Markdown import/export.
+- Edda layout validation, file indexing, and Markdown import/export.
+- Draft autosave, explicit Save, and checkpoint orchestration.
+- Local/server sync for saved files and checkpoint metadata.
 - Provider configuration and model variants.
 - Prompt assembly.
 - Agent tool definitions.
 - Structured Writes.
-- Revisions and diffs.
+- Version checks, checkpoint history, and diffs.
 - Activity Trails.
 - Prompt Records.
 
@@ -131,13 +136,13 @@ Tool results returned to the model are bounded. The backend stores the complete 
 
 Continuation generates new prose at the cursor or chapter end. The author can choose a word or sentence target and optional guidance. Without guidance, the model infers a plausible next direction from the chapter, Writing Brief, and project context.
 
-Continuation may stream into a transient Generation Buffer in the UI, but it does not stream token-by-token into the saved Chapter. Once complete, the generated span commits as one insert or append operation.
+Continuation may stream into a transient Generation Buffer in the UI, but it does not stream token-by-token into the saved Chapter file. Once complete, the generated span commits as one insert or append operation into a draft or saved file according to the active action.
 
 ### Rewrite
 
 Rewrite transforms selected text using the author's guidance. It receives the selection, surrounding context, Writing Brief, and relevant project context. It produces a complete candidate before replacing text.
 
-In preview mode, the author sees a diff and accepts or rejects the candidate. In Direct Apply mode, the replacement commits after completion and creates a revision.
+In preview mode, the author sees a diff and accepts or rejects the candidate. In Direct Apply mode, the replacement commits after completion into the current draft or saved file. A checkpoint is created only when the author explicitly saves one.
 
 ### Read and Check
 
@@ -145,7 +150,7 @@ Read and Check evaluates a selection or Chapter and returns a report with observ
 
 ### Structured Writes
 
-Document-changing agent tools use Structured Writes rather than arbitrary raw patches. V1 write operations include:
+Document-changing agent tools use Structured Writes rather than arbitrary raw patches. In the file-first model, each write targets a known saved file hash, current implementation revision token, byte range, or structured location. V1 write operations include:
 
 - Insert at position.
 - Append to Chapter.
@@ -153,50 +158,49 @@ Document-changing agent tools use Structured Writes rather than arbitrary raw pa
 - Update Story Bible Entry body.
 - Update Entry Section body.
 
-Each Structured Write targets a known content revision. If the content changed after the agent read it, the backend returns a conflict error. The agent can re-read current content and retry, or ask the author when the merge is ambiguous.
+Each Structured Write targets a known file-backed version. If the content changed after the agent read it, the backend returns a conflict error. The agent can re-read current content and retry, or ask the author when the merge is ambiguous.
 
-## Revisions And Diffs
+## Saves, Checkpoints, And Diffs
 
-Revisions are per item, not project-wide. Chapters, Story Bible Entries, Writing Briefs, and Project Notes can have Per-Item Revisions.
+Open Edda separates draft autosave, Save, and Checkpoint.
 
-Revision creation is grouped by meaningful operations:
+- Draft autosave protects web-editor work in progress without updating canonical Markdown files.
+- Save writes the current draft into the working project state.
+- Checkpoint records a named project-wide snapshot of saved files for history, comparison, restore, recovery, and sync.
 
-- Direct Apply.
-- Accepted preview.
-- Import.
-- Restore.
-- Explicit save revision.
-- Manual editing sessions that cross a chosen time or content threshold.
+Checkpoints are linear and writer-facing. They are not git branches or commits in the product vocabulary. The CLI should support commands such as `edda save "Note"`, `edda status`, `edda send`, `edda take`, `edda history`, `edda diff`, and `edda restore`.
 
-Autosave does not create noisy revision entries every few seconds.
+Current per-item database revisions can remain as migration scaffolding, audit detail, or implementation tokens, but the product-facing history model should move to explicit project-wide checkpoints.
 
-Diffs compare item revisions and support restore. Agent-created revisions are labeled with action, model variant, skill if any, and the linked Agent Session.
+Diffs compare current saved files with checkpoints or compare two checkpoints. Agent-created saved changes should be labeled with action, model variant, skill if any, and the linked Agent Session in activity/checkpoint metadata.
 
 ## Import And Export
 
-V1 uses the Elysium Layout as the first Markdown interoperability convention:
+Open Edda uses one defined layout to classify Markdown files. The target is the `alchemist`-style Edda layout:
 
-- `story/` maps to Chapters.
-- `characters/` maps to character Story Bible Entries.
-- `worldbuilding/` maps to worldbuilding Story Bible Entries.
-- `braindump/` maps to Project Notes.
-- Top-level guidance files such as `genre.md`, `synopsis.md`, and `conventions.md` map into Writing Briefs or Project Notes depending on role.
+- `AGENTS.md` and `BOOTSTRAP.md` hold project guidance and bootstrap instructions.
+- `.agents/skills/` holds project-local skill source material.
+- `story/` maps to Chapters and includes `_index.md` plus chapter files.
+- `storyline/` maps to plans, chapter plans, sequence maps, continuity matrices, draft status, style guides, and other planning material.
+- `characters/` maps to character Story Bible Entries and includes `_index.md`.
+- `worldbuilding/` maps to lore, with subdirectories such as `culture/`, `magic/`, `monsters/`, and `places/`.
+- `drafts/` maps to draft material and alternate chapter versions.
 
 Frontmatter preserves metadata such as status, type, roles, pronouns, tags, and relations. Markdown headings become Entry Sections where applicable.
 
-Import is conservative and creates a new Story Project from a clean Elysium Layout folder. Export is repeatable and loss-aware. V1 does not attempt ongoing merge/sync with a local folder.
+Import is conservative and can create a new Story Project from a clean Edda layout folder or archive. Export is repeatable and loss-aware. Elysium is one older structure that can be converted into Edda's layout, but it is not the target shape. For projects that use a different personal structure, Edda should provide conversion helpers and clear validation errors rather than trying to support every personal organization style. The target model also supports opening a local Edda folder in place, creating `.edda/` metadata, indexing files, and connecting that folder to a server project.
 
-A later Local Sync Tool will detect local Markdown changes and replay them into the service database with merge handling.
+Saved file state and checkpoints move between local folders and the server through the Edda CLI and service sync. Sync operates on saved files and checkpoint metadata, not editor drafts or every keystroke.
 
 ## Privacy And Trust
 
-Open Edda is private by default. Story Project content, revisions, Prompt Records, Activity Trails, provider keys, exports, skills, and settings are private to the authenticated Author.
+Open Edda is private by default. Story Project files, checkpoints, Prompt Records, Activity Trails, provider keys, exports, skills, and settings are private to the authenticated Author.
 
 V1 uses normal password auth with one admin author by default. There is no public registration, invitation flow, role system, or collaboration model in v1.
 
 Provider Disclosure is visible but not noisy. Settings show the configured provider and model variants, and agent actions indicate which provider/model is being used. The app does not interrupt every generation with a warning unless the provider configuration changes or the author is setting it up.
 
-Activity Trails are compact by default, such as an `actions: 32` pill, and expand to show readable details: which project items were read, which action ran, which skill was used, which model variant was used, and which content item changed.
+Activity Trails are compact by default, such as an `actions: 32` pill, and expand to show readable details: which project files or indexed items were read, which action ran, which skill was used, which model variant was used, and which content item changed.
 
 Prompt Records are separate advanced/debug records of raw assembled model inputs and outputs. They are subject to retention controls and must never include provider secrets.
 
@@ -215,7 +219,7 @@ Two existing agent systems informed the Agent Core design:
 
 ### Milestone 1: Project Core
 
-Auth, Story Projects, Chapters, Story Bible Entries, Entry Sections, Entry Relations, Writing Briefs, Project Notes, Attached Notes, Per-Item Revisions, diffs, and Elysium Layout import/export.
+Auth, Story Projects, Chapters, Story Bible Entries, Entry Sections, Entry Relations, Writing Briefs, Project Notes, Attached Notes, Per-Item Revisions, diffs, and Elysium Layout import/export. This milestone is implemented under the earlier database-backed model and is historical context for the file-first migration.
 
 ### Milestone 2: Agent Core
 
@@ -229,9 +233,13 @@ Skill import/install, skill browsing, routing/selecting skills for Agent Session
 
 Editor ergonomics, mobile-friendly layouts, side-panel Attached Notes, better diff/restore UI, export polish, provider disclosure polish, and model-switching UX.
 
-### Later: Local Sync And Collaboration
+### Milestone 5: File-First Projects And Checkpoints
 
-Build a Local Sync Tool that detects local Markdown changes and replays them into the service database with merge handling. Add multi-author collaboration only after the single-author workflow is stable.
+The defined Edda project layout, `.edda/` metadata, file indexing, draft/save/checkpoint semantics, local CLI, linear sync, diff/history/restore, and migration from database-owned prose to file-backed project content.
+
+### Later: Collaboration
+
+Add multi-author collaboration only after the single-author file-first workflow is stable.
 
 ## Open Decisions Deferred To Implementation Planning
 

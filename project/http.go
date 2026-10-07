@@ -3,17 +3,19 @@ package project
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"database/sql"
 	"errors"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
-	"git.inkyquill.net/inky/writer/auth"
-	"git.inkyquill.net/inky/writer/internal/httputil"
-	"git.inkyquill.net/inky/writer/markdownio"
+	"github.com/InkyQuill/open-edda/auth"
+	"github.com/InkyQuill/open-edda/internal/httputil"
+	"github.com/InkyQuill/open-edda/markdownio"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -30,8 +32,9 @@ type httpHandler struct {
 }
 
 type createProjectRequest struct {
-	Title    string `json:"title"`
-	Language string `json:"language"`
+	StorageMode string `json:"storageMode"`
+	Title       string `json:"title"`
+	Language    string `json:"language"`
 }
 
 type createContentRequest struct {
@@ -50,6 +53,15 @@ type updateContentRequest struct {
 	Reason           string `json:"reason"`
 }
 
+type restoreRevisionRequest struct {
+	ExpectedRevision int64  `json:"expectedRevision"`
+	Reason           string `json:"reason"`
+}
+
+type restoreRevisionService interface {
+	RestoreRevision(context.Context, RestoreRevisionInput) (ContentItem, error)
+}
+
 // RegisterRoutes mounts project core routes on an /api router.
 func RegisterRoutes(r chi.Router, service *Service) {
 	if service == nil {
@@ -66,6 +78,7 @@ func RegisterRoutes(r chi.Router, service *Service) {
 	r.Get("/projects/{projectID}/content/{contentID}", h.getContent)
 	r.Put("/projects/{projectID}/content/{contentID}", h.updateContent)
 	r.Get("/projects/{projectID}/content/{contentID}/revisions", h.listRevisions)
+	r.Post("/projects/{projectID}/content/{contentID}/revisions/{revisionNumber}/restore", h.restoreRevision)
 	r.Get("/projects/{projectID}/map", h.projectMap)
 }
 
@@ -87,9 +100,10 @@ func (h httpHandler) createProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	project, err := h.service.CreateProject(r.Context(), CreateProjectInput{
-		AuthorID: authorID(r),
-		Title:    input.Title,
-		Language: input.Language,
+		StorageMode: input.StorageMode,
+		AuthorID:    authorID(r),
+		Title:       input.Title,
+		Language:    input.Language,
 	})
 	if err != nil {
 		writeError(w, err)
@@ -257,6 +271,39 @@ func (h httpHandler) listRevisions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, revisions)
 }
 
+func (h httpHandler) restoreRevision(w http.ResponseWriter, r *http.Request) {
+	restoreRevisionHTTP(w, r, h.service)
+}
+
+func restoreRevisionHTTP(w http.ResponseWriter, r *http.Request, service restoreRevisionService) {
+	revisionNumber, err := strconv.ParseInt(chi.URLParam(r, "revisionNumber"), 10, 64)
+	if err != nil || revisionNumber < 1 {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid revision number"})
+		return
+	}
+
+	var input restoreRevisionRequest
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeMalformedJSON(w, err)
+		return
+	}
+
+	item, err := service.RestoreRevision(r.Context(), RestoreRevisionInput{
+		ProjectID:        chi.URLParam(r, "projectID"),
+		ContentID:        chi.URLParam(r, "contentID"),
+		RevisionNumber:   revisionNumber,
+		ExpectedRevision: input.ExpectedRevision,
+		Reason:           input.Reason,
+		CreatedBy:        "author",
+	})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, item)
+}
+
 func (h httpHandler) projectMap(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.ProjectMap(r.Context(), chi.URLParam(r, "projectID"))
 	if err != nil {
@@ -412,6 +459,10 @@ type errorResponse struct {
 }
 
 func writeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrInvalidTree) {
+		writeVersionError(w, err)
+		return
+	}
 	switch {
 	case errors.Is(err, ErrConflict):
 		writeJSON(w, http.StatusConflict, errorResponse{Error: "conflict"})

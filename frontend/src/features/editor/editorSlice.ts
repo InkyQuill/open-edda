@@ -33,8 +33,17 @@ export type EditorState = {
   cursorByte: number | null;
   selection: EditorSelection;
   actionModal: EditorActionModal;
+  actionInstructionsByKind: Record<EditorActionKind, string>;
   generateInstructions: string;
 };
+
+function emptyActionInstructions(): Record<EditorActionKind, string> {
+  return {
+    rewrite: "",
+    check: "",
+    note: "",
+  };
+}
 
 export const initialEditorState: EditorState = {
   contentContext: null,
@@ -46,6 +55,7 @@ export const initialEditorState: EditorState = {
   cursorByte: null,
   selection: null,
   actionModal: null,
+  actionInstructionsByKind: emptyActionInstructions(),
   generateInstructions: "",
 };
 
@@ -71,6 +81,7 @@ const editorSlice = createSlice({
       state.cursorByte = null;
       state.selection = null;
       state.actionModal = null;
+      state.actionInstructionsByKind = emptyActionInstructions();
       state.generateInstructions = "";
     },
     setDraftMarkdown(state, action: PayloadAction<string>) {
@@ -95,6 +106,7 @@ const editorSlice = createSlice({
       state.cursorByte = null;
       state.selection = null;
       state.actionModal = null;
+      state.actionInstructionsByKind = emptyActionInstructions();
     },
     saveFailed(state, action: PayloadAction<string>) {
       state.saveStatus = "failed";
@@ -119,12 +131,13 @@ const editorSlice = createSlice({
     ) {
       state.actionModal = {
         kind: action.payload.kind,
-        instructions: action.payload.instructions ?? "",
+        instructions: action.payload.instructions ?? state.actionInstructionsByKind[action.payload.kind],
       };
     },
     setActionInstructions(state, action: PayloadAction<string>) {
       if (state.actionModal) {
         state.actionModal.instructions = action.payload;
+        state.actionInstructionsByKind[state.actionModal.kind] = action.payload;
       }
     },
     closeActionModal(state) {
@@ -143,6 +156,7 @@ const editorSlice = createSlice({
       state.cursorByte = null;
       state.selection = null;
       state.actionModal = null;
+      state.actionInstructionsByKind = emptyActionInstructions();
       state.generateInstructions = "";
     },
   },

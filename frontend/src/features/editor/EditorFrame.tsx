@@ -1,16 +1,35 @@
 import { ClipboardCheck, FileText, MessageSquarePlus, PenLine, Save } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { GalleyEditor, type GalleyMode } from "@inky/galley-editor";
+import { useLocation } from "react-router-dom";
+import { GalleyEditor, type GalleyMode } from "@inkyquill/galley-editor";
 
+import type { AppDispatch, RootState } from "../../app/store/store";
 import { updateContent } from "../../api";
 import { Button } from "../../shared/ui/button";
 import type { ContentItem } from "../../types";
 import type { WorkspaceMode } from "../workspace/workspaceSlice";
+import {
+  acceptAssistantCandidate,
+  assistantActions,
+  rejectAssistantCandidate,
+  runCheck,
+  runGenerate,
+  runRewriteAction,
+} from "../assistant-actions/assistantActionsSlice";
+import { AssistantActionPreview } from "./AssistantActionPreview";
+import {
+  buildAssistantActionRequestKey,
+  buildCheckRequest,
+  buildGenerateRequest,
+  buildRewriteRequest,
+  validateSelectionAction,
+  validateGenerateAction,
+} from "./assistantActionRequests";
 import { createGalleyEditorSnapshot, type GalleySelectionSnapshot } from "./editorAdapter";
 import { GenerateComposer } from "./GenerateComposer";
 import { SelectionActionDialog } from "./SelectionActionDialog";
-import { editorActions, type EditorActionKind, type EditorState } from "./editorSlice";
+import { editorActions, type EditorActionKind } from "./editorSlice";
 
 export type EditorFrameProps = {
   projectId: string;
@@ -19,10 +38,6 @@ export type EditorFrameProps = {
   contentLoading?: boolean;
   contentError?: string | null;
   onContentSaved: (content: ContentItem) => void;
-};
-
-type EditorFrameRootState = {
-  editor: EditorState;
 };
 
 const actionButtons: Array<{
@@ -74,27 +89,49 @@ export function EditorFrame({
   contentError = null,
   onContentSaved,
 }: EditorFrameProps) {
-  const dispatch = useDispatch();
-  const editor = useSelector((state: EditorFrameRootState) => state.editor);
+  const dispatch = useDispatch<AppDispatch>();
+  const location = useLocation();
+  const assistantActionState = useSelector((state: RootState) => state.assistantActions);
+  const editor = useSelector((state: RootState) => state.editor);
+  const activeModelVariantId = useSelector(
+    (state: RootState) => state.modelSettings.activeModelVariantId,
+  );
+  const selectedSkillIds = useSelector((state: RootState) => state.skills.selectedSkillIds);
   const [generateStatus, setGenerateStatus] = useState<string | null>(null);
+  const [selectionActionError, setSelectionActionError] = useState<string | null>(null);
+  const editorContextRef = useRef(editor.contentContext);
   const contextMatchesContent =
     editor.contentContext?.projectId === projectId && editor.contentContext.contentId === content?.id;
   const selection = contextMatchesContent ? editor.selection : null;
   const draftMarkdown = contextMatchesContent ? editor.draftMarkdown : (content?.bodyMarkdown ?? "");
   const dirty = contextMatchesContent && editor.dirty;
   const saveStatus = contextMatchesContent ? editor.saveStatus : "idle";
-  const generateDisabled = !content || !contextMatchesContent || editor.cursorByte === null;
+  const generateDisabled = !content || !contextMatchesContent || editor.cursorByte === null || dirty;
   const generateHelperText = !content
     ? "Select content before generating."
+    : dirty
+      ? "Save the current draft before generating."
     : editor.cursorByte === null
       ? "Place the cursor in the draft before generating."
       : `Ready at byte ${editor.cursorByte} on revision ${editor.contentContext?.revision ?? content.currentRevision}.`;
 
   useEffect(() => {
+    editorContextRef.current = editor.contentContext;
+  }, [editor.contentContext]);
+
+  useEffect(() => {
+    if (!editor.actionModal) {
+      setSelectionActionError(null);
+    }
+  }, [editor.actionModal]);
+
+  useEffect(() => {
     if (!content) {
       dispatch(editorActions.resetEditorContext());
+      dispatch(assistantActions.clearAssistantActionResult());
       return;
     }
+    dispatch(assistantActions.clearAssistantActionResult());
     dispatch(
       editorActions.hydrateEditorContext({
         projectId,
@@ -137,15 +174,127 @@ export function EditorFrame({
   }
 
   function handleGenerate(): void {
-    if (!content || !contextMatchesContent || !editor.contentContext) {
-      setGenerateStatus("Select content before generating.");
+    const validationError = validateGenerateAction({
+      contentContext: contextMatchesContent ? editor.contentContext : null,
+      cursorByte: editor.cursorByte,
+      activeModelVariantId,
+      dirty,
+    });
+    if (validationError) {
+      setGenerateStatus(validationError);
       return;
     }
-    if (editor.cursorByte === null) {
-      setGenerateStatus("Place the cursor in the draft before generating.");
+    if (assistantActionState.status === "running") return;
+    if (!editor.contentContext || editor.cursorByte === null || !activeModelVariantId) return;
+
+    const requestKey = buildAssistantActionRequestKey(location.pathname, editor.contentContext);
+    const requestToken = crypto.randomUUID();
+    setGenerateStatus(null);
+    void dispatch(
+      runGenerate(
+        buildGenerateRequest({
+          contentContext: editor.contentContext,
+          activeModelVariantId,
+          cursorByte: editor.cursorByte,
+          instructions: editor.generateInstructions,
+          skillIds: selectedSkillIds,
+          requestKey,
+          requestToken,
+        }),
+      ),
+    );
+  }
+
+  async function handleAcceptPreview(): Promise<void> {
+    if (
+      !assistantActionState.candidate ||
+      !assistantActionState.requestKey ||
+      !assistantActionState.requestToken ||
+      assistantActionState.acceptStatus === "running"
+    ) {
       return;
     }
-    setGenerateStatus(`Generate is ready for revision ${editor.contentContext.revision} at byte ${editor.cursorByte}.`);
+
+    const result = await dispatch(
+      acceptAssistantCandidate({
+        projectId: assistantActionState.candidate.projectId,
+        candidateId: assistantActionState.candidate.id,
+        requestKey: assistantActionState.requestKey,
+        requestToken: assistantActionState.requestToken,
+      }),
+    );
+
+    if (!acceptAssistantCandidate.fulfilled.match(result)) return;
+    const currentContext = editorContextRef.current;
+    if (currentContext?.projectId !== result.payload.content.projectId || currentContext.contentId !== result.payload.content.id) {
+      return;
+    }
+    dispatch(
+      editorActions.saveSucceeded({
+        revision: result.payload.content.currentRevision,
+        bodyMarkdown: result.payload.content.bodyMarkdown,
+      }),
+    );
+    onContentSaved(result.payload.content);
+  }
+
+  function handleRejectPreview(): void {
+    if (
+      !assistantActionState.candidate ||
+      !assistantActionState.requestKey ||
+      !assistantActionState.requestToken ||
+      assistantActionState.rejectStatus === "running"
+    ) {
+      return;
+    }
+
+    void dispatch(
+      rejectAssistantCandidate({
+        projectId: assistantActionState.candidate.projectId,
+        candidateId: assistantActionState.candidate.id,
+        requestKey: assistantActionState.requestKey,
+        requestToken: assistantActionState.requestToken,
+      }),
+    );
+  }
+
+  function handleSelectionActionSubmit(kind: "rewrite" | "check", instructions: string): void {
+    const selectionInput = selection
+      ? { startByte: selection.startByte, endByte: selection.endByte }
+      : null;
+    const validationError = validateSelectionAction({
+      contentContext: contextMatchesContent ? editor.contentContext : null,
+      selection: selectionInput,
+      activeModelVariantId,
+      dirty,
+    });
+    if (validationError) {
+      setSelectionActionError(validationError);
+      return;
+    }
+    if (assistantActionState.status === "running") return;
+    if (!editor.contentContext || !selectionInput || !activeModelVariantId) return;
+
+    const requestKey = buildAssistantActionRequestKey(location.pathname, editor.contentContext);
+    const requestToken = crypto.randomUUID();
+    const requestInput = {
+      contentContext: editor.contentContext,
+      activeModelVariantId,
+      selection: selectionInput,
+      instructions,
+      skillIds: selectedSkillIds,
+      requestKey,
+      requestToken,
+    };
+
+    setGenerateStatus(null);
+    setSelectionActionError(null);
+    dispatch(editorActions.closeActionModal());
+    void dispatch(
+      kind === "rewrite"
+        ? runRewriteAction(buildRewriteRequest(requestInput))
+        : runCheck(buildCheckRequest(requestInput)),
+    );
   }
 
   if (contentLoading) {
@@ -182,7 +331,7 @@ export function EditorFrame({
           <FileText data-icon="inline-start" aria-hidden="true" />
           <span className="capitalize">{formatKind(content.kind)}</span>
           <span aria-hidden="true">/</span>
-          <span>Revision {content.currentRevision}</span>
+          <span>Saved version {content.currentRevision}</span>
           <span aria-hidden="true">/</span>
           <span className="capitalize">{mode} mode</span>
         </div>
@@ -198,10 +347,10 @@ export function EditorFrame({
             }}
           >
             <Save data-icon="inline-start" aria-hidden="true" />
-            {saveStatus === "pending" ? "Saving" : "Save"}
+            {saveStatus === "pending" ? "Saving file" : "Save file"}
           </Button>
-          {dirty ? <span className="text-xs text-muted-foreground">Unsaved changes</span> : null}
-          {saveStatus === "succeeded" ? <span className="text-xs text-muted-foreground">Saved</span> : null}
+          {dirty ? <span className="text-xs text-muted-foreground">Browser draft not saved</span> : null}
+          {saveStatus === "succeeded" ? <span className="text-xs text-muted-foreground">File saved</span> : null}
           {saveStatus === "failed" ? (
             <span role="alert" className="text-xs text-destructive">
               {editor.saveError}
@@ -216,7 +365,7 @@ export function EditorFrame({
         ) : null}
         <GalleyEditor
           value={draftMarkdown}
-          onChange={(nextValue) => dispatch(editorActions.setDraftMarkdown(nextValue))}
+          onChange={(nextValue: string) => dispatch(editorActions.setDraftMarkdown(nextValue))}
           onSelectionChange={handleSelectionChange}
           placeholder="No draft text yet."
           ariaLabel={`${content.title} draft text`}
@@ -238,7 +387,18 @@ export function EditorFrame({
 
       <GenerateComposer disabled={generateDisabled} helperText={generateHelperText} onGenerate={handleGenerate} />
       {generateStatus ? <p className="text-sm text-muted-foreground">{generateStatus}</p> : null}
-      <SelectionActionDialog />
+      <AssistantActionPreview
+        onAccept={() => {
+          void handleAcceptPreview();
+        }}
+        onReject={handleRejectPreview}
+        onDismiss={() => dispatch(assistantActions.clearAssistantActionResult())}
+      />
+      <SelectionActionDialog
+        error={selectionActionError}
+        submitting={assistantActionState.status === "running"}
+        onSubmit={handleSelectionActionSubmit}
+      />
     </article>
   );
 }

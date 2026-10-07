@@ -1,4 +1,5 @@
 export type StoryProject = {
+  storageMode?: "legacy" | "files";
   id: string;
   title: string;
   slug: string;
@@ -17,4 +18,19 @@ export type ContentItem = {
   metadataJson: string;
   sortOrder: number;
   currentRevision: number;
+};
+
+export type Revision = {
+  id: string;
+  contentItemId: string;
+  revisionNumber: number;
+  bodyMarkdown: string;
+  metadataJson: string;
+  reason: string;
+  createdBy: string;
+  createdAt: string;
+  agentSessionId?: string;
+  actionKind?: string;
+  modelVariantId?: string;
+  skillId?: string;
 };

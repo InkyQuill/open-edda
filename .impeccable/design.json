@@ -1,0 +1,506 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-07T10:40:41.264670+00:00",
+  "title": "Design System: Edda",
+  "extensions": {
+    "colorMeta": {
+      "light-shell": {
+        "role": "neutral",
+        "displayName": "Light Shell",
+        "tonalRamp": [
+          "oklch(15.0% 0.0054 117.9)",
+          "oklch(26.4% 0.0054 117.9)",
+          "oklch(37.9% 0.0054 117.9)",
+          "oklch(49.3% 0.0054 117.9)",
+          "oklch(60.7% 0.0054 117.9)",
+          "oklch(72.1% 0.0054 117.9)",
+          "oklch(83.6% 0.0054 117.9)",
+          "oklch(95.0% 0.0054 117.9)"
+        ]
+      },
+      "light-paper": {
+        "role": "neutral",
+        "displayName": "Light Paper",
+        "tonalRamp": [
+          "oklch(15.0% 0.0053 106.5)",
+          "oklch(26.4% 0.0053 106.5)",
+          "oklch(37.9% 0.0053 106.5)",
+          "oklch(49.3% 0.0053 106.5)",
+          "oklch(60.7% 0.0053 106.5)",
+          "oklch(72.1% 0.0053 106.5)",
+          "oklch(83.6% 0.0053 106.5)",
+          "oklch(95.0% 0.0053 106.5)"
+        ]
+      },
+      "light-raised": {
+        "role": "neutral",
+        "displayName": "Light Raised",
+        "tonalRamp": [
+          "oklch(15.0% 0.0054 95.1)",
+          "oklch(26.4% 0.0054 95.1)",
+          "oklch(37.9% 0.0054 95.1)",
+          "oklch(49.3% 0.0054 95.1)",
+          "oklch(60.7% 0.0054 95.1)",
+          "oklch(72.1% 0.0054 95.1)",
+          "oklch(83.6% 0.0054 95.1)",
+          "oklch(95.0% 0.0054 95.1)"
+        ]
+      },
+      "light-ink": {
+        "role": "neutral",
+        "displayName": "Light Ink",
+        "tonalRamp": [
+          "oklch(15.0% 0.0234 164.8)",
+          "oklch(26.4% 0.0234 164.8)",
+          "oklch(37.9% 0.0234 164.8)",
+          "oklch(49.3% 0.0234 164.8)",
+          "oklch(60.7% 0.0234 164.8)",
+          "oklch(72.1% 0.0234 164.8)",
+          "oklch(83.6% 0.0234 164.8)",
+          "oklch(95.0% 0.0234 164.8)"
+        ]
+      },
+      "light-muted": {
+        "role": "neutral",
+        "displayName": "Light Muted",
+        "tonalRamp": [
+          "oklch(15.0% 0.0181 154.1)",
+          "oklch(26.4% 0.0181 154.1)",
+          "oklch(37.9% 0.0181 154.1)",
+          "oklch(49.3% 0.0181 154.1)",
+          "oklch(60.7% 0.0181 154.1)",
+          "oklch(72.1% 0.0181 154.1)",
+          "oklch(83.6% 0.0181 154.1)",
+          "oklch(95.0% 0.0181 154.1)"
+        ]
+      },
+      "light-line": {
+        "role": "neutral",
+        "displayName": "Light Line",
+        "tonalRamp": [
+          "oklch(15.0% 0.0120 133.4)",
+          "oklch(26.4% 0.0120 133.4)",
+          "oklch(37.9% 0.0120 133.4)",
+          "oklch(49.3% 0.0120 133.4)",
+          "oklch(60.7% 0.0120 133.4)",
+          "oklch(72.1% 0.0120 133.4)",
+          "oklch(83.6% 0.0120 133.4)",
+          "oklch(95.0% 0.0120 133.4)"
+        ]
+      },
+      "light-hover": {
+        "role": "neutral",
+        "displayName": "Light Hover",
+        "tonalRamp": [
+          "oklch(15.0% 0.0119 133.4)",
+          "oklch(26.4% 0.0119 133.4)",
+          "oklch(37.9% 0.0119 133.4)",
+          "oklch(49.3% 0.0119 133.4)",
+          "oklch(60.7% 0.0119 133.4)",
+          "oklch(72.1% 0.0119 133.4)",
+          "oklch(83.6% 0.0119 133.4)",
+          "oklch(95.0% 0.0119 133.4)"
+        ]
+      },
+      "light-selected": {
+        "role": "neutral",
+        "displayName": "Light Selected",
+        "tonalRamp": [
+          "oklch(15.0% 0.0183 155.8)",
+          "oklch(26.4% 0.0183 155.8)",
+          "oklch(37.9% 0.0183 155.8)",
+          "oklch(49.3% 0.0183 155.8)",
+          "oklch(60.7% 0.0183 155.8)",
+          "oklch(72.1% 0.0183 155.8)",
+          "oklch(83.6% 0.0183 155.8)",
+          "oklch(95.0% 0.0183 155.8)"
+        ]
+      },
+      "light-accent": {
+        "role": "primary",
+        "displayName": "Light Accent",
+        "tonalRamp": [
+          "oklch(15.0% 0.0584 166.2)",
+          "oklch(26.4% 0.0584 166.2)",
+          "oklch(37.9% 0.0584 166.2)",
+          "oklch(49.3% 0.0584 166.2)",
+          "oklch(60.7% 0.0584 166.2)",
+          "oklch(72.1% 0.0584 166.2)",
+          "oklch(83.6% 0.0584 166.2)",
+          "oklch(95.0% 0.0584 166.2)"
+        ]
+      },
+      "light-accent-ink": {
+        "role": "primary",
+        "displayName": "Light Accent Ink",
+        "tonalRamp": [
+          "oklch(15.0% 0.0560 165.0)",
+          "oklch(26.4% 0.0560 165.0)",
+          "oklch(37.9% 0.0560 165.0)",
+          "oklch(49.3% 0.0560 165.0)",
+          "oklch(60.7% 0.0560 165.0)",
+          "oklch(72.1% 0.0560 165.0)",
+          "oklch(83.6% 0.0560 165.0)",
+          "oklch(95.0% 0.0560 165.0)"
+        ]
+      },
+      "light-danger": {
+        "role": "neutral",
+        "displayName": "Light Danger",
+        "tonalRamp": [
+          "oklch(15.0% 0.1479 24.9)",
+          "oklch(26.4% 0.1479 24.9)",
+          "oklch(37.9% 0.1479 24.9)",
+          "oklch(49.3% 0.1479 24.9)",
+          "oklch(60.7% 0.1479 24.9)",
+          "oklch(72.1% 0.1479 24.9)",
+          "oklch(83.6% 0.1479 24.9)",
+          "oklch(95.0% 0.1479 24.9)"
+        ]
+      },
+      "light-overlay": {
+        "role": "neutral",
+        "displayName": "Light Overlay",
+        "tonalRamp": [
+          "oklch(15.0% 0.0179 202.1)",
+          "oklch(26.4% 0.0179 202.1)",
+          "oklch(37.9% 0.0179 202.1)",
+          "oklch(49.3% 0.0179 202.1)",
+          "oklch(60.7% 0.0179 202.1)",
+          "oklch(72.1% 0.0179 202.1)",
+          "oklch(83.6% 0.0179 202.1)",
+          "oklch(95.0% 0.0179 202.1)"
+        ]
+      },
+      "light-selection": {
+        "role": "neutral",
+        "displayName": "Light Selection",
+        "tonalRamp": [
+          "oklch(15.0% 0.0245 151.1)",
+          "oklch(26.4% 0.0245 151.1)",
+          "oklch(37.9% 0.0245 151.1)",
+          "oklch(49.3% 0.0245 151.1)",
+          "oklch(60.7% 0.0245 151.1)",
+          "oklch(72.1% 0.0245 151.1)",
+          "oklch(83.6% 0.0245 151.1)",
+          "oklch(95.0% 0.0245 151.1)"
+        ]
+      },
+      "dark-shell": {
+        "role": "neutral",
+        "displayName": "Dark Shell",
+        "tonalRamp": [
+          "oklch(15.0% 0.0102 164.1)",
+          "oklch(26.4% 0.0102 164.1)",
+          "oklch(37.9% 0.0102 164.1)",
+          "oklch(49.3% 0.0102 164.1)",
+          "oklch(60.7% 0.0102 164.1)",
+          "oklch(72.1% 0.0102 164.1)",
+          "oklch(83.6% 0.0102 164.1)",
+          "oklch(95.0% 0.0102 164.1)"
+        ]
+      },
+      "dark-paper": {
+        "role": "neutral",
+        "displayName": "Dark Paper",
+        "tonalRamp": [
+          "oklch(15.0% 0.0122 160.5)",
+          "oklch(26.4% 0.0122 160.5)",
+          "oklch(37.9% 0.0122 160.5)",
+          "oklch(49.3% 0.0122 160.5)",
+          "oklch(60.7% 0.0122 160.5)",
+          "oklch(72.1% 0.0122 160.5)",
+          "oklch(83.6% 0.0122 160.5)",
+          "oklch(95.0% 0.0122 160.5)"
+        ]
+      },
+      "dark-raised": {
+        "role": "neutral",
+        "displayName": "Dark Raised",
+        "tonalRamp": [
+          "oklch(15.0% 0.0139 158.1)",
+          "oklch(26.4% 0.0139 158.1)",
+          "oklch(37.9% 0.0139 158.1)",
+          "oklch(49.3% 0.0139 158.1)",
+          "oklch(60.7% 0.0139 158.1)",
+          "oklch(72.1% 0.0139 158.1)",
+          "oklch(83.6% 0.0139 158.1)",
+          "oklch(95.0% 0.0139 158.1)"
+        ]
+      },
+      "dark-ink": {
+        "role": "neutral",
+        "displayName": "Dark Ink",
+        "tonalRamp": [
+          "oklch(15.0% 0.0136 134.9)",
+          "oklch(26.4% 0.0136 134.9)",
+          "oklch(37.9% 0.0136 134.9)",
+          "oklch(49.3% 0.0136 134.9)",
+          "oklch(60.7% 0.0136 134.9)",
+          "oklch(72.1% 0.0136 134.9)",
+          "oklch(83.6% 0.0136 134.9)",
+          "oklch(95.0% 0.0136 134.9)"
+        ]
+      },
+      "dark-muted": {
+        "role": "neutral",
+        "displayName": "Dark Muted",
+        "tonalRamp": [
+          "oklch(15.0% 0.0212 150.0)",
+          "oklch(26.4% 0.0212 150.0)",
+          "oklch(37.9% 0.0212 150.0)",
+          "oklch(49.3% 0.0212 150.0)",
+          "oklch(60.7% 0.0212 150.0)",
+          "oklch(72.1% 0.0212 150.0)",
+          "oklch(83.6% 0.0212 150.0)",
+          "oklch(95.0% 0.0212 150.0)"
+        ]
+      },
+      "dark-line": {
+        "role": "neutral",
+        "displayName": "Dark Line",
+        "tonalRamp": [
+          "oklch(15.0% 0.0194 153.9)",
+          "oklch(26.4% 0.0194 153.9)",
+          "oklch(37.9% 0.0194 153.9)",
+          "oklch(49.3% 0.0194 153.9)",
+          "oklch(60.7% 0.0194 153.9)",
+          "oklch(72.1% 0.0194 153.9)",
+          "oklch(83.6% 0.0194 153.9)",
+          "oklch(95.0% 0.0194 153.9)"
+        ]
+      },
+      "dark-hover": {
+        "role": "neutral",
+        "displayName": "Dark Hover",
+        "tonalRamp": [
+          "oklch(15.0% 0.0200 153.7)",
+          "oklch(26.4% 0.0200 153.7)",
+          "oklch(37.9% 0.0200 153.7)",
+          "oklch(49.3% 0.0200 153.7)",
+          "oklch(60.7% 0.0200 153.7)",
+          "oklch(72.1% 0.0200 153.7)",
+          "oklch(83.6% 0.0200 153.7)",
+          "oklch(95.0% 0.0200 153.7)"
+        ]
+      },
+      "dark-selected": {
+        "role": "neutral",
+        "displayName": "Dark Selected",
+        "tonalRamp": [
+          "oklch(15.0% 0.0370 157.5)",
+          "oklch(26.4% 0.0370 157.5)",
+          "oklch(37.9% 0.0370 157.5)",
+          "oklch(49.3% 0.0370 157.5)",
+          "oklch(60.7% 0.0370 157.5)",
+          "oklch(72.1% 0.0370 157.5)",
+          "oklch(83.6% 0.0370 157.5)",
+          "oklch(95.0% 0.0370 157.5)"
+        ]
+      },
+      "dark-accent": {
+        "role": "primary",
+        "displayName": "Dark Accent",
+        "tonalRamp": [
+          "oklch(15.0% 0.0483 157.6)",
+          "oklch(26.4% 0.0483 157.6)",
+          "oklch(37.9% 0.0483 157.6)",
+          "oklch(49.3% 0.0483 157.6)",
+          "oklch(60.7% 0.0483 157.6)",
+          "oklch(72.1% 0.0483 157.6)",
+          "oklch(83.6% 0.0483 157.6)",
+          "oklch(95.0% 0.0483 157.6)"
+        ]
+      },
+      "dark-accent-ink": {
+        "role": "primary",
+        "displayName": "Dark Accent Ink",
+        "tonalRamp": [
+          "oklch(15.0% 0.0435 155.8)",
+          "oklch(26.4% 0.0435 155.8)",
+          "oklch(37.9% 0.0435 155.8)",
+          "oklch(49.3% 0.0435 155.8)",
+          "oklch(60.7% 0.0435 155.8)",
+          "oklch(72.1% 0.0435 155.8)",
+          "oklch(83.6% 0.0435 155.8)",
+          "oklch(95.0% 0.0435 155.8)"
+        ]
+      },
+      "dark-danger": {
+        "role": "neutral",
+        "displayName": "Dark Danger",
+        "tonalRamp": [
+          "oklch(15.0% 0.0914 25.8)",
+          "oklch(26.4% 0.0914 25.8)",
+          "oklch(37.9% 0.0914 25.8)",
+          "oklch(49.3% 0.0914 25.8)",
+          "oklch(60.7% 0.0914 25.8)",
+          "oklch(72.1% 0.0914 25.8)",
+          "oklch(83.6% 0.0914 25.8)",
+          "oklch(95.0% 0.0914 25.8)"
+        ]
+      },
+      "dark-overlay": {
+        "role": "neutral",
+        "displayName": "Dark Overlay",
+        "tonalRamp": [
+          "oklch(15.0% 0.0125 155.7)",
+          "oklch(26.4% 0.0125 155.7)",
+          "oklch(37.9% 0.0125 155.7)",
+          "oklch(49.3% 0.0125 155.7)",
+          "oklch(60.7% 0.0125 155.7)",
+          "oklch(72.1% 0.0125 155.7)",
+          "oklch(83.6% 0.0125 155.7)",
+          "oklch(95.0% 0.0125 155.7)"
+        ]
+      },
+      "dark-selection": {
+        "role": "neutral",
+        "displayName": "Dark Selection",
+        "tonalRamp": [
+          "oklch(15.0% 0.0492 153.6)",
+          "oklch(26.4% 0.0492 153.6)",
+          "oklch(37.9% 0.0492 153.6)",
+          "oklch(49.3% 0.0492 153.6)",
+          "oklch(60.7% 0.0492 153.6)",
+          "oklch(72.1% 0.0492 153.6)",
+          "oklch(83.6% 0.0492 153.6)",
+          "oklch(95.0% 0.0492 153.6)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "interface": {
+        "displayName": "Interface",
+        "purpose": "Navigation and controls."
+      },
+      "manuscript": {
+        "displayName": "Manuscript",
+        "purpose": "Long-form prose; adjustable size."
+      },
+      "japanese": {
+        "displayName": "Japanese source",
+        "purpose": "Source text with CJK fallback."
+      }
+    },
+    "shadows": [
+      {
+        "name": "light-overlay",
+        "value": "0 16px 56px #17221d26",
+        "purpose": "Dialogs and transient confirmations in light mode."
+      },
+      {
+        "name": "dark-overlay",
+        "value": "0 16px 56px #0006",
+        "purpose": "Dialogs and transient confirmations in dark mode."
+      }
+    ],
+    "motion": [
+      {
+        "name": "control",
+        "value": "130ms ease-out",
+        "purpose": "Color/background transitions; disabled with reduced motion."
+      },
+      {
+        "name": "toast",
+        "value": "160ms ease-out",
+        "purpose": "Toast entry; disabled with reduced motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "mobile-max",
+        "value": "800px"
+      },
+      {
+        "name": "compact-max",
+        "value": "1150px"
+      },
+      {
+        "name": "wide-min",
+        "value": "1600px"
+      }
+    ],
+    "implementation": {
+      "scope": "Production project/file workflows; shared theme bridge for authentication, settings and retained structured workspace. Independent prototype at /design.html.",
+      "sources": [
+        "frontend/src/shared/ui/edda.css",
+        "frontend/src/shared/ui/edda.tsx",
+        "frontend/src/features/files",
+        "frontend/src/features/projects",
+        "frontend/src/features/appearance"
+      ],
+      "deployment": "Frontend integration deployed to https://edda.inky.su on 2026-10-07.",
+      "evidence": "2026-10-07: typecheck, 144 tests and four API-backed desktop/mobile end-to-end cases passed against the deployed server image; five production captures in .impeccable/review/production-*.png. Finish review scope-documentation finding corrected; no material visual or interaction findings.",
+      "tokenBridge": "Approved palette unchanged; --edda-muted and --edda-accent avoid collisions with existing semantic surface roles."
+    }
+  },
+  "components": [
+    {
+      "name": "Named icon action",
+      "kind": "button",
+      "refersTo": "icon-button",
+      "description": "Named icon action from the production Edda interface.",
+      "html": "<button class=\"ds-icon\" aria-label=\"Создать файл\" title=\"Создать файл\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" aria-hidden=\"true\"><path d=\"M12 5v14M5 12h14\"/></svg></button>",
+      "css": ".ds-icon{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--edda-muted,#667169);cursor:pointer}.ds-icon:hover{background:var(--hover,#e8ede5);color:var(--accent-ink,#234d3c)}.ds-icon:focus-visible{outline:2px solid var(--edda-accent,#376452);outline-offset:3px}"
+    },
+    {
+      "name": "Quiet action",
+      "kind": "button",
+      "refersTo": "quiet-button",
+      "description": "Quiet action from the production Edda interface.",
+      "html": "<button class=\"ds-quiet\">Скачать файл</button>",
+      "css": ".ds-quiet{font:500 12px \"Geist Variable\",sans-serif;padding:10px 14px;min-height:40px;border:0;border-radius:8px;background:var(--hover,#e8ede5);color:var(--accent-ink,#234d3c);cursor:pointer}.ds-quiet:hover{background:var(--selected,#dce9e0)}.ds-quiet:focus-visible{outline:2px solid var(--edda-accent,#376452);outline-offset:3px}"
+    },
+    {
+      "name": "Text action",
+      "kind": "button",
+      "description": "Text action from the production Edda interface.",
+      "html": "<button class=\"ds-text\">Продолжить работу</button>",
+      "css": ".ds-text{font:14px \"Geist Variable\",sans-serif;border:0;border-radius:4px;padding:7px 0;background:none;color:var(--accent-ink,#234d3c);cursor:pointer}.ds-text:hover{text-decoration:underline;text-underline-offset:5px}.ds-text:focus-visible{outline:2px solid var(--edda-accent,#376452);outline-offset:3px}"
+    },
+    {
+      "name": "Named field",
+      "kind": "input",
+      "description": "Named field from the production Edda interface.",
+      "html": "<label class=\"ds-field\">Имя<input placeholder=\"Новая глава.md\"/></label>",
+      "css": ".ds-field{display:flex;flex-direction:column;gap:9px;font:12px \"Geist Variable\",sans-serif;color:var(--ink,#293831)}.ds-field input{padding:11px 12px;min-height:42px;border:1px solid var(--line,#dce1d9);border-radius:6px;background:var(--paper,#fcfcf8);color:var(--ink,#293831);font:14px \"Geist Variable\",sans-serif}.ds-field input::placeholder{color:var(--edda-muted,#667169)}.ds-field input:focus-visible{outline:2px solid var(--edda-accent,#376452);outline-offset:3px}"
+    },
+    {
+      "name": "Selected file",
+      "kind": "nav",
+      "description": "Selected file from the production Edda interface.",
+      "html": "<nav aria-label=\"Файлы\"><button class=\"ds-file\" aria-current=\"page\">01 — Возвращение.md</button></nav>",
+      "css": ".ds-file{display:block;width:100%;text-align:left;min-height:38px;padding:9px 12px;border:0;border-radius:6px;background:var(--selected,#dce9e0);color:var(--accent-ink,#234d3c);font:13px \"Geist Variable\",sans-serif;cursor:pointer}.ds-file:hover{background:var(--hover,#e8ede5)}.ds-file:focus-visible{outline:2px solid var(--edda-accent,#376452);outline-offset:3px}"
+    },
+    {
+      "name": "Continue project surface",
+      "kind": "card",
+      "description": "Continue project surface from the production Edda interface.",
+      "html": "<section class=\"ds-continue\"><h2>Тихий берег</h2><p>Рукопись и материалы</p><button>Продолжить работу</button></section>",
+      "css": ".ds-continue{padding:32px;border-radius:12px;background:var(--shell,#f1f2ee);color:var(--ink,#293831);font-family:\"Geist Variable\",sans-serif}.ds-continue h2{font-size:25px;font-weight:500;margin:0}.ds-continue p{font-size:13px;color:var(--edda-muted,#667169)}.ds-continue button{border:0;background:none;color:var(--accent-ink,#234d3c);padding:7px 0;font:14px \"Geist Variable\",sans-serif;cursor:pointer}.ds-continue button:hover{text-decoration:underline;text-underline-offset:5px}.ds-continue button:focus-visible{outline:2px solid var(--edda-accent,#376452);outline-offset:3px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Тихая авторская мастерская",
+    "overview": "Edda is a calm workspace for sustained writing and literary translation. Warm stone surrounds a pale reading plane; dark mode uses charcoal surfaces and muted ivory text. Restrained green-teal accents mark selection and interaction. Text occupies the main space; files and optional context support it.",
+    "keyCharacteristics": [
+      "Text-first composition with optional supporting panes.",
+      "Equal light, dark and system theme support.",
+      "Quiet, named icon actions and explicit file affordances."
+    ],
+    "rules": [],
+    "dos": [
+      "Do keep every file in the project tree and open its content or download page in the main workspace.",
+      "Do provide keyboard and touch alternatives to drag and drop.",
+      "Do distinguish editing, browser drafts, confirmed server saves and failures truthfully.",
+      "Do preserve visible focus, Cyrillic and Japanese readability, and reduced-motion preferences."
+    ],
+    "donts": [
+      "Don’t use saturated call-to-action blocks for routine file operations.",
+      "Don’t treat a binary file or an unavailable browser preview as a project error.",
+      "Don’t hide essential actions behind hover alone on touch screens.",
+      "Don’t adopt prototype-only persistence or simulated conflicts as production semantics."
+    ]
+  }
+}

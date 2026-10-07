@@ -20,6 +20,7 @@ import type {
   RewriteRequest,
   RewriteResult,
 } from "./agentTypes";
+import { apiError } from "./api";
 import { getToken } from "./authApi";
 
 async function requestJSON<T>(path: string, init?: RequestInit): Promise<T> {
@@ -31,16 +32,7 @@ async function requestJSON<T>(path: string, init?: RequestInit): Promise<T> {
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const response = await fetch(path, { ...init, headers });
   if (!response.ok) {
-    let message = `${init?.method ?? "GET"} ${path} failed: ${response.status}`;
-    try {
-      const body = (await response.json()) as { error?: unknown };
-      if (typeof body.error === "string" && body.error.trim()) {
-        message = body.error;
-      }
-    } catch {
-      // Keep the status-based fallback when the server returns a non-JSON error.
-    }
-    throw new Error(message);
+    throw await apiError(`${init?.method ?? "GET"} ${path}`, response);
   }
   return response.json() as Promise<T>;
 }

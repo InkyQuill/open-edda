@@ -2,6 +2,8 @@
 
 This is an agent-facing implementation note. Use it when rewriting or auditing Edda skills.
 
+Status clarification (2026-10-06): this page describes the current database-backed runtime, not proven equivalence with current local CWS skills. Future adaptation follows [ADR 0014](../adr/0014-portable-projects-and-transactional-sync.md): preserve source mechanics and translate storage/tool access; explicitly defer unsupported behavior instead of silently removing it. Skill-parity implementation is deferred until projects/local sync and Pocket Editor are delivered.
+
 ## Storage
 
 Skill source folders currently live under:
@@ -121,7 +123,7 @@ through the `read_skill_file` tool. This tool returns one non-script file body. 
 
 When rewriting a skill:
 
-1. Preserve only behavior that can run through Edda tools and database-backed content.
+1. Preserve source methodology. Implement supported behavior through current Edda tools; explicitly document unsupported steps as deferred rather than claiming a reduced workflow is equivalent.
 2. Replace file/path/shell instructions with Edda tools.
 3. Put bulky reference material in `references/`, `templates/`, or `data/` and tell the agent when to load it with `read_skill_file`.
 4. Give the future agent concrete context-reading requirements.

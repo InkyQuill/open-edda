@@ -13,10 +13,10 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"git.inkyquill.net/inky/writer/agent"
-	"git.inkyquill.net/inky/writer/auth"
-	"git.inkyquill.net/inky/writer/project"
-	"git.inkyquill.net/inky/writer/store"
+	"github.com/InkyQuill/open-edda/agent"
+	"github.com/InkyQuill/open-edda/auth"
+	"github.com/InkyQuill/open-edda/project"
+	"github.com/InkyQuill/open-edda/store"
 	"github.com/pressly/goose/v3"
 )
 

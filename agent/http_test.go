@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"git.inkyquill.net/inky/writer/auth"
-	"git.inkyquill.net/inky/writer/project"
-	"git.inkyquill.net/inky/writer/skill"
+	"github.com/InkyQuill/open-edda/auth"
+	"github.com/InkyQuill/open-edda/project"
+	"github.com/InkyQuill/open-edda/skill"
 	"github.com/go-chi/chi/v5"
 )
 

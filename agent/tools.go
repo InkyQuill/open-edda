@@ -8,10 +8,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"git.inkyquill.net/inky/writer/project"
-	"git.inkyquill.net/inky/writer/skill"
-	scriptruntime "git.inkyquill.net/inky/writer/skill/runtime"
-	"git.inkyquill.net/inky/writer/store"
+	"github.com/InkyQuill/open-edda/project"
+	"github.com/InkyQuill/open-edda/skill"
+	scriptruntime "github.com/InkyQuill/open-edda/skill/runtime"
+	"github.com/InkyQuill/open-edda/store"
 )
 
 const (
@@ -325,14 +325,14 @@ func (s *Service) executeContextTool(ctx context.Context, input ToolCallInput, s
 			loadedSummary.Files[i].BodyText = ""
 		}
 		return map[string]any{
-				"skill":                loadedSummary,
-				"modelVisibleMarkdown": rendered,
-			}, true, map[string]any{
-				"skillId":         loaded.ID,
-				"name":            loaded.Name,
-				"scriptCount":     loaded.ScriptCount,
-				"scriptsDisabled": loaded.ScriptsDisabled,
-			}, nil
+			"skill":                loadedSummary,
+			"modelVisibleMarkdown": rendered,
+		}, true, map[string]any{
+			"skillId":         loaded.ID,
+			"name":            loaded.Name,
+			"scriptCount":     loaded.ScriptCount,
+			"scriptsDisabled": loaded.ScriptsDisabled,
+		}, nil
 	case "read_skill_file":
 		if s.skillService == nil {
 			return nil, false, nil, fmt.Errorf("skill service is not configured")
@@ -359,16 +359,16 @@ func (s *Service) executeContextTool(ctx context.Context, input ToolCallInput, s
 			return nil, false, nil, err
 		}
 		return map[string]any{
-				"skillId":              loaded.ID,
-				"skillName":            loaded.Name,
-				"file":                 file,
-				"modelVisibleMarkdown": rendered,
-			}, true, map[string]any{
-				"skillId": loaded.ID,
-				"name":    loaded.Name,
-				"path":    file.RelativePath,
-				"purpose": string(file.Purpose),
-			}, nil
+			"skillId":              loaded.ID,
+			"skillName":            loaded.Name,
+			"file":                 file,
+			"modelVisibleMarkdown": rendered,
+		}, true, map[string]any{
+			"skillId": loaded.ID,
+			"name":    loaded.Name,
+			"path":    file.RelativePath,
+			"purpose": string(file.Purpose),
+		}, nil
 	case "skill_script":
 		if s.skillService == nil {
 			return nil, false, nil, fmt.Errorf("skill service is not configured")
@@ -414,17 +414,17 @@ func (s *Service) executeContextTool(ctx context.Context, input ToolCallInput, s
 			errorMessage = err.Error()
 		}
 		return map[string]any{
-				"status":               run.Status,
-				"outputKind":           run.OutputKind,
-				"outputJson":           rawScriptOutputJSON(run.OutputJSON),
-				"errorMessage":         errorMessage,
-				"modelVisibleMarkdown": renderSkillScriptMarkdown(run.Status, run.OutputKind, run.OutputJSON, errorMessage),
-			}, false, map[string]any{
-				"skillId":     args.SkillID,
-				"scriptPath":  args.ScriptPath,
-				"scriptRunId": run.ID,
-				"status":      string(run.Status),
-			}, nil
+			"status":               run.Status,
+			"outputKind":           run.OutputKind,
+			"outputJson":           rawScriptOutputJSON(run.OutputJSON),
+			"errorMessage":         errorMessage,
+			"modelVisibleMarkdown": renderSkillScriptMarkdown(run.Status, run.OutputKind, run.OutputJSON, errorMessage),
+		}, false, map[string]any{
+			"skillId":     args.SkillID,
+			"scriptPath":  args.ScriptPath,
+			"scriptRunId": run.ID,
+			"status":      string(run.Status),
+		}, nil
 	case "append_to_chapter", "insert_into_chapter", "replace_selection", "update_story_bible_entry", "update_entry_section":
 		payload, metadata, err := s.executeWriteTool(ctx, input, session)
 		return payload, false, metadata, err

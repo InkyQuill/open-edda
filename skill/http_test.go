@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"git.inkyquill.net/inky/writer/skill/runtime"
+	"github.com/InkyQuill/open-edda/skill/runtime"
 	"github.com/go-chi/chi/v5"
 )
 

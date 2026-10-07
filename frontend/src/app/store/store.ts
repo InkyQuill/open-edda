@@ -1,5 +1,6 @@
 import { configureStore } from "@reduxjs/toolkit";
 import { assistantReducer } from "../../features/assistant/assistantSlice";
+import { assistantActionsReducer } from "../../features/assistant-actions/assistantActionsSlice";
 import { editorReducer } from "../../features/editor/editorSlice";
 import { modelSettingsReducer } from "../../features/model-settings/modelSettingsSlice";
 import { reviewReducer } from "../../features/review/reviewSlice";
@@ -11,6 +12,7 @@ import { workspaceReducer } from "../../features/workspace/workspaceSlice";
 export const store = configureStore({
   reducer: {
     assistant: assistantReducer,
+    assistantActions: assistantActionsReducer,
     editor: editorReducer,
     modelSettings: modelSettingsReducer,
     review: reviewReducer,

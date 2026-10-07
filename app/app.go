@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"strings"
 
-	"git.inkyquill.net/inky/writer/agent"
-	"git.inkyquill.net/inky/writer/auth"
-	"git.inkyquill.net/inky/writer/internal/httputil"
-	"git.inkyquill.net/inky/writer/project"
-	"git.inkyquill.net/inky/writer/skill"
+	"github.com/InkyQuill/open-edda/agent"
+	"github.com/InkyQuill/open-edda/auth"
+	"github.com/InkyQuill/open-edda/internal/httputil"
+	"github.com/InkyQuill/open-edda/project"
+	"github.com/InkyQuill/open-edda/skill"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -18,6 +18,7 @@ import (
 type Dependencies struct {
 	AuthService    *auth.Service
 	ProjectService *project.Service
+	VersionStore   *project.VersionStore
 	AgentService   *agent.Service
 	SkillService   *skill.Service
 	StaticFS       fs.FS
@@ -46,6 +47,7 @@ func New(deps *Dependencies) http.Handler {
 					}
 				}
 				project.RegisterRoutes(r, deps.ProjectService)
+				project.RegisterVersionRoutes(r, deps.VersionStore)
 				agent.RegisterRoutes(r, deps.AgentService)
 				skill.RegisterRoutes(r, deps.SkillService)
 			})

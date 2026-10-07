@@ -1,6 +1,6 @@
 package skill
 
-import "git.inkyquill.net/inky/writer/skill/runtime"
+import "github.com/InkyQuill/open-edda/skill/runtime"
 
 type FilePurpose string
 

@@ -263,8 +263,43 @@ func (q *Queries) GetEntrySection(ctx context.Context, arg GetEntrySectionParams
 	return i, err
 }
 
+const getRevisionByNumber = `-- name: GetRevisionByNumber :one
+SELECT revisions.id, revisions.content_item_id, revisions.revision_number, revisions.body_markdown, revisions.metadata_json, revisions.reason, revisions.created_by, revisions.created_at, revisions.agent_session_id, revisions.action_kind, revisions.model_variant_id, revisions.skill_id
+FROM revisions
+JOIN content_items ON content_items.id = revisions.content_item_id
+WHERE revisions.content_item_id = ?1
+  AND content_items.project_id = ?2
+  AND revisions.revision_number = ?3
+`
+
+type GetRevisionByNumberParams struct {
+	ContentItemID  string `json:"content_item_id"`
+	ProjectID      string `json:"project_id"`
+	RevisionNumber int64  `json:"revision_number"`
+}
+
+func (q *Queries) GetRevisionByNumber(ctx context.Context, arg GetRevisionByNumberParams) (Revision, error) {
+	row := q.db.QueryRowContext(ctx, getRevisionByNumber, arg.ContentItemID, arg.ProjectID, arg.RevisionNumber)
+	var i Revision
+	err := row.Scan(
+		&i.ID,
+		&i.ContentItemID,
+		&i.RevisionNumber,
+		&i.BodyMarkdown,
+		&i.MetadataJson,
+		&i.Reason,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.AgentSessionID,
+		&i.ActionKind,
+		&i.ModelVariantID,
+		&i.SkillID,
+	)
+	return i, err
+}
+
 const getStoryProject = `-- name: GetStoryProject :one
-SELECT id, author_id, title, slug, language, created_at, updated_at FROM story_projects
+SELECT id, author_id, title, slug, language, created_at, updated_at, storage_mode FROM story_projects
 WHERE id = ? AND author_id = ?
 `
 
@@ -284,12 +319,13 @@ func (q *Queries) GetStoryProject(ctx context.Context, arg GetStoryProjectParams
 		&i.Language,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.StorageMode,
 	)
 	return i, err
 }
 
 const getStoryProjectByID = `-- name: GetStoryProjectByID :one
-SELECT id, author_id, title, slug, language, created_at, updated_at FROM story_projects
+SELECT id, author_id, title, slug, language, created_at, updated_at, storage_mode FROM story_projects
 WHERE id = ?
 `
 
@@ -304,6 +340,7 @@ func (q *Queries) GetStoryProjectByID(ctx context.Context, id string) (StoryProj
 		&i.Language,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.StorageMode,
 	)
 	return i, err
 }
@@ -532,7 +569,7 @@ func (q *Queries) ListRevisions(ctx context.Context, arg ListRevisionsParams) ([
 }
 
 const listStoryProjects = `-- name: ListStoryProjects :many
-SELECT id, author_id, title, slug, language, created_at, updated_at FROM story_projects
+SELECT id, author_id, title, slug, language, created_at, updated_at, storage_mode FROM story_projects
 WHERE author_id = ?
 ORDER BY updated_at DESC, title ASC
 `
@@ -554,6 +591,7 @@ func (q *Queries) ListStoryProjects(ctx context.Context, authorID string) ([]Sto
 			&i.Language,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.StorageMode,
 		); err != nil {
 			return nil, err
 		}

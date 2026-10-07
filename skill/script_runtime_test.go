@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"git.inkyquill.net/inky/writer/skill/runtime"
+	"github.com/InkyQuill/open-edda/skill/runtime"
 )
 
 type fakeScriptRunner struct {

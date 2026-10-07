@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
-@import "@inky/galley-editor/style.css";
+@import "@inkyquill/galley-editor/style.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -296,4 +296,15 @@ select {
   html {
     @apply font-sans;
   }
+}
+
+/* File text has an independent reading face; application controls stay sans. */
+textarea.file-prose {
+  font-family: var(--file-prose-font, Georgia, "Times New Roman", serif);
+  font-size: 1.125rem;
+  line-height: 1.7;
+}
+textarea.file-prose::selection {
+  background: var(--muted);
+  color: var(--foreground);
 }

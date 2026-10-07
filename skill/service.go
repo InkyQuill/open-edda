@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"git.inkyquill.net/inky/writer/skill/runtime"
-	"git.inkyquill.net/inky/writer/store"
+	"github.com/InkyQuill/open-edda/skill/runtime"
+	"github.com/InkyQuill/open-edda/store"
 )
 
 var ErrInvalidInput = errors.New("invalid skill input")

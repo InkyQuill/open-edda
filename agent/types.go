@@ -1,6 +1,6 @@
 package agent
 
-import "git.inkyquill.net/inky/writer/project"
+import "github.com/InkyQuill/open-edda/project"
 
 type ActionKind string
 

@@ -11,8 +11,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"git.inkyquill.net/inky/writer/markdownio"
-	"git.inkyquill.net/inky/writer/store"
+	"github.com/InkyQuill/open-edda/markdownio"
+	"github.com/InkyQuill/open-edda/store"
 	"github.com/mattn/go-sqlite3"
 )
 
@@ -44,12 +44,19 @@ func (s *Service) AuthorOwnsProject(ctx context.Context, authorID, projectID str
 }
 
 func (s *Service) CreateProject(ctx context.Context, input CreateProjectInput) (StoryProject, error) {
+	if input.StorageMode == "files" {
+		return s.createFileProject(ctx, input)
+	}
+	if input.StorageMode != "" && input.StorageMode != "legacy" {
+		return StoryProject{}, ErrInvalidTree
+	}
 	now := nowString()
 	project := StoryProject{
-		ID:       newID("project"),
-		Title:    input.Title,
-		Slug:     slugify(input.Title),
-		Language: input.Language,
+		StorageMode: "legacy",
+		ID:          newID("project"),
+		Title:       input.Title,
+		Slug:        slugify(input.Title),
+		Language:    input.Language,
 	}
 
 	if err := s.queries.CreateStoryProject(ctx, store.CreateStoryProjectParams{
@@ -73,10 +80,11 @@ func (s *Service) CreateProject(ctx context.Context, input CreateProjectInput) (
 func (s *Service) ImportElysiumProject(ctx context.Context, authorID string, title string, language string, items []markdownio.ImportedItem) (StoryProject, error) {
 	now := nowString()
 	project := StoryProject{
-		ID:       newID("project"),
-		Title:    title,
-		Slug:     slugify(title),
-		Language: language,
+		StorageMode: "legacy",
+		ID:          newID("project"),
+		Title:       title,
+		Slug:        slugify(title),
+		Language:    language,
 	}
 
 	if err := s.inTx(ctx, func(queries *store.Queries) error {
@@ -206,8 +214,12 @@ func (s *Service) CreateContent(ctx context.Context, input CreateContentInput) (
 	}
 
 	if err := s.inTx(ctx, func(queries *store.Queries) error {
-		if _, err := queries.GetStoryProjectByID(ctx, input.ProjectID); err != nil {
+		p, err := queries.GetStoryProjectByID(ctx, input.ProjectID)
+		if err != nil {
 			return fmt.Errorf("get story project: %w", err)
+		}
+		if p.StorageMode == "files" {
+			return ErrConflict
 		}
 
 		if err := queries.CreateContentItem(ctx, store.CreateContentItemParams{
@@ -473,6 +485,81 @@ func (s *Service) UpdateContent(ctx context.Context, input UpdateContentInput) (
 	}
 
 	return updated, nil
+}
+
+func (s *Service) RestoreRevision(ctx context.Context, input RestoreRevisionInput) (ContentItem, error) {
+	var restored ContentItem
+	createdBy, err := createdBy(input.CreatedBy)
+	if err != nil {
+		return ContentItem{}, err
+	}
+	if err := s.inTx(ctx, func(queries *store.Queries) error {
+		item, err := queries.GetContentItem(ctx, store.GetContentItemParams{
+			ID:        input.ContentID,
+			ProjectID: input.ProjectID,
+		})
+		if err != nil {
+			return fmt.Errorf("get content item: %w", err)
+		}
+		if item.CurrentRevision != input.ExpectedRevision {
+			return ErrConflict
+		}
+
+		target, err := queries.GetRevisionByNumber(ctx, store.GetRevisionByNumberParams{
+			ContentItemID:  input.ContentID,
+			ProjectID:      input.ProjectID,
+			RevisionNumber: input.RevisionNumber,
+		})
+		if err != nil {
+			return fmt.Errorf("get revision: %w", err)
+		}
+
+		nextRevision := input.ExpectedRevision + 1
+		now := nowString()
+		affected, err := queries.UpdateContentItemBody(ctx, store.UpdateContentItemBodyParams{
+			BodyMarkdown:     target.BodyMarkdown,
+			MetadataJson:     target.MetadataJson,
+			NextRevision:     nextRevision,
+			UpdatedAt:        now,
+			ID:               input.ContentID,
+			ProjectID:        input.ProjectID,
+			ExpectedRevision: input.ExpectedRevision,
+		})
+		if err != nil {
+			return fmt.Errorf("update content item: %w", err)
+		}
+		if affected == 0 {
+			return ErrConflict
+		}
+
+		reason := emptyDefault(input.Reason, fmt.Sprintf("restore revision %d", input.RevisionNumber))
+		if err := queries.CreateRevision(ctx, store.CreateRevisionParams{
+			ID:             newID("revision"),
+			ContentItemID:  input.ContentID,
+			RevisionNumber: nextRevision,
+			BodyMarkdown:   target.BodyMarkdown,
+			MetadataJson:   target.MetadataJson,
+			Reason:         reason,
+			CreatedBy:      createdBy,
+			CreatedAt:      now,
+			AgentSessionID: sql.NullString{},
+			ActionKind:     "",
+			ModelVariantID: sql.NullString{},
+			SkillID:        "",
+		}); err != nil {
+			return fmt.Errorf("create revision: %w", err)
+		}
+
+		item.BodyMarkdown = target.BodyMarkdown
+		item.MetadataJson = target.MetadataJson
+		item.CurrentRevision = nextRevision
+		restored = contentItemFromStore(item)
+		return nil
+	}); err != nil {
+		return ContentItem{}, err
+	}
+
+	return restored, nil
 }
 
 func (s *Service) AppendToContent(ctx context.Context, input StructuredWriteInput) (ContentItem, error) {
@@ -826,10 +913,11 @@ func (s *Service) inTx(ctx context.Context, fn func(*store.Queries) error) error
 
 func storyProjectFromStore(project store.StoryProject) StoryProject {
 	return StoryProject{
-		ID:       project.ID,
-		Title:    project.Title,
-		Slug:     project.Slug,
-		Language: project.Language,
+		ID:          project.ID,
+		Title:       project.Title,
+		Slug:        project.Slug,
+		Language:    project.Language,
+		StorageMode: project.StorageMode,
 	}
 }
 

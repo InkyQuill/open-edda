@@ -1,0 +1,58 @@
+# Replace the image with your registry/digest and create open-edda-secrets first.
+# Qualify the selected block-backed storage class for SQLite WAL semantics.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: open-edda-data
+spec:
+  accessModes: [ReadWriteOncePod]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open-edda
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {app: open-edda}
+  template:
+    metadata:
+      labels: {app: open-edda}
+    spec:
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        runAsNonRoot: true
+      containers:
+        - name: open-edda
+          image: open-edda:local
+          ports: [{containerPort: 8080}]
+          envFrom:
+            - secretRef: {name: open-edda-secrets}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          readinessProbe:
+            httpGet: {path: /api/health, port: 8080}
+          livenessProbe:
+            httpGet: {path: /api/health, port: 8080}
+            initialDelaySeconds: 15
+          volumeMounts:
+            - {name: data, mountPath: /data}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: open-edda-data}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open-edda
+spec:
+  selector: {app: open-edda}
+  ports: [{port: 8080, targetPort: 8080}]

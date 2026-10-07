@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"git.inkyquill.net/inky/writer/app"
+	"github.com/InkyQuill/open-edda/app"
 )
 
 func TestBuildDependenciesRequiresAuthForProjectRoutes(t *testing.T) {
@@ -303,5 +303,82 @@ func TestAPIKeyEncryptionSecretAcceptsConfiguredSecret(t *testing.T) {
 	}
 	if secret != "test-api-key-encryption-secret-32" {
 		t.Fatalf("secret = %q, want configured secret", secret)
+	}
+}
+
+func TestFileStorageDataDirectoryAndRestart(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "existing-location.db")
+	dataDir := filepath.Join(root, "file-data")
+	t.Setenv("OPEN_EDDA_DB_PATH", dbPath)
+	t.Setenv("OPEN_EDDA_DATA_DIR", dataDir)
+	t.Setenv("OPEN_EDDA_MIGRATIONS_PATH", "migrations")
+	t.Setenv("OPEN_EDDA_JWT_SECRET", "file-test-secret-at-least-32-bytes-long")
+	t.Setenv("OPEN_EDDA_API_KEY_ENCRYPTION_SECRET", "file-test-encryption-at-least-32-bytes")
+	t.Setenv("OPEN_EDDA_BOOTSTRAP_EMAIL", "files@example.invalid")
+	t.Setenv("OPEN_EDDA_BOOTSTRAP_PASSWORD", "file-test-password")
+	staticDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(staticDir, "index.html"), []byte("<html></html>"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OPEN_EDDA_STATIC_PATH", staticDir)
+	deps, cleanup, err := buildDependencies()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { cleanup() }()
+	// Authenticate through HTTP so the test does not depend on author internals.
+	handler := app.New(deps)
+	login := httptest.NewRecorder()
+	handler.ServeHTTP(login, httptest.NewRequest("POST", "/api/auth/login", bytes.NewBufferString(`{"email":"files@example.invalid","password":"file-test-password"}`)))
+	var credentials struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(login.Body.Bytes(), &credentials); err != nil || credentials.Token == "" {
+		t.Fatalf("login: %s %v", login.Body.String(), err)
+	}
+	request := httptest.NewRequest("POST", "/api/projects", bytes.NewBufferString(`{"title":"Persistent files","storageMode":"files"}`))
+	request.Header.Set("Authorization", "Bearer "+credentials.Token)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	var created struct {
+		ID string `json:"id"`
+	}
+	if response.Code != 201 {
+		t.Fatal(response.Body.String())
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	get := func() string {
+		t.Helper()
+		r := httptest.NewRequest("GET", "/api/projects/"+created.ID+"/files/versions/current", nil)
+		r.Header.Set("Authorization", "Bearer "+credentials.Token)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		if w.Code != 200 {
+			t.Fatal(w.Body.String())
+		}
+		return w.Body.String()
+	}
+	before := get()
+	cleanup()
+	cleanup = func() {}
+	deps, cleanup, err = buildDependencies()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler = app.New(deps)
+	if after := get(); after != before {
+		t.Fatalf("manifest changed after restart: %s", after)
+	}
+	if _, err := os.Stat(dbPath); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "objects")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "edda.db")); !os.IsNotExist(err) {
+		t.Fatalf("DB unexpectedly moved: %v", err)
 	}
 }

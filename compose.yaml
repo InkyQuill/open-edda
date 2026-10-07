@@ -1,0 +1,17 @@
+services:
+  open-edda:
+    build: .
+    image: open-edda:local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      OPEN_EDDA_JWT_SECRET: ${OPEN_EDDA_JWT_SECRET:?Set a random JWT secret}
+      OPEN_EDDA_API_KEY_ENCRYPTION_SECRET: ${OPEN_EDDA_API_KEY_ENCRYPTION_SECRET:?Set a random encryption secret}
+      OPEN_EDDA_BOOTSTRAP_EMAIL: ${OPEN_EDDA_BOOTSTRAP_EMAIL:?Set the author email}
+      OPEN_EDDA_BOOTSTRAP_PASSWORD: ${OPEN_EDDA_BOOTSTRAP_PASSWORD:?Set the initial password}
+    volumes:
+      - edda-data:/data
+    stop_grace_period: 30s
+volumes:
+  edda-data:
