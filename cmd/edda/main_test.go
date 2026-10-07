@@ -3,12 +3,14 @@ package main
 import (
 	"bytes"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
-	"git.inkyquill.net/inky/writer/fileproject"
+	"github.com/InkyQuill/open-edda/fileproject"
 )
 
 func TestStatusReportsUninitializedLayout(t *testing.T) {
@@ -181,113 +183,93 @@ func TestCheckpointHistoryDiffAndRestoreWorkflow(t *testing.T) {
 	}
 }
 
-func TestGetInitializesConnectedProjectAndSyncState(t *testing.T) {
-	root := t.TempDir()
-
-	var stdout bytes.Buffer
-	if err := run(
-		[]string{"get", "--title", "Alchemy Draft", "--id", "project-1", "https://edda.example/projects/project-1", root},
-		&stdout,
-		&bytes.Buffer{},
-	); err != nil {
-		t.Fatalf("get error = %v", err)
-	}
-	if !strings.Contains(stdout.String(), "Connected Alchemy Draft (project-1)") {
-		t.Fatalf("get output = %s", stdout.String())
-	}
-	metadata, err := fileproject.ReadMetadata(root)
-	if err != nil {
-		t.Fatalf("ReadMetadata error = %v", err)
-	}
-	if metadata.ServerURL != "https://edda.example/projects/project-1" {
-		t.Fatalf("server URL = %q", metadata.ServerURL)
-	}
-	if _, err := fileproject.ReadSyncState(root); err != nil {
-		t.Fatalf("ReadSyncState error = %v", err)
-	}
-}
-
-func TestGetPreservesExistingMetadata(t *testing.T) {
-	root := t.TempDir()
-	if _, err := fileproject.InitMetadata(root, fileproject.InitMetadataInput{
-		ID:        "project-1",
-		Title:     "Existing Draft",
-		ServerURL: "https://old.example/projects/project-1",
-	}); err != nil {
-		t.Fatalf("InitMetadata error = %v", err)
-	}
-
-	if err := run(
-		[]string{"get", "--title", "New Draft", "--id", "project-2", "https://new.example/projects/project-2", root},
-		&bytes.Buffer{},
-		&bytes.Buffer{},
-	); err != nil {
-		t.Fatalf("get existing project error = %v", err)
-	}
-	metadata, err := fileproject.ReadMetadata(root)
-	if err != nil {
-		t.Fatalf("ReadMetadata error = %v", err)
-	}
-	if metadata.ID != "project-1" || metadata.Title != "Existing Draft" || metadata.ServerURL != "https://old.example/projects/project-1" {
-		t.Fatalf("metadata was overwritten: %#v", metadata)
+func TestNetworkCommandsPreserveLocalWork(t *testing.T) {
+	for _, serverURL := range []string{"", "http://127.0.0.1:1"} {
+		t.Run("server="+serverURL, func(t *testing.T) {
+			root := copyFixture(t, filepath.Join("..", "..", "fileproject", "testdata", "partial"))
+			if _, err := fileproject.InitMetadata(root, fileproject.InitMetadataInput{ID: "project-1", Title: "Existing draft", ServerURL: serverURL}); err != nil {
+				t.Fatal(err)
+			}
+			for _, note := range []string{"First local version", "Second local version"} {
+				if err := run([]string{"save", root, note}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			state, err := fileproject.ReadSyncState(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(state.PendingUploads) != 2 {
+				t.Fatalf("pending uploads = %d, want 2", len(state.PendingUploads))
+			}
+			before := snapshotFiles(t, root)
+			for _, args := range [][]string{
+				{"get", root, "--project", "project-2", "--server", "http://127.0.0.1:1"},
+				{"send", root}, {"take", root}, {"send", root},
+			} {
+				var stdout bytes.Buffer
+				err := run(args, &stdout, &bytes.Buffer{})
+				if err == nil {
+					t.Fatalf("%s error = %v", args[0], err)
+				}
+				if stdout.Len() != 0 {
+					t.Fatalf("%s printed success output: %s", args[0], stdout.String())
+				}
+				if after := snapshotFiles(t, root); !reflect.DeepEqual(before, after) {
+					t.Fatalf("%s changed project files or sync state", args[0])
+				}
+			}
+		})
 	}
 }
 
-func TestSaveCheckpointSendAndTakeWorkflow(t *testing.T) {
-	root := copyFixture(t, filepath.Join("..", "..", "fileproject", "testdata", "partial"))
-	if _, err := fileproject.InitMetadata(root, fileproject.InitMetadataInput{
-		ID:        "project-1",
-		Title:     "Alchemy Draft",
-		ServerURL: "https://edda.example/projects/project-1",
-	}); err != nil {
-		t.Fatalf("InitMetadata error = %v", err)
+func TestNetworkCommandsDoNotInitializeFolders(t *testing.T) {
+	for _, command := range []string{"get", "send", "take"} {
+		t.Run(command, func(t *testing.T) {
+			parent := t.TempDir()
+			root := filepath.Join(parent, "new-project")
+			args := []string{command, root}
+			if command == "get" {
+				args = []string{command, root, "--server", "http://127.0.0.1:1", "--project", "project-1"}
+			}
+			if err := run(args, &bytes.Buffer{}, &bytes.Buffer{}); err == nil {
+				t.Fatalf("error = %v", err)
+			}
+			if _, err := os.Stat(root); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("command created destination: %v", err)
+			}
+			if len(snapshotFiles(t, parent)) != 0 {
+				t.Fatal("command wrote files")
+			}
+		})
 	}
+}
 
-	var saveOut bytes.Buffer
-	if err := run([]string{"save", root, "Chapter", "polish"}, &saveOut, &bytes.Buffer{}); err != nil {
-		t.Fatalf("save checkpoint error = %v", err)
-	}
-	if !strings.Contains(saveOut.String(), "upload pending") {
-		t.Fatalf("save output = %s", saveOut.String())
-	}
-	state, err := fileproject.ReadSyncState(root)
+func snapshotFiles(t *testing.T, root string) map[string]string {
+	t.Helper()
+	result := map[string]string{}
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		result[relative] = string(data)
+		return nil
+	})
 	if err != nil {
-		t.Fatalf("ReadSyncState after save error = %v", err)
+		t.Fatal(err)
 	}
-	if state.PendingUpload == nil {
-		t.Fatalf("pending upload is nil")
-	}
-	checkpointID := state.PendingUpload.CheckpointID
-
-	var sendOut bytes.Buffer
-	if err := run([]string{"send", root}, &sendOut, &bytes.Buffer{}); err != nil {
-		t.Fatalf("send error = %v", err)
-	}
-	if !strings.Contains(sendOut.String(), checkpointID) {
-		t.Fatalf("send output = %s", sendOut.String())
-	}
-	state, err = fileproject.ReadSyncState(root)
-	if err != nil {
-		t.Fatalf("ReadSyncState after send error = %v", err)
-	}
-	if state.PendingUpload != nil || state.LastSentCheckpointID != checkpointID {
-		t.Fatalf("sync state after send = %#v", state)
-	}
-
-	var takeOut bytes.Buffer
-	if err := run([]string{"take", root}, &takeOut, &bytes.Buffer{}); err != nil {
-		t.Fatalf("take error = %v", err)
-	}
-	if !strings.Contains(takeOut.String(), "Checked https://edda.example/projects/project-1") {
-		t.Fatalf("take output = %s", takeOut.String())
-	}
-	state, err = fileproject.ReadSyncState(root)
-	if err != nil {
-		t.Fatalf("ReadSyncState after take error = %v", err)
-	}
-	if state.LastTakeAt == nil {
-		t.Fatalf("last take cursor not recorded")
-	}
+	return result
 }
 
 func TestSaveCheckpointTreatsBareTextAsMessage(t *testing.T) {
@@ -309,7 +291,7 @@ func TestSaveCheckpointTreatsBareTextAsMessage(t *testing.T) {
 	if err := run([]string{"save", "Chapter", "polish"}, &stdout, &bytes.Buffer{}); err != nil {
 		t.Fatalf("save checkpoint error = %v", err)
 	}
-	if !strings.Contains(stdout.String(), "upload pending") {
+	if !strings.Contains(stdout.String(), "separate from network checkout sends") {
 		t.Fatalf("save output = %s", stdout.String())
 	}
 	checkpoints, err := fileproject.ListCheckpoints(root)
@@ -346,31 +328,6 @@ func TestSaveCheckpointTreatsSingleBareArgAsMessage(t *testing.T) {
 	}
 	if len(checkpoints) != 1 || checkpoints[0].Message != "Quick note" {
 		t.Fatalf("checkpoints = %#v", checkpoints)
-	}
-}
-
-func TestSendRequiresServerURLAndRecordsRetryFailure(t *testing.T) {
-	root := copyFixture(t, filepath.Join("..", "..", "fileproject", "testdata", "partial"))
-	if _, err := fileproject.InitMetadata(root, fileproject.InitMetadataInput{
-		ID:    "project-1",
-		Title: "Alchemy Draft",
-	}); err != nil {
-		t.Fatalf("InitMetadata error = %v", err)
-	}
-	if err := run([]string{"save", root, "Offline checkpoint"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
-		t.Fatalf("save checkpoint error = %v", err)
-	}
-
-	err := run([]string{"send", root}, &bytes.Buffer{}, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "server URL is not configured") {
-		t.Fatalf("send without server error = %v", err)
-	}
-	state, readErr := fileproject.ReadSyncState(root)
-	if readErr != nil {
-		t.Fatalf("ReadSyncState error = %v", readErr)
-	}
-	if state.PendingUpload == nil || state.PendingUpload.Attempts != 1 || state.PendingUpload.LastError == "" {
-		t.Fatalf("pending upload after failed send = %#v", state.PendingUpload)
 	}
 }
 

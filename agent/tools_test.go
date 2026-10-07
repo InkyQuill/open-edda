@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"git.inkyquill.net/inky/writer/project"
-	"git.inkyquill.net/inky/writer/skill"
-	scriptruntime "git.inkyquill.net/inky/writer/skill/runtime"
-	"git.inkyquill.net/inky/writer/store"
+	"github.com/InkyQuill/open-edda/project"
+	"github.com/InkyQuill/open-edda/skill"
+	scriptruntime "github.com/InkyQuill/open-edda/skill/runtime"
+	"github.com/InkyQuill/open-edda/store"
 )
 
 func TestContextToolDefinitionsExposeExplicitSchemas(t *testing.T) {

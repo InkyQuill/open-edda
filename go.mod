@@ -1,4 +1,4 @@
-module git.inkyquill.net/inky/writer
+module github.com/InkyQuill/open-edda
 
 go 1.26.4
 
@@ -6,6 +6,8 @@ require (
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/mattn/go-sqlite3 v1.14.45
 	github.com/pressly/goose/v3 v3.27.1
+	golang.org/x/term v0.44.0
+	golang.org/x/text v0.38.0
 )
 
 require (
@@ -49,8 +51,7 @@ require (
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/sys v0.46.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20260120221211-b8f7ae30c516 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260420184626-e10c466a9529 // indirect
 	google.golang.org/grpc v1.80.0 // indirect

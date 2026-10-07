@@ -8,7 +8,7 @@ import (
 	"net/mail"
 	"strings"
 
-	"git.inkyquill.net/inky/writer/store"
+	"github.com/InkyQuill/open-edda/store"
 	"github.com/mattn/go-sqlite3"
 	"golang.org/x/crypto/bcrypt"
 )

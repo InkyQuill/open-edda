@@ -10,10 +10,11 @@ const (
 )
 
 type StoryProject struct {
-	ID       string `json:"id"`
-	Title    string `json:"title"`
-	Slug     string `json:"slug"`
-	Language string `json:"language"`
+	StorageMode string `json:"storageMode"`
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Slug        string `json:"slug"`
+	Language    string `json:"language"`
 }
 
 type ContentItem struct {
@@ -79,9 +80,10 @@ type AttachedNote struct {
 }
 
 type CreateProjectInput struct {
-	AuthorID string
-	Title    string
-	Language string
+	StorageMode string
+	AuthorID    string
+	Title       string
+	Language    string
 }
 
 type CreateContentInput struct {

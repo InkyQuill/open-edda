@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"git.inkyquill.net/inky/writer/skill/runtime"
-	"git.inkyquill.net/inky/writer/store"
+	"github.com/InkyQuill/open-edda/skill/runtime"
+	"github.com/InkyQuill/open-edda/store"
 )
 
 const (

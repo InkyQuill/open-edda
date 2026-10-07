@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.inkyquill.net/inky/writer/store"
+	"github.com/InkyQuill/open-edda/store"
 	"github.com/pressly/goose/v3"
 )
 

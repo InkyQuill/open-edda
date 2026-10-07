@@ -11,8 +11,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"git.inkyquill.net/inky/writer/markdownio"
-	"git.inkyquill.net/inky/writer/store"
+	"github.com/InkyQuill/open-edda/markdownio"
+	"github.com/InkyQuill/open-edda/store"
 	"github.com/mattn/go-sqlite3"
 )
 
@@ -44,12 +44,19 @@ func (s *Service) AuthorOwnsProject(ctx context.Context, authorID, projectID str
 }
 
 func (s *Service) CreateProject(ctx context.Context, input CreateProjectInput) (StoryProject, error) {
+	if input.StorageMode == "files" {
+		return s.createFileProject(ctx, input)
+	}
+	if input.StorageMode != "" && input.StorageMode != "legacy" {
+		return StoryProject{}, ErrInvalidTree
+	}
 	now := nowString()
 	project := StoryProject{
-		ID:       newID("project"),
-		Title:    input.Title,
-		Slug:     slugify(input.Title),
-		Language: input.Language,
+		StorageMode: "legacy",
+		ID:          newID("project"),
+		Title:       input.Title,
+		Slug:        slugify(input.Title),
+		Language:    input.Language,
 	}
 
 	if err := s.queries.CreateStoryProject(ctx, store.CreateStoryProjectParams{
@@ -73,10 +80,11 @@ func (s *Service) CreateProject(ctx context.Context, input CreateProjectInput) (
 func (s *Service) ImportElysiumProject(ctx context.Context, authorID string, title string, language string, items []markdownio.ImportedItem) (StoryProject, error) {
 	now := nowString()
 	project := StoryProject{
-		ID:       newID("project"),
-		Title:    title,
-		Slug:     slugify(title),
-		Language: language,
+		StorageMode: "legacy",
+		ID:          newID("project"),
+		Title:       title,
+		Slug:        slugify(title),
+		Language:    language,
 	}
 
 	if err := s.inTx(ctx, func(queries *store.Queries) error {
@@ -206,8 +214,12 @@ func (s *Service) CreateContent(ctx context.Context, input CreateContentInput) (
 	}
 
 	if err := s.inTx(ctx, func(queries *store.Queries) error {
-		if _, err := queries.GetStoryProjectByID(ctx, input.ProjectID); err != nil {
+		p, err := queries.GetStoryProjectByID(ctx, input.ProjectID)
+		if err != nil {
 			return fmt.Errorf("get story project: %w", err)
+		}
+		if p.StorageMode == "files" {
+			return ErrConflict
 		}
 
 		if err := queries.CreateContentItem(ctx, store.CreateContentItemParams{
@@ -901,10 +913,11 @@ func (s *Service) inTx(ctx context.Context, fn func(*store.Queries) error) error
 
 func storyProjectFromStore(project store.StoryProject) StoryProject {
 	return StoryProject{
-		ID:       project.ID,
-		Title:    project.Title,
-		Slug:     project.Slug,
-		Language: project.Language,
+		ID:          project.ID,
+		Title:       project.Title,
+		Slug:        project.Slug,
+		Language:    project.Language,
+		StorageMode: project.StorageMode,
 	}
 }
 

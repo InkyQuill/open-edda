@@ -13,9 +13,9 @@ import (
 	"strconv"
 	"strings"
 
-	"git.inkyquill.net/inky/writer/auth"
-	"git.inkyquill.net/inky/writer/internal/httputil"
-	"git.inkyquill.net/inky/writer/markdownio"
+	"github.com/InkyQuill/open-edda/auth"
+	"github.com/InkyQuill/open-edda/internal/httputil"
+	"github.com/InkyQuill/open-edda/markdownio"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -32,8 +32,9 @@ type httpHandler struct {
 }
 
 type createProjectRequest struct {
-	Title    string `json:"title"`
-	Language string `json:"language"`
+	StorageMode string `json:"storageMode"`
+	Title       string `json:"title"`
+	Language    string `json:"language"`
 }
 
 type createContentRequest struct {
@@ -99,9 +100,10 @@ func (h httpHandler) createProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	project, err := h.service.CreateProject(r.Context(), CreateProjectInput{
-		AuthorID: authorID(r),
-		Title:    input.Title,
-		Language: input.Language,
+		StorageMode: input.StorageMode,
+		AuthorID:    authorID(r),
+		Title:       input.Title,
+		Language:    input.Language,
 	})
 	if err != nil {
 		writeError(w, err)
@@ -281,8 +283,8 @@ func restoreRevisionHTTP(w http.ResponseWriter, r *http.Request, service restore
 	}
 
 	var input restoreRevisionRequest
-	if err := decodeJSON(r, &input); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "malformed JSON"})
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeMalformedJSON(w, err)
 		return
 	}
 
@@ -457,6 +459,10 @@ type errorResponse struct {
 }
 
 func writeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrInvalidTree) {
+		writeVersionError(w, err)
+		return
+	}
 	switch {
 	case errors.Is(err, ErrConflict):
 		writeJSON(w, http.StatusConflict, errorResponse{Error: "conflict"})

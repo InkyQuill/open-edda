@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"git.inkyquill.net/inky/writer/internal/httputil"
+	"github.com/InkyQuill/open-edda/internal/httputil"
 	"github.com/go-chi/chi/v5"
 )
 

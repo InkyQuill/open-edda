@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/InkyQuill/open-edda/internal/httputil"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -52,6 +53,21 @@ func TestRestoreRevisionHTTPRejectsMalformedJSON(t *testing.T) {
 	}
 	if !strings.Contains(response.Body.String(), "malformed JSON") {
 		t.Fatalf("body = %s", response.Body.String())
+	}
+}
+
+func TestRestoreRevisionHTTPRejectsOversizedBodyBeforeRestore(t *testing.T) {
+	response := httptest.NewRecorder()
+	request := restoreRevisionRequestWithParams("1", `{"expectedRevision":1,"reason":"`+strings.Repeat("x", int(httputil.DefaultJSONBodyLimit))+`"}`)
+	fake := &restoreRevisionFake{}
+
+	restoreRevisionHTTP(response, request, fake)
+
+	if response.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413", response.Code)
+	}
+	if fake.input.ProjectID != "" {
+		t.Fatal("oversized request reached the restore service")
 	}
 }
 

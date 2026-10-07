@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"git.inkyquill.net/inky/writer/fileproject"
+	"github.com/InkyQuill/open-edda/fileproject"
 )
 
 func main() {
@@ -22,13 +23,51 @@ func main() {
 
 func run(args []string, stdout io.Writer, stderr io.Writer) error {
 	if len(args) == 0 {
-		printUsage(stderr)
-		return fmt.Errorf("command is required")
+		printUsage(stdout)
+		return nil
 	}
 
+	if args[0] == "help" && len(args) > 1 {
+		return printCommandHelp(args[1], stdout)
+	}
+	if _, ok := commandHelp[args[0]]; ok && wantsCommandHelp(args[1:]) {
+		return printCommandHelp(args[0], stdout)
+	}
+	prepared, err := prepareInteractivePath(args[0], args[1:], stderr)
+	if err != nil {
+		return err
+	}
+	args = append([]string{args[0]}, prepared...)
+
 	switch args[0] {
+	case "init", "ids", "save", "checkpoint", "files", "diff":
+		root, _ := splitOptionalPath(args[1:])
+		if _, err := os.Lstat(checkoutPath(root)); err == nil {
+			return errors.New("prototype snapshot command is not available in a network checkout; use status, send, take or history")
+		}
+	}
+	switch args[0] {
+	case "import":
+		return runImport(args[1:], stdout, stderr)
+	case "login":
+		return runLogin(args[1:], os.Stdin, stdout)
+	case "logout":
+		if len(args) != 1 {
+			return errors.New("logout takes no arguments")
+		}
+		return runLogout(stdout)
+	case "projects":
+		return runProjects(args[1:], stdout)
+	case "backup", "verify-backup", "restore-backup":
+		return runBackup(args[0], args[1:], stdout)
+	case "create":
+		return runCreateProject(args[1:], stdout)
+	case "attach":
+		return runAttach(args[1:], stdout)
+	case "move":
+		return runMove(args[1:], stdout)
 	case "get":
-		return runGet(args[1:], stdout)
+		return runNetworkGet(args[1:], stdout)
 	case "status":
 		return runStatus(args[1:], stdout)
 	case "ids":
@@ -38,22 +77,42 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 	case "save":
 		return runSave(args[1:], stdout)
 	case "send":
-		return runSend(args[1:], stdout)
+		return runNetworkSend(args[1:], stdout)
 	case "take":
-		return runTake(args[1:], stdout)
+		return runNetworkTake(args[1:], stdout)
 	case "checkpoint":
 		return runCheckpoint(args[1:], stdout)
 	case "history":
+		root, _ := splitOptionalPath(args[1:])
+		if _, err := os.Lstat(checkoutPath(root)); err == nil {
+			return runNetworkHistory(args[1:], stdout)
+		}
 		return runHistory(args[1:], stdout)
 	case "files":
 		return runFiles(args[1:], stdout)
 	case "diff":
 		return runDiff(args[1:], stdout)
 	case "restore":
+		root, _ := splitOptionalPath(args[1:])
+		if _, err := os.Lstat(checkoutPath(root)); err == nil {
+			return runNetworkRestore(args[1:], stdout)
+		}
 		return runRestore(args[1:], stdout)
 	case "conflicts":
+		root, _ := splitOptionalPath(args[1:])
+		if _, err := os.Lstat(checkoutPath(root)); err == nil {
+			root, err := networkRoot("conflicts", args[1:])
+			if err != nil {
+				return err
+			}
+			return runNetworkConflicts(root, stdout)
+		}
 		return runConflicts(args[1:], stdout)
 	case "resolve":
+		root, _ := splitOptionalPath(args[1:])
+		if _, err := os.Lstat(checkoutPath(root)); err == nil {
+			return runNetworkResolve(args[1:], stdout)
+		}
 		return runResolve(args[1:], stdout)
 	case "help", "-h", "--help":
 		printUsage(stdout)
@@ -75,6 +134,9 @@ func runStatus(args []string, stdout io.Writer) error {
 		root = flags.Arg(0)
 	}
 
+	if _, err := os.Lstat(checkoutPath(root)); err == nil {
+		return runNetworkStatus(root, stdout)
+	}
 	layout, err := fileproject.Scan(root)
 	if err != nil {
 		return err
@@ -124,11 +186,19 @@ func runStatus(args []string, stdout io.Writer) error {
 
 func runIDs(args []string, stdout io.Writer) error {
 	if len(args) == 0 {
-		return fmt.Errorf("ids requires a subcommand")
+		var action string
+		if err := askChoice(&action, "IDs action", []string{"sync"}, stdout); err != nil {
+			return err
+		}
+		args = []string{action}
 	}
 	switch args[0] {
 	case "sync":
-		return runIDSync(args[1:], stdout)
+		prepared, err := prepareInteractivePath("files", args[1:], stdout)
+		if err != nil {
+			return err
+		}
+		return runIDSync(prepared, stdout)
 	default:
 		return fmt.Errorf("unknown ids subcommand %q", args[0])
 	}
@@ -166,6 +236,15 @@ func runInit(args []string, stdout io.Writer) error {
 		root = flags.Arg(0)
 	}
 
+	if *title == "" && interactiveInput() {
+		absolute, err := filepath.Abs(root)
+		if err != nil {
+			return err
+		}
+		if err := askValue(title, "Project title (--title)", filepath.Base(absolute), stdout); err != nil {
+			return err
+		}
+	}
 	metadata, err := fileproject.InitMetadata(root, fileproject.InitMetadataInput{
 		ID:        *id,
 		Title:     *title,
@@ -197,8 +276,19 @@ func runSave(args []string, stdout io.Writer) error {
 	if *fileID == "" && !*fromDraft && *bodyFile == "" {
 		return runSaveCheckpoint(root, flags.Args(), stdout)
 	}
-	if *fileID == "" {
-		return fmt.Errorf("save requires --id")
+	if err := askValue(fileID, "File ID (--id)", "", stdout); err != nil {
+		return err
+	}
+	if !*fromDraft && *bodyFile == "" {
+		var choice string
+		if err := askChoice(&choice, "Save source", []string{"draft", "file"}, stdout); err != nil {
+			return err
+		}
+		if choice == "draft" {
+			*fromDraft = true
+		} else if err := askValue(bodyFile, "Markdown source (--body-file)", "", stdout); err != nil {
+			return err
+		}
 	}
 	if *fromDraft == (*bodyFile != "") {
 		return fmt.Errorf("save requires exactly one of --from-draft or --body-file")
@@ -234,52 +324,10 @@ func runSave(args []string, stdout io.Writer) error {
 	return nil
 }
 
-func runGet(args []string, stdout io.Writer) error {
-	flags := flag.NewFlagSet("get", flag.ContinueOnError)
-	flags.SetOutput(io.Discard)
-	title := flags.String("title", "", "project title")
-	id := flags.String("id", "", "project id")
-	if err := flags.Parse(args); err != nil {
-		return err
-	}
-	if flags.NArg() == 0 {
-		return fmt.Errorf("get requires a server URL")
-	}
-	serverURL := flags.Arg(0)
-	root := "."
-	if flags.NArg() > 1 {
-		root = flags.Arg(1)
-	}
-	projectTitle := strings.TrimSpace(*title)
-	if projectTitle == "" {
-		projectTitle = "Edda Project"
-	}
-	metadata, err := fileproject.ReadMetadata(root)
-	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		metadata, err = fileproject.InitMetadata(root, fileproject.InitMetadataInput{
-			ID:        *id,
-			Title:     projectTitle,
-			ServerURL: serverURL,
-		})
-		if err != nil {
-			return err
-		}
-	}
-	state, err := fileproject.EnsureSyncState(root)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(stdout, "Connected %s (%s) to %s as %s\n", metadata.Title, metadata.ID, metadata.ServerURL, state.DeviceID)
-	return nil
-}
-
 func runSaveCheckpoint(root string, args []string, stdout io.Writer) error {
 	message := strings.TrimSpace(strings.Join(args, " "))
-	if message == "" {
-		return fmt.Errorf("save requires a checkpoint note or file-save flags")
+	if err := askValue(&message, "Checkpoint note", "", stdout); err != nil {
+		return err
 	}
 	checkpoint, err := fileproject.CreateCheckpoint(root, fileproject.CreateCheckpointInput{Message: message})
 	if err != nil {
@@ -288,7 +336,7 @@ func runSaveCheckpoint(root string, args []string, stdout io.Writer) error {
 	if _, err := fileproject.RecordPendingUpload(root, checkpoint.ID); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "Saved checkpoint %s (%d files); upload pending\n", checkpoint.ID, len(checkpoint.Files))
+	fmt.Fprintf(stdout, "Saved prototype checkpoint %s (%d files); this queue is separate from network checkout sends\n", checkpoint.ID, len(checkpoint.Files))
 	return nil
 }
 
@@ -303,73 +351,16 @@ func runCheckpoint(args []string, stdout io.Writer) error {
 	if flags.NArg() > 0 {
 		root = flags.Arg(0)
 	}
+	if *message == "" && interactiveInput() {
+		if err := askValue(message, "Checkpoint note (--message)", "", stdout); err != nil {
+			return err
+		}
+	}
 	checkpoint, err := fileproject.CreateCheckpoint(root, fileproject.CreateCheckpointInput{Message: *message})
 	if err != nil {
 		return err
 	}
 	fmt.Fprintf(stdout, "Checkpoint %s (%d files)\n", checkpoint.ID, len(checkpoint.Files))
-	return nil
-}
-
-func runSend(args []string, stdout io.Writer) error {
-	root, flagArgs := splitOptionalPath(args)
-	flags := flag.NewFlagSet("send", flag.ContinueOnError)
-	flags.SetOutput(io.Discard)
-	if err := flags.Parse(flagArgs); err != nil {
-		return err
-	}
-	if flags.NArg() > 0 {
-		root = flags.Arg(0)
-	}
-	metadata, err := fileproject.ReadMetadata(root)
-	if err != nil {
-		return err
-	}
-	if metadata.ServerURL == "" {
-		if _, stateErr := fileproject.RecordPendingUploadFailure(root, "server URL is not configured"); stateErr != nil {
-			return stateErr
-		}
-		return fmt.Errorf("server URL is not configured; run edda get or edda init --server-url")
-	}
-	state, err := fileproject.EnsureSyncState(root)
-	if err != nil {
-		return err
-	}
-	if state.PendingUpload == nil {
-		fmt.Fprintln(stdout, "No pending upload.")
-		return nil
-	}
-	checkpointID := state.PendingUpload.CheckpointID
-	state, err = fileproject.CompletePendingUpload(root)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(stdout, "Sent checkpoint %s to %s from %s\n", checkpointID, metadata.ServerURL, state.DeviceID)
-	return nil
-}
-
-func runTake(args []string, stdout io.Writer) error {
-	root, flagArgs := splitOptionalPath(args)
-	flags := flag.NewFlagSet("take", flag.ContinueOnError)
-	flags.SetOutput(io.Discard)
-	if err := flags.Parse(flagArgs); err != nil {
-		return err
-	}
-	if flags.NArg() > 0 {
-		root = flags.Arg(0)
-	}
-	metadata, err := fileproject.ReadMetadata(root)
-	if err != nil {
-		return err
-	}
-	if metadata.ServerURL == "" {
-		return fmt.Errorf("server URL is not configured; run edda get or edda init --server-url")
-	}
-	state, err := fileproject.RecordTake(root)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(stdout, "Checked %s for updates from %s\n", metadata.ServerURL, state.DeviceID)
 	return nil
 }
 
@@ -410,8 +401,26 @@ func runResolve(args []string, stdout io.Writer) error {
 	if flags.NArg() > 0 {
 		root = flags.Arg(0)
 	}
-	if *fileID == "" {
-		return fmt.Errorf("resolve requires --id")
+	if *fileID == "" && interactiveInput() {
+		if err := runConflicts([]string{root}, stdout); err != nil {
+			return err
+		}
+	}
+	if err := askValue(fileID, "Conflict file ID (--id)", "", stdout); err != nil {
+		return err
+	}
+	if *bodyFile == "" && *use == "" && interactiveInput() {
+		var choice string
+		if err := askChoice(&choice, "Use version", []string{"local", "server", "file"}, stdout); err != nil {
+			return err
+		}
+		if choice == "file" {
+			if err := askValue(bodyFile, "Resolved Markdown file (--body-file)", "", stdout); err != nil {
+				return err
+			}
+		} else {
+			*use = choice
+		}
 	}
 	if (*bodyFile != "") == (*use != "") {
 		return fmt.Errorf("resolve requires exactly one of --use or --body-file")
@@ -440,6 +449,7 @@ func runHistory(args []string, stdout io.Writer) error {
 	root, flagArgs := splitOptionalPath(args)
 	flags := flag.NewFlagSet("history", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
+	machine := flags.Bool("json", false, "output JSON for scripts")
 	fileID := flags.String("id", "", "stable file id")
 	if err := flags.Parse(flagArgs); err != nil {
 		return err
@@ -451,6 +461,9 @@ func runHistory(args []string, stdout io.Writer) error {
 		history, err := fileproject.ListFileCheckpointHistory(root, *fileID)
 		if err != nil {
 			return err
+		}
+		if *machine {
+			return json.NewEncoder(stdout).Encode(history)
 		}
 		if len(history) == 0 {
 			fmt.Fprintln(stdout, "No file history.")
@@ -468,6 +481,9 @@ func runHistory(args []string, stdout io.Writer) error {
 	checkpoints, err := fileproject.ListCheckpointSummaries(root)
 	if err != nil {
 		return err
+	}
+	if *machine {
+		return json.NewEncoder(stdout).Encode(checkpoints)
 	}
 	if len(checkpoints) == 0 {
 		fmt.Fprintln(stdout, "No checkpoints.")
@@ -519,8 +535,13 @@ func runDiff(args []string, stdout io.Writer) error {
 	if flags.NArg() > 0 {
 		root = flags.Arg(0)
 	}
-	if *from == "" {
-		return fmt.Errorf("diff requires --from")
+	if *from == "" && interactiveInput() {
+		if err := runHistory([]string{root}, stdout); err != nil {
+			return err
+		}
+	}
+	if err := askValue(from, "Source checkpoint ID (--from)", "", stdout); err != nil {
+		return err
 	}
 	entries, err := fileproject.DiffCheckpoint(root, *from, *to)
 	if err != nil {
@@ -547,8 +568,13 @@ func runRestore(args []string, stdout io.Writer) error {
 	if flags.NArg() > 0 {
 		root = flags.Arg(0)
 	}
-	if *checkpointID == "" {
-		return fmt.Errorf("restore requires --checkpoint")
+	if *checkpointID == "" && interactiveInput() {
+		if err := runHistory([]string{root}, stdout); err != nil {
+			return err
+		}
+	}
+	if err := askValue(checkpointID, "Checkpoint ID (--checkpoint)", "", stdout); err != nil {
+		return err
 	}
 	checkpoint, err := fileproject.RestoreCheckpoint(root, *checkpointID)
 	if err != nil {
@@ -559,22 +585,42 @@ func runRestore(args []string, stdout io.Writer) error {
 }
 
 func printUsage(output io.Writer) {
-	fmt.Fprintln(output, "Usage:")
-	fmt.Fprintln(output, "  edda get [--title \"Title\"] [--id project-id] URL [path]")
-	fmt.Fprintln(output, "  edda status [path]")
-	fmt.Fprintln(output, "  edda ids sync [path]")
-	fmt.Fprintln(output, "  edda init [path] --title \"Title\" [--id project-id] [--server-url URL]")
-	fmt.Fprintln(output, "  edda save [path] \"Checkpoint note\"")
-	fmt.Fprintln(output, "  edda save [path] --id file-id (--from-draft | --body-file markdown.md) [--expected-sha256 HASH]")
-	fmt.Fprintln(output, "  edda send [path]")
-	fmt.Fprintln(output, "  edda take [path]")
-	fmt.Fprintln(output, "  edda checkpoint [path] [--message \"Message\"]")
-	fmt.Fprintln(output, "  edda history [path] [--id file-id]")
-	fmt.Fprintln(output, "  edda files [path]")
-	fmt.Fprintln(output, "  edda diff [path] --from checkpoint-id [--to checkpoint-id]")
-	fmt.Fprintln(output, "  edda restore [path] --checkpoint checkpoint-id")
-	fmt.Fprintln(output, "  edda conflicts [path]")
-	fmt.Fprintln(output, "  edda resolve [path] --id file-id (--use local|server | --body-file markdown.md)")
+	fmt.Fprintln(output, `Edda — keep local project folders in sync with your server.
+
+Upload an existing local project:
+  edda login
+  edda send ./my-book
+  The first send offers to create a project or select an existing one.
+  Later, use the same command to send your changes.
+
+Download and work with a server project:
+  edda projects               List your projects
+  edda get                   Choose a project and a new destination folder
+  edda status ./my-book      Inspect local changes (offline)
+  edda send ./my-book        Upload changes
+  edda take ./my-book        Receive and merge server changes
+
+Other project commands:
+  create      Create an empty project on the server
+  attach      Connect a local folder to an existing project without uploading
+  import      Upload into an empty project and connect the local folder
+  history     List saved versions
+  restore     Restore a saved version
+  conflicts   List conflicts
+  resolve     Choose a conflict resolution
+  move        Move a file while preserving its identity
+  logout      Remove the saved login
+
+Server administration: backup, verify-backup, restore-backup
+Local prototype tools: init, ids sync, save, checkpoint, files, diff
+  Local prototype tools do not connect or upload your folder.
+
+Run edda COMMAND --help (or edda help COMMAND) for options and examples.
+In a terminal, missing required values are requested; explicit arguments skip
+prompts. Optional settings retain defaults. Folder defaults to the current directory
+where applicable; connected commands find .edda in parent directories.
+Scripts must supply required values. JSON is opt-in via --json
+on projects, create, history and import. Login is shared across commands.`)
 }
 
 func splitOptionalPath(args []string) (string, []string) {

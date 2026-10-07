@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	edcrypto "git.inkyquill.net/inky/writer/internal/crypto"
-	"git.inkyquill.net/inky/writer/project"
-	"git.inkyquill.net/inky/writer/skill"
-	"git.inkyquill.net/inky/writer/store"
+	edcrypto "github.com/InkyQuill/open-edda/internal/crypto"
+	"github.com/InkyQuill/open-edda/project"
+	"github.com/InkyQuill/open-edda/skill"
+	"github.com/InkyQuill/open-edda/store"
 	"github.com/pressly/goose/v3"
 )
 

@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	"git.inkyquill.net/inky/writer/internal/httputil"
-	"git.inkyquill.net/inky/writer/project"
+	"github.com/InkyQuill/open-edda/internal/httputil"
+	"github.com/InkyQuill/open-edda/project"
 	"github.com/go-chi/chi/v5"
 )
 

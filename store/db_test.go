@@ -909,3 +909,32 @@ func requireFTS5(t *testing.T, err error) {
 		t.Fatalf("sqlite FTS5 support is required; run tests with: go test -tags sqlite_fts5 ./...: %v", err)
 	}
 }
+
+func TestOpenUsesDurableSynchronizationOnEveryConnection(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "durable.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(3)
+	var conns []*sql.Conn
+	defer func() {
+		for _, conn := range conns {
+			conn.Close()
+		}
+	}()
+	for range 3 {
+		conn, err := db.Conn(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		conns = append(conns, conn)
+		var mode int
+		if err := conn.QueryRowContext(context.Background(), "PRAGMA synchronous").Scan(&mode); err != nil {
+			t.Fatal(err)
+		}
+		if mode != 2 {
+			t.Fatalf("synchronous = %d, want FULL (2)", mode)
+		}
+	}
+}

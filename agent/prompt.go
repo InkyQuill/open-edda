@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"git.inkyquill.net/inky/writer/project"
-	"git.inkyquill.net/inky/writer/skill"
+	"github.com/InkyQuill/open-edda/project"
+	"github.com/InkyQuill/open-edda/skill"
 )
 
 const fictionAssistantSystemPrompt = "You are a fiction writing assistant working inside Edda. Preserve the author's intent, respect established project facts, and use available tools to inspect project context before making claims. Do not invent durable worldbuilding facts unless the author asks you to brainstorm."

@@ -23,5 +23,5 @@ func sqliteDSN(path string) string {
 		separator = "&"
 	}
 
-	return path + separator + "_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000"
+	return path + separator + "_foreign_keys=on&_journal_mode=WAL&_synchronous=FULL&_busy_timeout=5000"
 }

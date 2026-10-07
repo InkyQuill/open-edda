@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"git.inkyquill.net/inky/writer/internal/httputil"
-	"git.inkyquill.net/inky/writer/store"
+	"github.com/InkyQuill/open-edda/internal/httputil"
+	"github.com/InkyQuill/open-edda/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/pressly/goose/v3"
 )

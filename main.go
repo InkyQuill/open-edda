@@ -10,12 +10,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"git.inkyquill.net/inky/writer/agent"
-	"git.inkyquill.net/inky/writer/app"
-	"git.inkyquill.net/inky/writer/auth"
-	"git.inkyquill.net/inky/writer/project"
-	"git.inkyquill.net/inky/writer/skill"
-	"git.inkyquill.net/inky/writer/store"
+	"github.com/InkyQuill/open-edda/agent"
+	"github.com/InkyQuill/open-edda/app"
+	"github.com/InkyQuill/open-edda/auth"
+	"github.com/InkyQuill/open-edda/project"
+	"github.com/InkyQuill/open-edda/skill"
+	"github.com/InkyQuill/open-edda/store"
 	"github.com/pressly/goose/v3"
 )
 
@@ -77,6 +77,17 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 		cleanup()
 		return nil, func() {}, err
 	}
+	dataDir := getenvDefault("OPEN_EDDA_DATA_DIR", filepath.Dir(dbPath))
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
+		cleanup()
+		return nil, func() {}, err
+	}
+	versions, err := project.NewVersionStore(db, dataDir, project.VersionLimits{})
+	if err != nil {
+		cleanup()
+		return nil, func() {}, err
+	}
+	cleanup = func() { _ = versions.Close(); _ = db.Close() }
 	projectService := project.NewService(db)
 	agentService := agent.NewService(db, projectService, nil)
 	agentService.SetEncryptionSecret(apiKeyEncryptionSecret)
@@ -86,6 +97,7 @@ func buildDependencies() (*app.Dependencies, func(), error) {
 	return &app.Dependencies{
 		AuthService:    authService,
 		ProjectService: projectService,
+		VersionStore:   versions,
 		AgentService:   agentService,
 		SkillService:   skillService,
 		StaticFS:       os.DirFS(staticPath),

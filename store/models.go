@@ -143,6 +143,54 @@ type ModelVariant struct {
 	UpdatedAt                 string  `json:"updated_at"`
 }
 
+type ProjectFile struct {
+	ID           string `json:"id"`
+	ProjectID    string `json:"project_id"`
+	RelativePath string `json:"relative_path"`
+	Kind         string `json:"kind"`
+	Title        string `json:"title"`
+	Sha256       string `json:"sha256"`
+	Bytes        int64  `json:"bytes"`
+	UpdatedAt    string `json:"updated_at"`
+}
+
+type ProjectObject struct {
+	ProjectID string `json:"project_id"`
+	Sha256    string `json:"sha256"`
+	Bytes     int64  `json:"bytes"`
+}
+
+type ProjectTreeID struct {
+	ProjectID string `json:"project_id"`
+	ID        string `json:"id"`
+	Kind      string `json:"kind"`
+}
+
+type ProjectVersion struct {
+	ProjectID     string         `json:"project_id"`
+	ID            string         `json:"id"`
+	ParentID      sql.NullString `json:"parent_id"`
+	OperationID   string         `json:"operation_id"`
+	RequestSha256 string         `json:"request_sha256"`
+	Message       string         `json:"message"`
+	CreatedAt     string         `json:"created_at"`
+}
+
+type ProjectVersionEntry struct {
+	ProjectID string         `json:"project_id"`
+	VersionID string         `json:"version_id"`
+	ID        string         `json:"id"`
+	Path      string         `json:"path"`
+	Kind      string         `json:"kind"`
+	Sha256    sql.NullString `json:"sha256"`
+	Bytes     int64          `json:"bytes"`
+}
+
+type ProjectVersionHead struct {
+	ProjectID string         `json:"project_id"`
+	VersionID sql.NullString `json:"version_id"`
+}
+
 type PromptContextSnapshot struct {
 	ID               string `json:"id"`
 	PromptRecordID   string `json:"prompt_record_id"`
@@ -308,13 +356,14 @@ type SkillScriptRun struct {
 }
 
 type StoryProject struct {
-	ID        string `json:"id"`
-	AuthorID  string `json:"author_id"`
-	Title     string `json:"title"`
-	Slug      string `json:"slug"`
-	Language  string `json:"language"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	ID          string `json:"id"`
+	AuthorID    string `json:"author_id"`
+	Title       string `json:"title"`
+	Slug        string `json:"slug"`
+	Language    string `json:"language"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+	StorageMode string `json:"storage_mode"`
 }
 
 type ToolResultArtifact struct {
