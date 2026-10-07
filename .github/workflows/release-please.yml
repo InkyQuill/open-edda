@@ -1,0 +1,88 @@
+name: Release please
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+jobs:
+  checks:
+    uses: ./.github/workflows/checks.yml
+  release:
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: write
+    outputs:
+      created: ${{ steps.identity.outputs.created }}
+      tag: ${{ steps.identity.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Detect merged version change
+        id: version
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          changed=false
+          if [ "$GITHUB_EVENT_NAME" = push ] && previous=$(git show "$BEFORE:version.txt" 2>/dev/null); then
+            if [ "$(cat version.txt)" != "$previous" ]; then changed=true; fi
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+      - id: release
+        if: steps.version.outputs.changed != 'true'
+        uses: googleapis/release-please-action@8b8fd2cc23b2e18957157a9d923d75aa0c6f6ad5 # v4
+        with:
+          target-branch: main
+          skip-github-release: true
+      # GITHUB_TOKEN-created PRs do not trigger pull_request workflows.
+      - name: Dispatch checks for the release PR
+        if: steps.release.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PR: ${{ steps.release.outputs.pr }}
+        run: |
+          number=$(jq -er '.number' <<< "$RELEASE_PR")
+          head=$(gh pr view "$number" --json headRefName --jq .headRefName)
+          case "$head" in release-please--branches--main*) ;; *) exit 1;; esac
+          gh workflow run checks.yml --ref "$head"
+      - name: Prepare immutable tag and draft release
+        if: steps.version.outputs.changed == 'true'
+        id: identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(cat version.txt)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(jq -r '.["."]' .release-please-manifest.json)" = "$version"
+          tag="v$version"
+          if existing=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq .object.sha 2>/dev/null); then
+            test "$existing" = "$GITHUB_SHA"
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$tag" -f "sha=$GITHUB_SHA"
+          fi
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            awk '/^## / { if (seen++) exit } seen { print }' CHANGELOG.md > /tmp/release-notes.md
+            gh release create "$tag" --draft --verify-tag --title "$tag" --notes-file /tmp/release-notes.md
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo 'created=true' >> "$GITHUB_OUTPUT"
+  publish:
+    needs: release
+    if: needs.release.outputs.created == 'true'
+    uses: ./.github/workflows/release-cli.yml
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    with:
+      tag: ${{ needs.release.outputs.tag }}
