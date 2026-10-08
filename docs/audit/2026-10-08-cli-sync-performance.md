@@ -93,8 +93,8 @@ manifest. Neither extension is claimed as implemented here.
 
 ## Local installation
 
-The checked CLI was installed atomically at `/home/inky/.local/bin/edda` and its
+The checked CLI was installed atomically at `~/.local/bin/edda` and its
 SHA-256 matched the tested executable. The previous executable is retained at
-`/home/inky/.local/state/open-edda/cli-backups/edda-before-sync-20261008-8rbfhg_o`.
+`~/.local/state/open-edda/cli-backups/`.
 Installed send/take help confirms the new flags. No server redeployment was needed
 for the existing manifest/object API optimization.

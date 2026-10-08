@@ -4,8 +4,10 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"io/fs"
+	"strings"
 	"testing"
 )
 
@@ -119,5 +121,75 @@ func TestArchiveCorruptionAndExpandedLimits(t *testing.T) {
 	data = testZIP(t, zipMember{name: "a", body: "123"}, zipMember{name: "b", body: "456"})
 	if _, err := s.StageArchive(context.Background(), "author-1", "project-1", bytes.NewReader(data), int64(len(data))); !errors.Is(err, ErrInvalidTree) {
 		t.Fatalf("expanded bytes bypassed limit: %v", err)
+	}
+}
+
+func TestArchiveSpoolCleanup(t *testing.T) {
+	for _, scenario := range []string{"success", "corrupt", "cancel", "upload-failure"} {
+		t.Run(scenario, func(t *testing.T) {
+			s, db, _ := newTestVersions(t)
+			body := strings.Repeat("large archive member\n", 1<<18)
+			data := testZIP(t, zipMember{name: "book.md", body: body})
+			archive, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			member := archive.File[0]
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			author := "author-1"
+			switch scenario {
+			case "corrupt":
+				offset, err := member.DataOffset()
+				if err != nil {
+					t.Fatal(err)
+				}
+				data[offset] ^= 0xff
+			case "cancel":
+				cancel()
+			case "upload-failure":
+				author = "other-author"
+			}
+			entry := TreeEntry{Path: "book.md", Kind: "file", Bytes: int64(len(body))}
+			err = s.stageArchiveMember(ctx, author, "project-1", member, &entry)
+			switch scenario {
+			case "success":
+				if err != nil {
+					t.Fatal(err)
+				}
+				file, err := s.openVerifiedObject(ctx, entry.SHA256, entry.Bytes)
+				if err != nil {
+					t.Fatal(err)
+				}
+				file.Close()
+			case "corrupt":
+				if !errors.Is(err, ErrInvalidTree) {
+					t.Fatalf("corruption: %v", err)
+				}
+			case "cancel":
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("cancellation: %v", err)
+				}
+			case "upload-failure":
+				if !errors.Is(err, sql.ErrNoRows) {
+					t.Fatalf("upload authorization: %v", err)
+				}
+			}
+			entries, err := fs.ReadDir(s.objects.FS(), ".")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, entry := range entries {
+				if strings.HasPrefix(entry.Name(), ".") {
+					t.Fatalf("temporary file leaked: %s", entry.Name())
+				}
+			}
+			if scenario != "success" && len(entries) != 0 {
+				t.Fatal("failed member published an object")
+			}
+			if versionCount(t, db) != 0 {
+				t.Fatal("staging published a version")
+			}
+		})
 	}
 }

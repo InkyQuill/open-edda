@@ -2,12 +2,13 @@ package project
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path"
 	"strings"
 )
@@ -125,20 +126,49 @@ func (s *VersionStore) StageArchive(ctx context.Context, author, project string,
 		if entry.Kind != "file" {
 			continue
 		}
-		reader, err := files[entry.Path].Open()
-		if err != nil {
-			return invalid("cannot open ZIP member")
-		}
-		data, readErr := io.ReadAll(io.LimitReader(contextReader{ctx: ctx, r: reader}, entry.Bytes+1))
-		closeErr := reader.Close()
-		if readErr != nil || closeErr != nil || int64(len(data)) != entry.Bytes {
-			return invalid("ZIP member failed size or checksum verification")
-		}
-		digest := sha256.Sum256(data)
-		entry.SHA256 = hex.EncodeToString(digest[:])
-		if err := s.UploadObject(ctx, author, project, entry.SHA256, entry.Bytes, bytes.NewReader(data)); err != nil {
+		if err := s.stageArchiveMember(ctx, author, project, files[entry.Path], entry); err != nil {
 			return ArchivePlan{}, err
 		}
 	}
 	return plan, nil
+}
+
+// stageArchiveMember bounds heap use independently of the expanded member size.
+// Its private spool is removed on success, corrupt input, cancellation or upload failure.
+func (s *VersionStore) stageArchiveMember(ctx context.Context, author, project string, member *zip.File, entry *TreeEntry) error {
+	id, err := versionID()
+	if err != nil {
+		return err
+	}
+	name := ".archive-" + id
+	spool, err := s.objects.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
+	if err != nil {
+		return err
+	}
+	defer s.objects.Remove(name)
+	defer spool.Close()
+
+	reader, err := member.Open()
+	if err != nil {
+		return fmt.Errorf("%w: cannot open ZIP member", ErrInvalidTree)
+	}
+	digest := sha256.New()
+	n, copyErr := io.Copy(io.MultiWriter(spool, digest), io.LimitReader(contextReader{ctx: ctx, r: reader}, entry.Bytes+1))
+	closeErr := reader.Close()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	// Filesystem failures are operational errors, not invalid archive input.
+	var diskErr *os.PathError
+	if errors.As(copyErr, &diskErr) {
+		return copyErr
+	}
+	if copyErr != nil || closeErr != nil || n != entry.Bytes {
+		return fmt.Errorf("%w: ZIP member failed size or checksum verification", ErrInvalidTree)
+	}
+	entry.SHA256 = hex.EncodeToString(digest.Sum(nil))
+	if _, err := spool.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	return s.UploadObject(ctx, author, project, entry.SHA256, entry.Bytes, spool)
 }
