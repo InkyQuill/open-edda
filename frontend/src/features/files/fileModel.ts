@@ -48,7 +48,7 @@ export async function inspectFile(entry: TreeEntry, blob: Blob): Promise<FileVie
   const typed = new Blob([blob], { type: mime ?? (kind === 'text' ? 'text/plain;charset=utf-8' : 'application/octet-stream') });
   return { entry, kind, blob: typed, body, url: URL.createObjectURL(typed) };
 }
-export type ImportItem = { path: string; file?: File; id: string };
+export type ImportItem = { path: string; file?: File; staged?: TreeEntry; id: string };
 export async function droppedItems(items: DataTransferItemList, fallback: FileList): Promise<ImportItem[]> {
   const roots = Array.from(items).filter(item => item.kind === 'file').map(item => item.webkitGetAsEntry?.()).filter((entry): entry is FileSystemEntry => !!entry);
   if (!roots.length) return Array.from(fallback).map(file => ({ path: file.name, file, id: crypto.randomUUID() }));
