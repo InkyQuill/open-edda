@@ -6,7 +6,7 @@ Date: 2026-10-06. Status: accepted by the user on 2026-10-06; storage foundation
 
 The public project model is a flexible tree of files and directories, primarily serving CWS and CWS-compatible work. Flat organization within logical sections is the preferred starting point, never an enforced rule. Nested directories, multiple books/volumes, arbitrary filenames and unknown formats remain supported storage concepts. Preserve empty directories explicitly if selected for transfer. CWS recognition provides optional views; it cannot decide which files exist.
 
-Elysium is an obsolete, initially misconfigured project, not an example, default template, compatibility authority or onboarding target. Its conversion endpoint is obsolete prototype code; it has no migration/compatibility obligation. New acceptance fixtures derive from current CWS projects.
+The flat CWS project format is the structural reference for examples, onboarding and new acceptance fixtures. CWS installation is optional. Prototype conversion endpoints have no migration/compatibility obligation.
 
 A local working copy contains normal author-readable files. That does not require the server to mutate a live author-readable folder on every save. Users manipulate the server project through the API; a mounted data volume is persistence, not a second live editing interface.
 

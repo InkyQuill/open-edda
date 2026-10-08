@@ -4,7 +4,7 @@ Open Edda is a self-hosted web writing and translation workspace with portable, 
 
 Before working on the interface, read [DESIGN.md](DESIGN.md) and [PRODUCT.md](PRODUCT.md). The approved design is integrated into the production project and file workspace. The isolated `frontend/design.html` prototype remains a design reference; scope and verification are in [production acceptance](docs/design/production-acceptance.md).
 
-Current product direction: [ADR 0014](docs/adr/0014-portable-projects-and-transactional-sync.md). Delivery order: projects and local synchronization, then Pocket Editor, then Writing Tools feature parity and agent-skill parity. CWS is the baseline; primarily flat organization is preferred, arbitrary directory trees remain valid, and Elysium is legacy only. Docker volume/PVC deployment and physical storage are covered by [ADR 0015](docs/adr/0015-storage-and-container-deployment.md). This glossary describes product intent; consult the [audit](docs/audit/2026-10-06-project-direction.md) for actual implementation status.
+Current product direction: [ADR 0014](docs/adr/0014-portable-projects-and-transactional-sync.md). Delivery order: projects and local synchronization, then Pocket Editor, then Writing Tools feature parity and agent-skill parity. The flat CWS project format is the structural reference; nested book folders and existing directory trees remain valid. CWS installation and integration skills are optional. Docker volume/PVC deployment and physical storage are covered by [ADR 0015](docs/adr/0015-storage-and-container-deployment.md). This glossary describes product intent; consult the [audit](docs/audit/2026-10-06-project-direction.md) for actual implementation status.
 
 ## Language
 
@@ -81,15 +81,15 @@ The authoritative version of a story project's text, reference material, version
 _Avoid_: File source, sync folder
 
 **Markdown Export**:
-The existing Elysium conversion/export operation for database content. It is not a lossless transfer of an arbitrary project tree.
+The existing Markdown conversion/export operation for legacy database content. It is not a lossless transfer of an arbitrary project tree.
 _Avoid_: Full-project synchronization
 
-**Elysium Layout**:
-A legacy Markdown import/export convention with folders such as `story/`, `characters/`, `worldbuilding/`, and `braindump/`. It is not a required project layout.
-_Avoid_: Mandatory Edda structure
+**CWS Project Layout**:
+The flat CWS project format is the structural reference for writing and translation projects. Preserve author-defined directory roles and nested book folders when present; CWS itself is optional.
+_Avoid_: Mandatory tool installation, forced folder conversion
 
 **Markdown Import**:
-A conservative process that creates a story project from an Elysium Layout folder while preserving Markdown content, metadata, entry sections, relations, and chapters.
+The existing conversion of recognized Markdown files into legacy database content items. Importing a portable CWS project instead preserves its complete file tree through the folder-import workflow.
 _Avoid_: Live sync, merge import
 
 **Local Sync Tool**:
@@ -97,7 +97,7 @@ An authenticated workflow that exchanges project files with a server using trans
 _Avoid_: Git client, successful transfer without a server receipt
 
 **Markdown-Based Content**:
-Legacy content is editable through the Markdown editor and remains database-backed. New file projects have a plain UTF-8 editor over immutable file objects and authoritative SQLite version manifests, alongside downloadable unknown/binary formats. CLI folder import, get/send/take, explicit file conflict choices and journaled recovery are available. History/restore UI, explicit rename identity, folder attachment, Docker and verified online backup/fresh-volume restore are implemented for Linux single-instance deployment. Pocket provider integration remains a later stage. The user confirmed no old deployed projects exist, so legacy migration/backward compatibility are not requirements.
+Legacy content is editable through the Markdown editor and remains database-backed. New file projects use Galley live Markdown editing and a plain UTF-8 fallback over immutable file objects and authoritative SQLite version manifests, alongside downloadable unknown/binary formats. CLI folder import, get/send/take, explicit file conflict choices and journaled recovery are available. History/restore UI, explicit rename identity, folder attachment, Docker and verified online backup/fresh-volume restore are implemented for Linux single-instance deployment. Pocket provider integration is implemented in Pocket Editor with recorded P3 verification. Semantic web review remains P4. The user confirmed no old deployed projects exist, so legacy migration/backward compatibility are not requirements.
 _Avoid_: Rich text document, proprietary document model
 
 **Galley Editor**:

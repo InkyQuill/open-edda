@@ -6,7 +6,21 @@ Open Edda is a self-hosted web workspace and versioned project repository for wr
 
 The immediate priority is projects and local-computer synchronization, then Pocket Editor. Web Galley Desk/Timeline Helper capabilities and local-agent skill parity follow later. See the [verified audit](docs/audit/2026-10-06-project-direction.md), [roadmap](docs/roadmap.md) and [delivery plan](docs/plans/2026-10-06-projects-and-sync.md).
 
-CWS is the project baseline, with a flexible directory tree and a preference for flat organization where useful. Elysium is legacy only. Distribution uses a Docker image with data on a volume or Kubernetes PVC; [ADR 0015](docs/adr/0015-storage-and-container-deployment.md) compares storage options and recommends immutable files plus transactional SQLite version metadata. Container build and volume/PVC instructions are in [deployment and backup](docs/architecture/deployment-and-backup.md).
+The flat CWS project format is the structural reference, with support for nested book folders and preservation of existing directory trees. CWS installation and integration skills are optional. Distribution uses a Docker image with data on a volume or Kubernetes PVC; [ADR 0015](docs/adr/0015-storage-and-container-deployment.md) compares storage options and recommends immutable files plus transactional SQLite version metadata. Container build and volume/PVC instructions are in [deployment and backup](docs/architecture/deployment-and-backup.md).
+
+## File workspace
+
+Markdown files open in Galley live editing; use **Исходный Markdown** to switch
+to source text. Drafts stay in the current browser tab until explicitly saved.
+Choose a shared Galley theme in **Настройки вида**; light, dark and system modes
+remain independent of the theme family.
+
+Use **Импорт ZIP** in the file sidebar to inspect an archive before adding it.
+Nested paths and empty directories are kept; existing files are never replaced.
+ZIP limits are 64 MiB uploaded, 256 MiB expanded and the configured per-file/tree
+limits. Other archive types can be stored as ordinary files. In **История проекта**,
+select a saved version and **Сравнить с текущей** to inspect project changes and
+text differences. [Implementation and verification](docs/audit/2026-10-08-files-editor-themes.md).
 
 ## Stack
 
@@ -73,7 +87,7 @@ go build -tags sqlite_fts5 -o edda ./cmd/edda
 ./edda send ./my-book
 ```
 
-Login asks for the server, email and a hidden password. First send asks whether to create a project or choose an existing one, connects the folder and uploads it. Inside that folder or any subdirectory, use `edda send` to upload edits and `edda take` to receive server changes. Commands discover the `.edda` binding automatically. `edda import` also saves this binding after a successful upload. `edda get` downloads an existing project into a new folder through a selection dialogue.
+Login asks for the server, email and a hidden password. First send asks whether to create a project or choose an existing one, connects the folder and uploads it. Inside that folder or any subdirectory, use `edda send` to upload edits and `edda take` to receive server changes. They reuse unchanged content by SHA-256 and show stages, counts, bytes and elapsed time; `--quiet` hides progress. Changed files still transfer as whole objects. Commands discover the `.edda` binding automatically. `edda import` also saves this binding after a successful upload. `edda get` downloads an existing project into a new folder through a selection dialogue.
 
 Explicit arguments skip prompts: `edda send ./my-book --title "My book"` creates a project on first send. `edda COMMAND --help` explains every command. Output is readable by default; `projects`, `create`, `history` and `import` offer `--json` for scripts. See [CLI synchronization](docs/architecture/cli-sync.md) for details.
 
@@ -130,7 +144,7 @@ auth/        JWT auth service and middleware
 cmd/edda/    CLI connection, import, checkout and transactional send
 fileproject/ File inventory, IDs, local saves, snapshots and conflicts
 frontend/    React workspace UI
-markdownio/  Elysium Markdown import/export
+markdownio/  Legacy database-content Markdown import/export
 migrations/  SQLite schema migrations
 project/     Story projects, content, revisions, notes
 queries/     SQL query sources for sqlc
@@ -141,7 +155,7 @@ docs/        Roadmap, specs, implementation plans, skill library docs
 
 ## Current Product Shape
 
-Implemented foundations include authenticated single-author project/content management, database item revisions, Elysium Markdown import/export, OpenAI-compatible assistant workflows, skill import/routing, an approved script runtime, and a routed React writing workspace. Provider/model/skill administration has a settings surface.
+Implemented foundations include authenticated single-author project/content management, database item revisions, Legacy database-content Markdown import/export, OpenAI-compatible assistant workflows, skill import/routing, an approved script runtime, and a routed React writing workspace. Provider/model/skill administration has a settings surface.
 
 The `fileproject` package now supplies a generic [folder inventory and import](docs/architecture/folder-import.md); earlier prototype helpers still supply fixed-layout scanning, stable IDs, indexing, local drafts/saves, snapshots, version checks and conflict helpers. The legacy web editor and agent still use database content/revision APIs. UI labels that say “Checkpoint” currently refer to item revisions, not integrated project snapshots.
 
