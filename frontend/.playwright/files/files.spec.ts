@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import type { ProjectVersion } from '../../src/features/files/fileApi';
 
+test.beforeEach(async ({page}) => { await page.addInitScript(() => localStorage.setItem('edda.editor-mode', 'source')); });
+
 test('real workspace retains drafts, resolves conflicts and retries lost save receipts', async ({ page, request, isMobile }, info) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   const response = await loginForTest(request);

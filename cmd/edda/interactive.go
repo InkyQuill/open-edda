@@ -137,7 +137,7 @@ func askProject(id *string, server string, output io.Writer) error {
 	}
 }
 
-func prepareFirstSend(root, server, title, id string, excludes []string, output io.Writer) error {
+func prepareFirstSend(root, server, title, id string, excludes []string, output io.Writer, quiet bool) error {
 	info, err := os.Lstat(root)
 	if err != nil {
 		return err
@@ -148,7 +148,9 @@ func prepareFirstSend(root, server, title, id string, excludes []string, output 
 	if _, err := os.Lstat(filepath.Join(root, ".edda")); !os.IsNotExist(err) {
 		return errors.New("folder already has .edda metadata; first send will not replace it. Use a separate folder for a network checkout")
 	}
-	inventory, err := fileproject.ScanInventory(context.Background(), root, excludes)
+	ctx, _, finish := observeSync(context.Background(), output, quiet)
+	inventory, err := fileproject.ScanInventory(ctx, root, excludes)
+	finish()
 	if err != nil {
 		return err
 	}
@@ -192,7 +194,10 @@ func prepareFirstSend(root, server, title, id string, excludes []string, output 
 	for _, exclude := range excludes {
 		args = append(args, "--exclude", exclude)
 	}
-	if err := runAttach(args, output); err != nil {
+	ctx, output, finish = observeSync(context.Background(), output, quiet)
+	defer finish()
+	syncPhase(ctx, "Attaching project")
+	if err := runAttachContext(ctx, args, output); err != nil {
 		return fmt.Errorf("project %s exists, but attachment failed (retry with --project %s): %w", id, id, err)
 	}
 	return nil

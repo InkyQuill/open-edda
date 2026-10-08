@@ -50,3 +50,9 @@ export async function uploadBlob(projectId: string, file: Blob): Promise<{ sha25
   if (!response.ok) throw await apiError("Upload file", response);
   return { sha256, bytes: file.size };
 }
+export async function stageArchive(projectId: string, file: File): Promise<{ entries: TreeEntry[]; omitted: string[] }> {
+  if (file.size > 64 * 1024 * 1024) throw new Error('ZIP-архив превышает 64 МиБ.');
+  const response = await authFetch(`${root(projectId)}/archive`, { method: 'POST', headers: { 'Content-Type': 'application/zip' }, body: file });
+  if (!response.ok) throw await apiError('Импорт ZIP', response);
+  return response.json();
+}

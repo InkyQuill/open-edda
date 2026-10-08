@@ -12,7 +12,7 @@ The first delivery is project creation/import plus reliable local-computer synch
 
 ## Preserve the project, interpret it separately
 
-- A project is a portable tree of author-owned files, not a prescribed set of chapter and bible database rows. Existing CWS and CWS-compatible layouts remain in place. Prefer flat organization where useful without imposing depth or folder names; expose the actual directory tree. Elysium is historical legacy, not the compatibility target.
+- A project is a portable tree of author-owned files, not a prescribed set of chapter and bible database rows. The flat CWS project format is the structural reference. Existing CWS and CWS-compatible layouts remain in place without imposing depth or folder names; expose the actual directory tree, including nested book folders. CWS installation and integration skills remain optional.
 - Storage and versioning preserve selected files byte-for-byte regardless of whether Edda understands their format. Markdown interpretation, search and specialized views are derived capabilities; an unrecognized file must not silently disappear from transfer or history.
 - Preserve project guidance, frontmatter, unknown fields, sources, translations, knowledge bases, plans, assets, review sidecars, timeline files and skill assets. Layout adapters may recognize these roles without moving files or rewriting content.
 - Initial import/attachment must show the included and excluded inventory. Generated caches, credentials, machine-local settings, installed external skill links and large source assets need an explicit policy. Exclusions must be visible; no blanket hidden-directory exclusion or automatic upload of external symlink targets.

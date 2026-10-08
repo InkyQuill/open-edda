@@ -75,6 +75,11 @@ func buildUpdateResult(ctx context.Context, root string, state checkout, p updat
 			continue
 		}
 		entry := remote[name]
+		// The result already contains the verified local snapshot. Rewriting
+		// identical bytes adds disk I/O and fsync without changing the result.
+		if current, ok := local[name]; ok && current.Kind == entry.Kind && current.SHA256 == entry.SHA256 && current.Bytes == entry.Bytes {
+			continue
+		}
 		target := filepath.Join(result, filepath.FromSlash(name))
 		if entry.Kind == "directory" {
 			if err := os.MkdirAll(target, 0700); err != nil {

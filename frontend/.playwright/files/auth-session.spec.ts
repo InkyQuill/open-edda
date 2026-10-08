@@ -50,7 +50,7 @@ test('expiry during save preserves the draft across reauthentication', async ({p
     return true;
   }, {intervals:[2100], timeout:10000}).toBe(true);
   await expect(page).toHaveURL(new RegExp(`/projects/${id}/files$`));
-  await expect(text).toHaveValue('Черновик переживает повторный вход');
+  await expect(text).toContainText('Черновик переживает повторный вход');
 });
 
 test('refresh cookie silently recovers access and logout revokes it', async ({page,context}) => {

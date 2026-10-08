@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -31,6 +32,27 @@ func RegisterVersionRoutes(r chi.Router, s *VersionStore) {
 				}
 				next.ServeHTTP(w, r)
 			})
+		})
+		r.Post("/archive", func(w http.ResponseWriter, r *http.Request) {
+			file, err := os.CreateTemp("", "edda-archive-*.zip")
+			if err != nil {
+				writeVersionError(w, err)
+				return
+			}
+			defer os.Remove(file.Name())
+			defer file.Close()
+			size, err := io.Copy(file, http.MaxBytesReader(w, r.Body, 64<<20))
+			if err != nil {
+				writeJSON(w, 400, errorResponse{Error: "cannot read ZIP; maximum upload is 64 MiB"})
+				return
+			}
+			plan, err := s.StageArchive(r.Context(), authorID(r), chi.URLParam(r, "projectID"), file, size)
+			if err != nil {
+				writeVersionError(w, err)
+				return
+			}
+			w.Header().Set("Cache-Control", "no-store")
+			writeJSON(w, 200, plan)
 		})
 		r.Get("/versions", func(w http.ResponseWriter, r *http.Request) {
 			page, err := s.History(r.Context(), authorID(r), chi.URLParam(r, "projectID"), r.URL.Query().Get("cursor"))

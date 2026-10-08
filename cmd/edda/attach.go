@@ -19,6 +19,9 @@ import (
 // A nonempty server must match exactly, because otherwise there is no shared
 // ancestor from which deletions and unsent local additions can be distinguished.
 func runAttach(args []string, output io.Writer) error {
+	return runAttachContext(context.Background(), args, output)
+}
+func runAttachContext(ctx context.Context, args []string, output io.Writer) error {
 	root, rest := splitOptionalPath(args)
 	flags := flag.NewFlagSet("attach", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
@@ -57,7 +60,6 @@ func runAttach(args []string, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	ctx := context.Background()
 	head, err := client.version(ctx, "versions/current")
 	if err != nil {
 		return err

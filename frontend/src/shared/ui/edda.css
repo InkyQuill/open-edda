@@ -22,3 +22,19 @@
 @media(max-width:1150px){.breadcrumbs>a,.breadcrumbs>svg{display:none}}
 
 .project-list-item{display:flex;align-items:center;gap:8px}.project-list-item .project-row{flex:1;min-width:0}.project-list-item>.icon-button{flex-shrink:0;color:var(--edda-muted)}.project-list-item>.icon-button:hover{color:var(--danger)}
+
+.comparison-path { overflow-wrap: anywhere; }
+.version-diff { max-height: 55vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.65; }
+.version-diff > span { display: block; min-height: 1.65em; }
+.version-diff .diff-added { background: var(--selected); color: var(--accent-ink); }
+.version-diff .diff-removed { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
+
+.file-galley { --ge-font-body: Georgia, 'Noto Serif', serif; --ge-font-size: 1em; --ge-line-height: 1.85; --ge-radius-editor: 0px; --ge-shadow-editor: none; --ge-color-bg: var(--paper); --ge-color-text: var(--ink); --ge-color-text-muted: var(--edda-muted); --ge-color-surface: var(--shell); --ge-color-surface-elevated: var(--raised); --ge-color-border: var(--line); --ge-color-link: var(--edda-accent); --ge-color-link-hover: var(--accent-ink); --ge-color-selection: var(--selection); --ge-color-caret: var(--ink); --ge-color-focus-ring: var(--edda-accent); }
+.file-galley.sans-prose { --ge-font-body: 'Geist Variable', system-ui, sans-serif; }
+.file-galley .ge-editor-shell { border: 0; box-shadow: none; background: transparent; }
+.file-galley .cm-editor { background: transparent; font-size: inherit; }
+.file-galley .cm-editor.cm-focused { outline: none; }
+.file-galley:focus-within { box-shadow: -2px 0 var(--edda-accent); }
+.file-galley .cm-content { padding: 0; }
+.file-galley .cm-line { padding: 0; }
+.file-galley .cm-scroller { font-family: var(--ge-font-body); line-height: 1.85; }

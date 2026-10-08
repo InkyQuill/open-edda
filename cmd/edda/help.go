@@ -31,7 +31,7 @@ This does not revoke sessions on the server or change environment variables.`,
   edda create [--title TITLE] [--server URL] [--json]
 The title is requested if omitted. To upload a local folder, use edda send FOLDER.`,
 	"send": `Upload local files to Edda, then send subsequent changes from the same folder.
-  edda send [FOLDER]
+  edda send [FOLDER] [--quiet]
   edda send FOLDER --title "My book"
   edda send FOLDER --project ID
 For a folder not yet attached, the dialogue offers a new or existing project.
@@ -39,7 +39,8 @@ For a folder not yet attached, the dialogue offers a new or existing project.
 options also accept --server URL and repeatable --exclude relative/path.
 An existing nonempty project must match the local folder before attachment.
 The folder is remembered through .edda metadata. Later, just run edda send FOLDER.
-To preview files and exclusions without uploading: edda import FOLDER --dry-run.`,
+Only missing SHA-256 contents are uploaded. Progress shows stages, counts and bytes;
+--quiet hides progress. To preview files and exclusions without uploading: edda import FOLDER --dry-run.`,
 	"attach": `Connect an existing local folder to a server project without uploading it.
   edda attach [FOLDER] [--project ID] [--server URL] [--exclude relative/path]
 Select a project from the list if --project is omitted. Then use edda send FOLDER.
@@ -49,10 +50,12 @@ A nonempty remote must match the local files exactly. --exclude is repeatable.`,
 Missing destination and project are requested. Existing folders are never replaced.
 --version selects a historical version; the default is the current version.`,
 	"take": `Bring server changes into a connected local folder.
-  edda take [FOLDER] [--restart]
+  edda take [FOLDER] [--restart] [--quiet]
 Local edits are merged; conflicting files require edda conflicts and edda resolve.
 Run take again after resolving them. --restart rebuilds an unapplied update plan
-when local files have changed; recovery snapshots are retained.`,
+when local files have changed; recovery snapshots are retained.
+Verified local contents are reused by SHA-256; only missing contents are downloaded.
+Progress shows stages, counts and bytes; --quiet hides progress.`,
 	"status": `Show local project state, pending operations and unsent changes.
   edda status [FOLDER]
 This works offline and does not check for new server changes.`,

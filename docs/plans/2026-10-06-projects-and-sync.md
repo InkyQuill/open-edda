@@ -2,7 +2,7 @@
 
 Status: baseline build/module/CLI safety slice implemented after the 2026-10-06 audit; object/tree/version storage and basic web file editing are implemented; CLI folder import into empty projects is implemented; the initial CLI download/send cycle is implemented; existing-copy update, explicit conflict resolution and process-exit recovery are implemented. See [verification](../audit/2026-10-06-baseline-repair.md). Scope and order are defined by [roadmap](../roadmap.md) and [ADR 0014](../adr/0014-portable-projects-and-transactional-sync.md).
 
-Storage design: [ADR 0015](../adr/0015-storage-and-container-deployment.md) recommends immutable content objects plus authoritative SQLite manifests. CWS/flexible folder trees are the baseline; Elysium is historical only.
+Storage design: [ADR 0015](../adr/0015-storage-and-container-deployment.md) recommends immutable content objects plus authoritative SQLite manifests. The flat CWS project format is the structural reference; preserve existing folder trees and support nested book folders without requiring CWS installation.
 
 ## Work packages
 

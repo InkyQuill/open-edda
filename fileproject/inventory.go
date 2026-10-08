@@ -34,6 +34,7 @@ type InventoryNotice struct {
 }
 
 func ScanInventory(ctx context.Context, directory string, exclusions []string, tracked ...[]project.TreeEntry) (Inventory, error) {
+	ReportProgress(ctx, Progress{Phase: "Scanning local digests"})
 	result := Inventory{Entries: []project.TreeEntry{}, Excluded: []InventoryNotice{}, Problems: []InventoryNotice{}}
 	for _, name := range exclusions {
 		if name == "." || !fs.ValidPath(name) || strings.Contains(name, "\\") {
@@ -130,6 +131,7 @@ func ScanInventory(ctx context.Context, directory string, exclusions []string, t
 			}
 		}
 		result.Entries = append(result.Entries, item)
+		ReportProgress(ctx, Progress{Phase: "Scanning local digests", Done: int64(len(result.Entries)), Bytes: result.Bytes, Path: name})
 		return nil
 	})
 	if err != nil {
@@ -199,6 +201,12 @@ func (r inventoryReader) Read(p []byte) (int, error) {
 // StageInventory freezes verified bytes outside the author folder. The caller
 // owns the empty private staging directory and removes it on every exit path.
 func StageInventory(ctx context.Context, inventory Inventory, exclusions []string, directory string) error {
+	return StageInventoryMissing(ctx, inventory, exclusions, directory, nil)
+}
+
+// StageInventoryMissing freezes only contents not already in the acknowledged
+// server version, while still checking the complete local tree for concurrent edits.
+func StageInventoryMissing(ctx context.Context, inventory Inventory, exclusions []string, directory string, present map[string]int64) error {
 	if len(inventory.Problems) > 0 {
 		return fmt.Errorf("resolve inventory problems before importing")
 	}
@@ -207,8 +215,20 @@ func StageInventory(ctx context.Context, inventory Inventory, exclusions []strin
 		return err
 	}
 	defer root.Close()
+	var done, total, stagedBytes int64
+	for _, entry := range inventory.Entries {
+		if entry.Kind == "file" {
+			if n, ok := present[entry.SHA256]; !ok || n != entry.Bytes {
+				total++
+			}
+		}
+	}
+	ReportProgress(ctx, Progress{Phase: "Preparing changed files", Total: total})
 	for _, entry := range inventory.Entries {
 		if entry.Kind != "file" {
+			continue
+		}
+		if n, ok := present[entry.SHA256]; ok && n == entry.Bytes {
 			continue
 		}
 		source, err := openInventoryFile(root, entry.Path)
@@ -236,6 +256,9 @@ func StageInventory(ctx context.Context, inventory Inventory, exclusions []strin
 		if n != entry.Bytes || hex.EncodeToString(hash.Sum(nil)) != entry.SHA256 {
 			return fmt.Errorf("%q changed after inventory; run import again", entry.Path)
 		}
+		done++
+		stagedBytes += n
+		ReportProgress(ctx, Progress{Phase: "Preparing changed files", Done: done, Total: total, Bytes: stagedBytes, Path: entry.Path})
 	}
 	// Detect additions/deletions and directory changes as well as altered bytes.
 	current, err := ScanInventory(ctx, inventory.Root, exclusions, inventory.Entries)

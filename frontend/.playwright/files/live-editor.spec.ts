@@ -1,0 +1,37 @@
+import { expect, test } from '@playwright/test';
+import { loginForTest } from './auth';
+
+test('live Markdown preserves drafts, explicit saves and source mode', async ({page,request,isMobile},info) => {
+  const {token} = await (await loginForTest(request)).json() as {token:string}; const headers={Authorization:`Bearer ${token}`};
+  await page.addInitScript(value=>localStorage.setItem('open_edda_token',value),token);
+  const {id} = await (await request.post('/api/projects',{headers,data:{title:`Live editor ${info.project.name}`,storageMode:'files'}})).json() as {id:string};
+  await page.goto(`/projects/${id}/files`);
+  await expect(page.getByRole('heading',{name:`Live editor ${info.project.name}`,exact:true})).toBeVisible();
+  await page.locator('input[type=file]').first().setInputFiles([{name:'chapter.md',mimeType:'text/markdown',buffer:Buffer.from('# Глава\n\nТихий **вечер**.\n')},{name:'notes.txt',mimeType:'text/plain',buffer:Buffer.from('Заметки')}]);
+  await page.getByRole('dialog').getByRole('button',{name:'Добавить файлы',exact:true}).click();
+  const live=page.getByRole('textbox',{name:'Текст файла',exact:true});
+  await expect(live).toHaveAttribute('contenteditable','true');
+  await live.fill('# Глава\n\nНовый **вечер**.');
+  await page.getByRole('button',{name:'Исходный Markdown',exact:true}).click();
+  const raw=page.getByLabel('Текст файла',{exact:true}); await expect(raw).toHaveValue('# Глава\n\nНовый **вечер**.');
+  await page.getByRole('button',{name:'Живой Markdown',exact:true}).click();
+  await page.getByRole('button',{name:'Сохранить файл',exact:true}).click();
+  await expect(page.locator('.save-label')).toHaveText('Сохранено');
+  await live.fill('Несохранённый черновик');
+  if(isMobile)await page.getByRole('button',{name:'Файлы проекта',exact:true}).click();
+  await page.getByRole('button',{name:'notes.txt',exact:true}).click();
+  await expect(page.locator('textarea[aria-label="Текст файла"]')).toHaveValue('Заметки');
+  if(isMobile)await page.getByRole('button',{name:'Файлы проекта',exact:true}).click();
+  await page.getByRole('button',{name:/^chapter.md/}).click();
+  await expect(live).toContainText('Несохранённый черновик');
+  await page.getByRole('button',{name:'Оригинал и перевод',exact:true}).click();
+  if(isMobile)await page.getByRole('tab',{name:'Оригинал',exact:true}).click();
+  await page.getByRole('combobox',{name:'Оригинал',exact:true}).selectOption({label:'notes.txt'});
+  await expect(page.locator('.source-prose')).toHaveText('Заметки');
+  if(isMobile)await page.getByRole('tab',{name:'Перевод',exact:true}).click();
+  await expect(live).toContainText('Несохранённый черновик');
+  await page.screenshot({path:info.outputPath('live-markdown.png'),fullPage:true});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+  page.once('dialog',dialog=>dialog.accept()); await page.reload();
+  await expect(live).toContainText('Несохранённый черновик');
+});
