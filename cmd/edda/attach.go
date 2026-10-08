@@ -65,13 +65,14 @@ func runAttach(args []string, output io.Writer) error {
 	if err := validateRemoteSelection(checkout{Excludes: excludes}, head.Entries); err != nil {
 		return err
 	}
-	inventory, err := fileproject.ScanInventory(ctx, root, excludes)
+	inventory, err := fileproject.ScanInventory(ctx, root, excludes, head.Entries)
 	if err != nil {
 		return err
 	}
 	reportSyncExclusions(inventory, output)
 	if len(inventory.Problems) > 0 {
-		return errors.New("unsupported local entries; inspect import --dry-run")
+		reportInventoryProblems(inventory, output)
+		return errors.New("exclude these paths in .eddaignore or with --exclude, then retry attach")
 	}
 	if len(head.Entries) > 0 && !sameFiles(inventory.Entries, head.Entries) {
 		return errors.New("nonempty remote differs from this folder; get a separate copy and reconcile first, or attach to an empty project")

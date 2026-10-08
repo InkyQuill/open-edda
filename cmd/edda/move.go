@@ -15,10 +15,11 @@ import (
 )
 
 type pendingMove struct {
-	Excludes []string            `json:"excludes,omitempty"`
-	From     string              `json:"from"`
-	To       string              `json:"to"`
-	Entries  []project.TreeEntry `json:"entries"`
+	Untracked []string            `json:"untracked,omitempty"`
+	Excludes  []string            `json:"excludes,omitempty"`
+	From      string              `json:"from"`
+	To        string              `json:"to"`
+	Entries   []project.TreeEntry `json:"entries"`
 }
 
 func localIdentities(state checkout, entries []project.TreeEntry) []project.TreeEntry {
@@ -78,7 +79,17 @@ func runMove(args []string, output io.Writer) error {
 	if *from == *to || strings.HasPrefix(*to, *from+"/") {
 		return errors.New("usage: edda move CHECKOUT --from PATH --to PATH (existing destination parents required)")
 	}
-	inventory, err := fileproject.ScanInventory(context.Background(), root, state.Excludes)
+	for _, name := range state.Untracked {
+		// Exclusions below the source travel with it; all other exclusions must
+		// remain disjoint from the destination, including its parents/children.
+		if name == *from || strings.HasPrefix(name, *from+"/") {
+			continue
+		}
+		if name == *to || strings.HasPrefix(*to, name+"/") || strings.HasPrefix(name, *to+"/") {
+			return fmt.Errorf("destination overlaps untracked path %q; use edda rm --undo first", name)
+		}
+	}
+	inventory, err := fileproject.ScanInventory(context.Background(), root, state.localExclusions(), state.Base.Entries, state.Identity)
 	if err != nil {
 		return err
 	}
@@ -108,7 +119,13 @@ func runMove(args []string, output io.Writer) error {
 			excludes[i] = *to + strings.TrimPrefix(name, *from)
 		}
 	}
-	state.Move = &pendingMove{From: *from, To: *to, Entries: entries, Excludes: excludes}
+	untracked := append([]string{}, state.Untracked...)
+	for i, name := range untracked {
+		if name == *from || strings.HasPrefix(name, *from+"/") {
+			untracked[i] = *to + strings.TrimPrefix(name, *from)
+		}
+	}
+	state.Move = &pendingMove{Untracked: untracked, From: *from, To: *to, Entries: entries, Excludes: excludes}
 	if err := writePrivateJSON(checkoutPath(root), state); err != nil {
 		return err
 	}
@@ -147,6 +164,7 @@ func finishMove(root string, state checkout, output io.Writer) error {
 		return err
 	}
 	state.Excludes = move.Excludes
+	state.Untracked = move.Untracked
 	state.Identity = move.Entries
 	state.Move = nil
 	if err := writePrivateJSON(checkoutPath(root), state); err != nil {

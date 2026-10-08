@@ -34,6 +34,7 @@ func runImport(args []string, stdout, stderr io.Writer) error {
 	server := flags.String("server", os.Getenv("OPEN_EDDA_URL"), "Open Edda base URL (or OPEN_EDDA_URL)")
 	projectID := flags.String("project", "", "empty project ID")
 	dryRun := flags.Bool("dry-run", false, "preview inventory; no network or source changes")
+	verbose := flags.Bool("verbose", false, "list all included and excluded paths")
 	machine := flags.Bool("json", false, "output JSON for scripts")
 	var excludes importExclusions
 	flags.Var(&excludes, "exclude", "exact relative file or directory to exclude (repeatable)")
@@ -63,13 +64,30 @@ func runImport(args []string, stdout, stderr io.Writer) error {
 			return errors.New("folder already has .edda metadata; use edda send for a connected project; import never replaces an existing binding")
 		}
 	}
-	inventory, err := fileproject.ScanInventory(context.Background(), root, excludes)
+	var tracked []project.TreeEntry
+	if *dryRun {
+		if _, err := os.Lstat(checkoutPath(root)); err == nil {
+			state, err := readCheckout(root)
+			if err != nil {
+				return err
+			}
+			excludes = append(excludes, state.localExclusions()...)
+			tracked = append(tracked, state.Base.Entries...)
+			tracked = append(tracked, state.Identity...)
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	inventory, err := fileproject.ScanInventory(context.Background(), root, excludes, tracked)
 	if err != nil {
 		return err
 	}
 	if !*machine {
 		printInventory(inventory, stdout)
-		if *dryRun {
+		if *verbose {
+			for _, notice := range inventory.Excluded {
+				fmt.Fprintf(stdout, "  excluded %q (%s)\n", notice.Path, notice.Reason)
+			}
 			for _, entry := range inventory.Entries {
 				fmt.Fprintf(stdout, "  %s %q (%d bytes)\n", entry.Kind, entry.Path, entry.Bytes)
 			}
@@ -210,6 +228,7 @@ func (e *importHTTPError) Error() string {
 }
 
 type importClient struct {
+	server    string
 	root      string
 	token     string
 	projectID string
@@ -227,9 +246,16 @@ func newImportClient(server, projectID, token string) (*importClient, error) {
 	if strings.TrimSpace(token) != token || strings.ContainsAny(token, "\r\n") {
 		return nil, errors.New("OPEN_EDDA_TOKEN is malformed")
 	}
-	return &importClient{root: strings.TrimRight(server, "/") + "/api/projects/" + url.PathEscape(projectID) + "/files/", token: token, projectID: projectID, http: &http.Client{Timeout: 2 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
+	return &importClient{server: strings.TrimRight(server, "/"), root: strings.TrimRight(server, "/") + "/api/projects/" + url.PathEscape(projectID) + "/files/", token: token, projectID: projectID, http: &http.Client{Timeout: 2 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
 func (c *importClient) request(ctx context.Context, method, path string, body io.Reader, length int64) (*http.Response, error) {
+	if !strings.HasPrefix(path, "auth/") {
+		token, err := refreshSavedAccess(ctx, c.server, c.token)
+		if err != nil {
+			return nil, err
+		}
+		c.token = token
+	}
 	request, err := http.NewRequestWithContext(ctx, method, c.root+path, body)
 	if err != nil {
 		return nil, err

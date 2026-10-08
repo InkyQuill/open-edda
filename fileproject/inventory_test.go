@@ -70,7 +70,7 @@ func TestInventoryRejectsLinksSpecialFilesAndCollisions(t *testing.T) {
 		t.Fatal(err)
 	}
 	inventory, err := ScanInventory(context.Background(), root, nil)
-	if err != nil || len(inventory.Problems) != 2 {
+	if err != nil || len(inventory.Problems) != 1 || len(inventory.Excluded) != 1 {
 		t.Fatalf("link/special: %+v %v", inventory, err)
 	}
 	inventory, err = ScanInventory(context.Background(), root, []string{"skills", "pipe"})

@@ -26,7 +26,7 @@ edda get
 
 The CLI is human-first. In a terminal, omitted required values are requested; connected-project commands discover the nearest `.edda` in the current directory or its parents, and explicit arguments skip the corresponding prompts. Outside a project, folder prompts offer the current directory where appropriate. Optional settings retain defaults. `--json` selects machine output on `projects`, `create`, `history` and `import` and disables prompts for those commands. Without a terminal, required inputs must be supplied as arguments; commands never wait for a dialogue. `edda COMMAND --help` and `edda help COMMAND` explain each operation with examples. Server addresses and credentials are reused from login.
 
-For scripts, the first upload can be `edda send ./book --title "My book"` or `edda send ./book --project PROJECT_ID`; optional `--server URL` and repeated `--exclude relative/path` apply only to first attachment. Ordinary sends use the persisted connection and exclusions. The first-send workflow validates the folder before creating a project, attaches it, then runs the regular transactional send. If upload fails after attachment, repeat `edda send ./book`; existing recovery rules apply. Existing `.edda` metadata is never replaced. Cancellation before choosing/creating a project has no remote or local side effects.
+For scripts, the first upload can be `edda send ./book --title "My book"` or `edda send ./book --project PROJECT_ID`; optional `--server URL` and repeated `--exclude relative/path` apply only to first attachment. Ordinary sends use the persisted connection and exact exclusions plus the current root `.eddaignore`; see [ignore rules](folder-import.md#eddaignore). The first-send workflow validates the folder before creating a project, attaches it, then runs the regular transactional send. If upload fails after attachment, repeat `edda send ./book`; existing recovery rules apply. Existing `.edda` metadata is never replaced. Cancellation before choosing/creating a project has no remote or local side effects.
 
 `edda import ./book --dry-run` previews the folder without uploading; `--json` returns its inventory. A real `import` uploads into an empty project and saves `.edda/checkout.json` containing the server, project ID, acknowledged imported version and exclusions. Its JSON output is the publication receipt. Afterwards, run `send`, `take`, `status` or `history` from any subdirectory without supplying a folder or project ID. The binding is relative to the containing folder, so moving the whole folder preserves it. Existing metadata is never replaced; use `send` for an already connected project. An older imported folder can be connected with `edda attach FOLDER`, which verifies its files against the selected project without reuploading.
 
@@ -47,6 +47,22 @@ The nearest `.edda` is a discovery boundary: nested or invalid metadata never ca
 `edda move CHECKOUT --from old/path --to new/path` moves a file or whole directory, keeping IDs for its descendants and moving matching explicit exclusions. Destination parents must already exist. The intent is written before the filesystem move; if interrupted, repeat `edda move CHECKOUT` to finish metadata recovery. Other synchronization commands refuse an unfinished move. `send` publishes the move normally. External filesystem renames remain delete/add because guessing identity by content hash is unsafe.
 
 `edda history CHECKOUT [--cursor ID]` lists immutable version summaries in pages. `edda get NEW_DIRECTORY --project ID --version VERSION_ID` checks out a historical version without changing server history. `edda restore CHECKOUT --version VERSION_ID` publishes that version as a new server version against the checkout base; retry of the same base/target returns the same receipt. Local files remain untouched. Follow it with `take`, which preserves local changes through the normal merge/conflict and recovery flow.
+
+## Stop tracking without deleting local files
+
+Inside a connected folder (including any subdirectory):
+
+```sh
+edda rm debug.log .creative-writing
+edda status
+edda send
+# Undo a local tracking exclusion, before or after send:
+edda rm --undo debug.log
+```
+
+`rm` changes only `.edda` tracking metadata. Files stay on this computer; directories include their whole subtree. A subsequent `send` removes the paths from the current server tree while retaining prior versions. Other clients receive that deletion through ordinary synchronization. Removed paths remain local-only on this checkout instead of being automatically re-added. `--undo` removes the exclusion recorded by `rm`; other `.eddaignore` and explicit rules still apply.
+
+Paths are relative to the current directory; external paths and `.edda` are rejected. Multiple paths are recorded atomically. Pending send/move/update operations must finish first. Disjoint remote updates can merge before sending removals; concurrent changes to locally untracked paths require `rm --undo`, `take` and reconciliation before another removal. Moving a tracked parent carries its local-only child exclusions with it.
 
 ## Sending and recovery
 
@@ -102,3 +118,9 @@ A separate runtime check built the actual server and CLI executables and ran the
 Attachment/move tests also cover identity across rename/edit conflicts, interrupted moves, persistent symlink exclusions and dirty local work during server restore. The container acceptance script verifies the shipped executables and restoration onto a fresh volume.
 
 The human-first CLI acceptance check is `python3 scripts/check-cli-interactive.py CLI_BINARY SERVER_BINARY` after building both executables with `-tags sqlite_fts5`. It uses a Linux pseudo-terminal, a real localhost server and temporary credentials/data to check prompts, first-send upload, project selection, synchronization/conflict recovery, history/restore, human/JSON output, cancellation, backup/restore and local prototype commands. It does not use production projects.
+
+## Deleting a server project
+
+The project list has a separate delete action. Its dialog explains that server files and version history become unavailable and requires the exact project title before enabling confirmation. Cancel is the default escape route; failures keep the dialog open for retry. Local folders remain unchanged and their old binding cannot synchronize after deletion.
+
+`DELETE /api/projects/{id}` requires authentication, ownership and JSON `{ "confirmationTitle": "Exact project title" }`. A mismatched title returns 409; an empty confirmation returns 400. Project rows and dependent history/content records are removed in one transaction. Immutable object bytes are retained pending a future garbage collector, as with unreferenced upload objects; this operation does not promise immediate disk-space recovery. Existing backups remain separate.

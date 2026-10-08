@@ -64,15 +64,7 @@ func (s *Service) Register(ctx context.Context, email, password string) (AuthRes
 		return AuthResponse{}, fmt.Errorf("create author: %w", err)
 	}
 
-	token, err := GenerateToken(authorID, email, s.secret)
-	if err != nil {
-		return AuthResponse{}, fmt.Errorf("generate token: %w", err)
-	}
-
-	return AuthResponse{
-		Token:  token,
-		Author: AuthorPublic{ID: authorID, Email: email},
-	}, nil
+	return s.newSession(ctx, AuthorPublic{ID: authorID, Email: email})
 }
 
 func (s *Service) Login(ctx context.Context, email, password string) (AuthResponse, error) {
@@ -93,15 +85,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (AuthRespon
 		return AuthResponse{}, ErrInvalidCredentials
 	}
 
-	token, err := GenerateToken(author.ID, author.Email, s.secret)
-	if err != nil {
-		return AuthResponse{}, fmt.Errorf("generate token: %w", err)
-	}
-
-	return AuthResponse{
-		Token:  token,
-		Author: AuthorPublic{ID: author.ID, Email: author.Email},
-	}, nil
+	return s.newSession(ctx, AuthorPublic{ID: author.ID, Email: author.Email})
 }
 
 func (s *Service) ValidateToken(tokenString string) (*Claims, error) {

@@ -1,11 +1,8 @@
 import type { WriterSkill } from "./skillTypes";
-import { getToken } from "./authApi";
+import { authFetch } from "./api";
 
 async function requestJSON<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getToken();
-  const headers = new Headers(init?.headers);
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(path, { ...init, headers });
+  const response = await authFetch(path, init);
   if (!response.ok) {
     let message = `${init?.method ?? "GET"} ${path} failed: ${response.status}`;
     try {

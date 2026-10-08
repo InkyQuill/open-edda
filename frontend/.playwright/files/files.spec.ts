@@ -1,10 +1,11 @@
+import { loginForTest } from './auth';
 import { createHash } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import type { ProjectVersion } from '../../src/features/files/fileApi';
 
 test('real workspace retains drafts, resolves conflicts and retries lost save receipts', async ({ page, request, isMobile }, info) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
-  const response = await request.post('/api/auth/login', { data: { email: 'browser@example.invalid', password: 'browser-test-password' } });
+  const response = await loginForTest(request);
   const { token } = await response.json() as { token: string }; const headers = { Authorization: `Bearer ${token}` };
   await page.addInitScript(value => localStorage.setItem('open_edda_token', value), token);
   await page.goto('/projects');
@@ -57,7 +58,7 @@ test('real workspace retains drafts, resolves conflicts and retries lost save re
 });
 
 test('imports previewable and binary files, preserves move identity and restores history',async ({page,request,isMobile},info) => {
-  const response=await request.post('/api/auth/login',{data:{email:'browser@example.invalid',password:'browser-test-password'}});
+  const response=await loginForTest(request);
   const {token}=await response.json() as {token:string}; const headers={Authorization:`Bearer ${token}`};
   await page.addInitScript(value=>localStorage.setItem('open_edda_token',value),token);
   const projectTitle = `Files ${info.project.name} ${Date.now()}`;
@@ -73,6 +74,8 @@ test('imports previewable and binary files, preserves move identity and restores
   const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'Скачать файл',exact:true}).last().click();expect((await downloaded).suggestedFilename()).toBe('cover.bin');
   await files();await page.getByRole('button',{name:'cover.svg',exact:true}).click();await expect(page.getByRole('img',{name:'cover.svg',exact:true})).toBeVisible();
   await files();await page.getByRole('button',{name:'Действия: 章.md',exact:true}).click();await page.getByLabel('Имя',{exact:true}).fill('renamed.md');await page.getByRole('button',{name:'Сохранить изменения',exact:true}).click();
+  // The click starts an asynchronous rename; wait for its successful UI completion.
+  await expect(page.getByRole('button',{name:'Сохранить изменения',exact:true})).toHaveCount(0);
   const renamed=await (await request.get(`${root}/versions/current`,{headers})).json() as ProjectVersion;expect(renamed.entries.find(e=>e.path==='renamed.md')?.id).toBe(original.entries.find(e=>e.path==='章.md')?.id);
   await page.getByRole('button',{name:'Создать папку',exact:true}).click();await page.getByLabel('Имя',{exact:true}).fill('materials');await page.getByRole('button',{name:'Создать',exact:true}).click();
   if(!isMobile){await page.getByRole('button',{name:'renamed.md',exact:true}).dragTo(page.getByRole('button',{name:'materials',exact:true}));await expect.poll(async()=> (await (await request.get(`${root}/versions/current`,{headers})).json() as ProjectVersion).entries.find(e=>e.id===original.entries.find(e=>e.path==='章.md')?.id)?.path).toBe('materials/renamed.md');}
