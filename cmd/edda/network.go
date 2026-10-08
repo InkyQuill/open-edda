@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/InkyQuill/open-edda/fileproject"
@@ -130,6 +131,7 @@ func runNetworkSend(args []string, output io.Writer) error {
 	root, rest := splitOptionalPath(args)
 	flags := flag.NewFlagSet("send", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
+	quiet := flags.Bool("quiet", false, "hide progress")
 	title := flags.String("title", "", "create a new project on first send")
 	id := flags.String("project", "", "attach to an existing project on first send")
 	server := flags.String("server", "", "server URL for first send")
@@ -149,7 +151,7 @@ func runNetworkSend(args []string, output io.Writer) error {
 		return err
 	}
 	if _, err := os.Lstat(checkoutPath(root)); os.IsNotExist(err) {
-		if err := prepareFirstSend(root, *server, *title, *id, excludes, output); err != nil {
+		if err := prepareFirstSend(root, *server, *title, *id, excludes, output, *quiet); err != nil {
 			return err
 		}
 	} else if err != nil {
@@ -185,6 +187,10 @@ func runNetworkSend(args []string, output io.Writer) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	ctx, output, finishProgress := observeSync(ctx, output, *quiet)
+	defer finishProgress()
+	present := objectSizes(state.Base.Entries)
+
 	if state.Pending == nil {
 		inventory, err := fileproject.ScanInventory(ctx, root, state.localExclusions(), state.Base.Entries, state.Identity)
 		if err != nil {
@@ -195,6 +201,7 @@ func runNetworkSend(args []string, output io.Writer) error {
 			return errors.New("resolve unsupported local entries before sending")
 		}
 		reportSyncExclusions(inventory, output)
+		syncPhase(ctx, "Checking remote manifest")
 		head, err := client.version(ctx, "versions/current")
 		if err != nil {
 			return err
@@ -218,11 +225,11 @@ func runNetworkSend(args []string, output io.Writer) error {
 				os.RemoveAll(stage)
 			}
 		}()
-		if err = fileproject.StageInventory(ctx, inventory, state.localExclusions(), stage); err != nil {
+		if err = fileproject.StageInventoryMissing(ctx, inventory, state.localExclusions(), stage, present); err != nil {
 			return err
 		}
 		for _, entry := range inventory.Entries {
-			if entry.Kind == "file" {
+			if entry.Kind == "file" && !hasObject(present, entry) {
 				file, err := os.Open(filepath.Join(stage, entry.ID))
 				if err != nil {
 					return err
@@ -244,6 +251,7 @@ func runNetworkSend(args []string, output io.Writer) error {
 			return err
 		}
 	}
+	syncPhase(ctx, "Checking publication receipt")
 	receipt, err := client.version(ctx, "operations/"+state.Pending.Operation)
 	if err == nil {
 		return acknowledgeSend(root, state, receipt, output)
@@ -277,8 +285,21 @@ func runNetworkSend(args []string, output io.Writer) error {
 		return err
 	}
 	defer stage.Close()
+	var sent, total int64
+	var sentBytes atomic.Int64
+	missing := map[string]bool{}
+	for _, entry := range pending.Inventory.Entries {
+		if entry.Kind == "file" && !hasObject(present, entry) && !missing[entry.SHA256] {
+			missing[entry.SHA256] = true
+			total++
+		}
+	}
+	fileproject.ReportProgress(ctx, fileproject.Progress{Phase: "Uploading changed files", Total: total})
 	for _, entry := range pending.Inventory.Entries {
 		if entry.Kind != "file" {
+			continue
+		}
+		if hasObject(present, entry) {
 			continue
 		}
 		info, err := stage.Lstat(entry.ID)
@@ -292,13 +313,22 @@ func runNetworkSend(args []string, output io.Writer) error {
 		if err != nil {
 			return err
 		}
-		response, uploadErr := client.request(ctx, "PUT", "objects/"+entry.SHA256, struct{ io.Reader }{file}, entry.Bytes)
+		completed := sent
+		reader := progressReader{Reader: file, advance: func(n int) {
+			sentBytes.Add(int64(n))
+			fileproject.ReportProgress(ctx, fileproject.Progress{Phase: "Uploading changed files", Done: completed, Total: total, Bytes: sentBytes.Load(), Path: entry.Path})
+		}}
+		response, uploadErr := client.request(ctx, "PUT", "objects/"+entry.SHA256, reader, entry.Bytes)
 		file.Close()
 		if uploadErr != nil {
 			return uploadErr
 		}
 		response.Body.Close()
+		sent++
+		fileproject.ReportProgress(ctx, fileproject.Progress{Phase: "Uploading changed files", Done: sent, Total: total, Bytes: sentBytes.Load(), Path: entry.Path})
+		present[entry.SHA256] = entry.Bytes
 	}
+	syncPhase(ctx, "Publishing version (server verification)")
 	response, err := client.request(ctx, "POST", "versions", bytes.NewReader(body), int64(len(body)))
 	if err != nil {
 		return fmt.Errorf("send not acknowledged; prepared snapshot retained: %w", err)
@@ -331,4 +361,18 @@ func reportSyncExclusions(inventory fileproject.Inventory, output io.Writer) {
 	if len(inventory.Excluded) > 0 {
 		fmt.Fprintf(output, "Excluded %d paths/subtrees (.eddaignore, defaults and --exclude). Use edda import --dry-run --verbose to list them.\n", len(inventory.Excluded))
 	}
+}
+
+func objectSizes(entries []project.TreeEntry) map[string]int64 {
+	result := map[string]int64{}
+	for _, entry := range entries {
+		if entry.Kind == "file" {
+			result[entry.SHA256] = entry.Bytes
+		}
+	}
+	return result
+}
+func hasObject(objects map[string]int64, entry project.TreeEntry) bool {
+	n, ok := objects[entry.SHA256]
+	return ok && n == entry.Bytes
 }

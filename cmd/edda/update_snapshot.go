@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/InkyQuill/open-edda/fileproject"
 )
 
 type localNode struct {
@@ -21,9 +23,17 @@ type localNode struct {
 	Mode uint32 `json:"mode"`
 }
 
-// Snapshot includes excluded local files as well as portable files. Only the
-// checkout's own .edda is omitted. Symlinks are recorded, never followed.
+// Snapshot includes excluded files inside portable top-level units: replacing
+// a directory must preserve its local-only descendants. Reserved top-level
+// state/cache paths can never be remote units, so leave them entirely untouched.
+// Symlinks are recorded, never followed.
 func localSnapshot(ctx context.Context, source, destination string, only ...string) ([]localNode, error) {
+	phase := "Verifying local snapshot"
+	if destination != "" {
+		phase = "Saving recovery snapshot"
+	}
+	fileproject.ReportProgress(ctx, fileproject.Progress{Phase: phase})
+	var processedBytes int64
 	nodes := []localNode{}
 	root, err := os.OpenRoot(source)
 	if err != nil {
@@ -46,8 +56,11 @@ func localSnapshot(ctx context.Context, source, destination string, only ...stri
 			}
 			return nil
 		}
-		if name == ".edda" {
-			return fs.SkipDir
+		if localOnlySnapshotRoot(name) {
+			if entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
 		}
 		info, err := root.Lstat(name)
 		if err != nil {
@@ -121,10 +134,12 @@ func localSnapshot(ctx context.Context, source, destination string, only ...stri
 				return copyErr
 			}
 			node.Hash = hex.EncodeToString(hash.Sum(nil))
+			processedBytes += opened.Size()
 		default:
 			return fmt.Errorf("cannot preserve special local file %q during update", name)
 		}
 		nodes = append(nodes, node)
+		fileproject.ReportProgress(ctx, fileproject.Progress{Phase: phase, Done: int64(len(nodes)), Bytes: processedBytes, Path: name})
 		return nil
 	})
 	if err != nil {
@@ -159,4 +174,15 @@ func (r *updateReader) Read(p []byte) (int, error) {
 		return 0, err
 	}
 	return r.reader.Read(p)
+}
+
+func localOnlySnapshotRoot(name string) bool {
+	if strings.Contains(name, "/") {
+		return false
+	}
+	switch name {
+	case ".edda", ".git", "node_modules", "__pycache__", ".DS_Store":
+		return true
+	}
+	return name == ".env" || strings.HasPrefix(name, ".env.")
 }

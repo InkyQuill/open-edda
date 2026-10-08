@@ -163,10 +163,29 @@ func lockCheckout(root string) (func(), error) {
 	return func() { syscall.Flock(int(file.Fd()), syscall.LOCK_UN); file.Close() }, nil
 }
 
-func downloadCheckout(ctx context.Context, client *importClient, version project.ProjectVersion, root, server string) error {
+type objectReuse struct {
+	Root  *os.Root
+	Paths map[string]string
+}
+
+func downloadCheckout(ctx context.Context, client *importClient, version project.ProjectVersion, root, server string, reuse ...objectReuse) error {
 	if err := validateCheckoutTree(version.Entries); err != nil {
 		return err
 	}
+	destination, err := os.OpenRoot(root)
+	if err != nil {
+		return err
+	}
+	defer destination.Close()
+	downloaded := objectReuse{Root: destination, Paths: map[string]string{}}
+	reuse = append(reuse, downloaded)
+	var done, total, transferred int64
+	for _, entry := range version.Entries {
+		if entry.Kind == "file" {
+			total++
+		}
+	}
+	fileproject.ReportProgress(ctx, fileproject.Progress{Phase: "Preparing version files", Total: total})
 	// The destination is a private, newly created directory, never an author tree.
 	directories := []string{}
 	for _, entry := range version.Entries {
@@ -184,18 +203,47 @@ func downloadCheckout(ctx context.Context, client *importClient, version project
 		if entry.Kind != "file" {
 			continue
 		}
-		response, err := client.request(ctx, "GET", "versions/"+url.PathEscape(version.ID)+"/entries/"+url.PathEscape(entry.ID), nil, 0)
-		if err != nil {
-			return err
+		var source io.ReadCloser
+		reused := false
+		for _, cache := range reuse {
+			name, ok := cache.Paths[entry.SHA256]
+			if !ok {
+				continue
+			}
+			candidate, err := cache.Root.OpenFile(name, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+			if err != nil {
+				return err
+			}
+			info, err := candidate.Stat()
+			if err != nil || !info.Mode().IsRegular() || info.Size() != entry.Bytes {
+				candidate.Close()
+				return fmt.Errorf("cached file changed: %q", name)
+			}
+			source = candidate
+			reused = true
+			break
+		}
+		if source == nil {
+			response, err := client.request(ctx, "GET", "versions/"+url.PathEscape(version.ID)+"/entries/"+url.PathEscape(entry.ID), nil, 0)
+			if err != nil {
+				return err
+			}
+			source = response.Body
 		}
 		file, err := os.OpenFile(filepath.Join(root, filepath.FromSlash(entry.Path)), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 		if err != nil {
-			response.Body.Close()
+			source.Close()
 			return err
 		}
 		hash := sha256.New()
-		n, copyErr := io.Copy(io.MultiWriter(file, hash), io.LimitReader(response.Body, entry.Bytes+1))
-		response.Body.Close()
+		reader := progressReader{Reader: source, advance: func(n int) {
+			if !reused {
+				transferred += int64(n)
+			}
+			fileproject.ReportProgress(ctx, fileproject.Progress{Phase: "Preparing version files", Done: done, Total: total, Bytes: transferred, Path: entry.Path})
+		}}
+		n, copyErr := io.Copy(io.MultiWriter(file, hash), io.LimitReader(&updateReader{ctx: ctx, reader: reader}, entry.Bytes+1))
+		source.Close()
 		if copyErr == nil {
 			copyErr = file.Sync()
 		}
@@ -209,6 +257,9 @@ func downloadCheckout(ctx context.Context, client *importClient, version project
 		if n != entry.Bytes || hex.EncodeToString(hash.Sum(nil)) != entry.SHA256 {
 			return fmt.Errorf("download checksum/size mismatch: %s", entry.Path)
 		}
+		downloaded.Paths[entry.SHA256] = entry.Path
+		done++
+		fileproject.ReportProgress(ctx, fileproject.Progress{Phase: "Preparing version files", Done: done, Total: total, Bytes: transferred, Path: entry.Path})
 	}
 	if err := os.Mkdir(filepath.Join(root, ".edda"), 0700); err != nil {
 		return err

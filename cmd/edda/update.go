@@ -21,6 +21,7 @@ func runNetworkTake(args []string, output io.Writer) error {
 	flags := flag.NewFlagSet("take", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	root, rest := splitOptionalPath(args)
+	quiet := flags.Bool("quiet", false, "hide progress")
 	restart := flags.Bool("restart", false, "archive an un-applied plan and inspect the current files again")
 	if err := flags.Parse(rest); err != nil {
 		return err
@@ -49,6 +50,10 @@ func runNetworkTake(args []string, output io.Writer) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	ctx, output, finishProgress := observeSync(ctx, output, *quiet)
+	defer finishProgress()
+	syncPhase(ctx, "Checking remote manifest")
+
 	if state.Update != "" {
 		p, err := loadUpdate(root, state)
 		if err != nil {
@@ -162,10 +167,32 @@ func runNetworkTake(args []string, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if err = downloadCheckout(ctx, client, remote, filepath.Join(directory, "remote"), state.Server); err != nil {
+	localRoot, err := os.OpenRoot(filepath.Join(directory, "local"))
+	if err != nil {
 		return err
 	}
-	if err = downloadCheckout(ctx, client, state.Base, filepath.Join(directory, "base"), state.Server); err != nil {
+	defer localRoot.Close()
+	cached := objectReuse{Root: localRoot, Paths: map[string]string{}}
+	for _, node := range snapshot {
+		if node.Kind == "file" {
+			cached.Paths[node.Hash] = node.Path
+		}
+	}
+	if err = downloadCheckout(ctx, client, remote, filepath.Join(directory, "remote"), state.Server, cached); err != nil {
+		return err
+	}
+	remoteRoot, err := os.OpenRoot(filepath.Join(directory, "remote"))
+	if err != nil {
+		return err
+	}
+	defer remoteRoot.Close()
+	remoteCache := objectReuse{Root: remoteRoot, Paths: map[string]string{}}
+	for _, entry := range remote.Entries {
+		if entry.Kind == "file" {
+			remoteCache.Paths[entry.SHA256] = entry.Path
+		}
+	}
+	if err = downloadCheckout(ctx, client, state.Base, filepath.Join(directory, "base"), state.Server, cached, remoteCache); err != nil {
 		return err
 	}
 	current, err := localSnapshot(ctx, root, "")
@@ -220,6 +247,7 @@ func finishTake(ctx context.Context, root string, state checkout, p updatePlan, 
 		fmt.Fprintf(output, "Base/local/remote snapshots: %s\n", filepath.Join(root, ".edda", state.Update))
 		return errors.New("update requires choices; use edda resolve --path PATH --use local|remote, then edda take")
 	}
+	syncPhase(ctx, "Applying update with recovery backups")
 	if err = applyUpdate(ctx, root, state, p); err != nil {
 		return fmt.Errorf("update stopped; run take to recover or inspect status: %w", err)
 	}
