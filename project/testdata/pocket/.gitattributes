@@ -1,0 +1,3 @@
+# Golden byte fixtures must retain CRLF on every checkout.
+chapter.md -text whitespace=cr-at-eol
+applied.md -text whitespace=cr-at-eol

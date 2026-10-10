@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "chapter_id": "0b4f1cad-c846-4551-a497-a745087f5de2",
+  "source_path": "chapter.md",
+  "chapter_note": "Проверить ритм вступления.",
+  "signals": [
+    {
+      "id": "77b2f145-faa5-4de8-8fb2-050dc805978e",
+      "type": "warning",
+      "selected_text": "Он тихо сказал: привет.",
+      "anchor": {
+        "source_sha256": "33093a053c18692edab1120a2d40b78d8624c67653fad91d53e4844674856d36",
+        "selection_sha256": "091986e08aabe3ba22e6d9af0a8805f3ce3fb9d7a65125e046269141e5049aa4",
+        "start_byte": 21,
+        "end_byte": 62,
+        "start_line": 3,
+        "end_line": 3,
+        "prefix": "# Глава 🐦\r\n\r\n",
+        "suffix": "\r\nПотом ушёл домой.\r\n"
+      },
+      "comment": "Проверить голос героя"
+    },
+    {
+      "id": "87b2f145-faa5-4de8-8fb2-050dc805978e",
+      "type": "note",
+      "selected_text": "тихо",
+      "anchor": {
+        "source_sha256": "33093a053c18692edab1120a2d40b78d8624c67653fad91d53e4844674856d36",
+        "selection_sha256": "374107b2f1f9127994a15eac8fe3b1f334693226462c3b540c3b01661ecbf78e",
+        "start_byte": 26,
+        "end_byte": 34,
+        "start_line": 3,
+        "end_line": 3,
+        "prefix": "# Глава 🐦\r\n\r\nОн ",
+        "suffix": " сказал: привет.\r\nПотом ушёл домой.\r\n"
+      },
+      "comment": "Внутри правки"
+    }
+  ],
+  "edits": [
+    {
+      "id": "a65eef9e-7318-4777-b2a2-c58a169bfcf6",
+      "before": "тихо",
+      "after": "совсем тихо",
+      "anchor": {
+        "source_sha256": "33093a053c18692edab1120a2d40b78d8624c67653fad91d53e4844674856d36",
+        "selection_sha256": "374107b2f1f9127994a15eac8fe3b1f334693226462c3b540c3b01661ecbf78e",
+        "start_byte": 26,
+        "end_byte": 34,
+        "start_line": 3,
+        "end_line": 3,
+        "prefix": "# Глава 🐦\r\n\r\nОн ",
+        "suffix": " сказал: привет.\r\nПотом ушёл домой.\r\n"
+      }
+    },
+    {
+      "id": "b65eef9e-7318-4777-b2a2-c58a169bfcf6",
+      "before": "домой",
+      "after": "к себе",
+      "anchor": {
+        "source_sha256": "33093a053c18692edab1120a2d40b78d8624c67653fad91d53e4844674856d36",
+        "selection_sha256": "7ec561e04671ca6beca2aa4bd5e3c557f83a3c6c52c3b645c93289382d3d61a3",
+        "start_byte": 84,
+        "end_byte": 94,
+        "start_line": 4,
+        "end_line": 4,
+        "prefix": "# Глава 🐦\r\n\r\nОн тихо сказал: привет.\r\nПотом ушёл ",
+        "suffix": ".\r\n"
+      }
+    }
+  ]
+}

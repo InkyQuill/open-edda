@@ -1,6 +1,6 @@
 # Open Edda Roadmap
 
-Updated 2026-10-08 with milestone checklists and the author-approved integration backlog; baseline established after [implementation audit](audit/2026-10-06-project-direction.md). Product authority: [ADR 0014](adr/0014-portable-projects-and-transactional-sync.md). The [previous milestone tracker](archive/roadmap-2026-07-01.md) is retained as history; its “Implemented” labels are not proof of end-to-end readiness.
+Updated 2026-10-10 with milestone checklists and the author-approved integration backlog; baseline established after [implementation audit](audit/2026-10-06-project-direction.md). Product authority: [ADR 0014](adr/0014-portable-projects-and-transactional-sync.md). The [previous milestone tracker](archive/roadmap-2026-07-01.md) is retained as history; its “Implemented” labels are not proof of end-to-end readiness.
 
 ## Direction and order
 
@@ -11,6 +11,10 @@ The flat CWS project format is the structural reference. CWS integration remains
 Delivery order: **projects → local synchronization → Pocket Editor → web Writing Tools and skill parity**. Basic usable UI and preservation of tool files belong to the first delivery; broad tool-feature and skill expansion do not.
 
 Integration principle (2026-10-07): Edda, CWS, Hieronymus, Galley Desk, Timeline Helper and Pocket Editor are independently usable writing tools. Enable integrations only for tools installed/configured by the author; no tool or integration skill is mandatory for another. Plain file projects remain fully usable without CWS. See the [integration backlog](backlog.md#writing-tools-integrations-requested-2026-10-07) for scope and acceptance criteria.
+
+Author control (2026-10-10): folder purposes and readiness belong to the author.
+KB, drafts, fragments and main text are optional, configurable navigation roles;
+no draft-before-ready requirement or automatic lifecycle gates. See [ADR 0016](adr/0016-author-controlled-workspace.md).
 
 Checklist: `[x]` = delivered with recorded verification; `[ ]` = remaining or not yet verified. Checks below summarize existing evidence, not a fresh runtime test run. A completed foundation does not mark later tool integration complete.
 
@@ -91,7 +95,11 @@ Exit: Edda book directory → offline Pocket review → Edda → local Galley De
 - [x] Integrate the live Markdown editor `@inkyquill/galley-editor` into the current file workspace, preserving its padding, text width and borderless surface, plus existing drafts/save/history/conflict behavior ([INT-02](backlog.md#int-02--live-galley-markdown-editor)).
 - [x] Create an Edda theme in `galley-themes` from the current approved light/dark design ([INT-03](backlog.md#int-03--edda-theme-in-galley-themes)).
 - [x] Support shared `galley-themes` visual themes across Edda and its editor ([INT-04](backlog.md#int-04--shared-galley-themes-in-edda)).
-- [ ] Galley Desk equivalent reading/editing/review, chapter ordering/management, metadata and compatible review application; continue round-trip with the desktop app. Edda must understand and display Pocket Editor sidecars and support review decisions/explicit edit application, including stale-anchor handling, based on `/home/inky/Development/WritingTools/galley-desk/` ([INT-06](backlog.md#int-06--understand-pocket-editor-sidecars-in-edda)).
+- [x] Display existing Pocket/Galley reviews in both editing and review modes; navigate highlights, explicitly accept/reject proposals or close signals, preserve drafts and unknown metadata, and publish chapter + sidecar atomically ([INT-06 delivery](audit/2026-10-10-pocket-review.md)).
+- [x] Create/edit review signals, proposals and chapter notes; undo/redo individual review decisions without restoring unrelated project files. An ordinary Markdown file can opt into review directly in Edda; compatible manifest/sidecar metadata is created explicitly.
+- [x] Let the author assign custom KB/draft/fragment/main-text sections to existing folders, with no mandatory roles or readiness prerequisites ([author-control contract](adr/0016-author-controlled-workspace.md)).
+- [x] Manage book/chapter titles and chapter order; retain missing chapters, explicitly add/remove existing files from the spine, edit arbitrary chapter YAML while preserving body bytes and review anchors. No readiness or folder prerequisites. See [delivery](audit/2026-10-10-book-management.md).
+- [ ] Galley Desk equivalent reading/editing/review, chapter ordering/management, metadata and compatible review application; continue round-trip with the desktop app. Existing sidecar reading/decisions/application are delivered; annotation creation/editing and per-chapter session undo/redo are now delivered; book/chapter titles, ordered navigation, explicit existing-file addition/removal and YAML metadata editing are delivered locally. Atomic chapter creation and verified adoption of existing sidecars are also delivered; packaged-client qualification remains; reference: `/home/inky/Development/WritingTools/galley-desk/` ([INT-06](backlog.md#int-06--understand-pocket-editor-sidecars-in-edda)).
 - [ ] Timeline Helper equivalent event/plotline/temporal editing, shared timeline/calendar projections and compatible file preservation; continue round-trip with the desktop app.
 - [ ] Reuse shared Galley themes and domain contracts, not Electron-specific shell/IPC code. The [initial parity matrix and source snapshots](plans/2026-10-08-writing-tools-parity.md) record current delivery and remaining contracts; extend it with the detailed Timeline inventory.
 
@@ -99,7 +107,7 @@ Exit: Edda book directory → offline Pocket review → Edda → local Galley De
 
 - [ ] Establish optional, bidirectional CWS integration: Edda understands directory roles from CWS project metadata; CWS understands how to work with Edda projects and synchronization. Preserve arbitrary layouts and standalone use of every tool; integration skills activate only for installed/configured tools ([INT-05](backlog.md#int-05--optional-bidirectional-cws-integration)).
 - [ ] Inventory current local CWS skills and source versions; map each operation to Edda storage/tools.
-- [ ] Preserve semantics, source authority, review gates, supporting assets and outputs. Test matching local/web scenarios; explicitly label unsupported helpers.
+- [ ] Preserve semantics, source authority, supporting assets and outputs within author-selected workflows; never impose source-tool lifecycle gates on ordinary Edda work ([ADR 0016](adr/0016-author-controlled-workspace.md)). Test matching local/web scenarios; explicitly label unsupported helpers.
 - [ ] Resolve built-in/global/project scopes and script capabilities as part of this phase.
 
 The remaining P4 integrations and P5 are later work; their relative implementation order can be selected after P3 without delaying projects or synchronization. Multi-author collaboration and a consistency dashboard remain deferred until the single-author round-trip is reliable.

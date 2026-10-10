@@ -33,6 +33,7 @@ func RegisterVersionRoutes(r chi.Router, s *VersionStore) {
 				next.ServeHTTP(w, r)
 			})
 		})
+		registerPocketRoutes(r, s)
 		r.Post("/archive", func(w http.ResponseWriter, r *http.Request) {
 			file, err := os.CreateTemp("", "edda-archive-*.zip")
 			if err != nil {
