@@ -13,7 +13,7 @@ test('author manages chapter order and metadata without a required draft stage',
  const initial=await head();
  const manifest={schema_version:2,book_id:'1b4f1cad-c846-4551-a497-a745087f5de2',title:'Книга',future:{preserve:true},chapters:[{id:'0b4f1cad-c846-4551-a497-a745087f5de2',path:'one.md',title:'Первая',extra:42},{id:'2b4f1cad-c846-4551-a497-a745087f5de2',path:'missing.md',title:'Отсутствующая'}]};
  const entries:TreeEntry[]=[];
- for(const [id,path,body] of [['manifest','.pocket-editor.json',JSON.stringify(manifest)],['one','one.md','Текст 🐦\r\nбез черновика\n'],['two','two.md','Вторая глава'],['reviewed','reviewed.md','С рецензией'],['review','reviewed.review.json',JSON.stringify({chapter_id:'4b4f1cad-c846-4551-a497-a745087f5de2',source_path:'reviewed.md',chapter_note:'Заметка'})]]){
+ for(const [id,path,body] of [['manifest','.pocket-editor.json',JSON.stringify(manifest)],['one','one.md','Текст 🐦\r\nбез черновика\n'],['two','two.md','---\nСцена между разделителями.\n---\nПродолжение.'],['reviewed','reviewed.md','С рецензией'],['review','reviewed.review.json',JSON.stringify({chapter_id:'4b4f1cad-c846-4551-a497-a745087f5de2',source_path:'reviewed.md',chapter_note:'Заметка'})]]){
   const sha256=createHash('sha256').update(body).digest('hex');
   expect((await request.put(`${root}/objects/${sha256}`,{headers,data:body})).status()).toBe(204);
   entries.push({id,path,kind:'file',sha256,bytes:Buffer.byteLength(body)});
@@ -58,4 +58,12 @@ test('author manages chapter order and metadata without a required draft stage',
  expect(updated.entries.map(e=>e.path)).toEqual(lost.entries.map(e=>e.path));
  expect(updated.entries.find(e=>e.id==='two')?.sha256).toBe(entries.find(e=>e.id==='two')?.sha256);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+ if(isMobile)await page.getByRole('button',{name:'Файлы проекта',exact:true}).click();
+ await page.getByRole('navigation',{name:'Главы книги'}).getByRole('button',{name:/two.md/}).click();
+ await page.getByRole('button',{name:'Метаданные главы',exact:true}).click();
+ await expect(dialog).toContainText('Исправьте исходный Markdown');
+ await dialog.getByRole('textbox',{name:'Свойства YAML',exact:true}).fill('title: Новое');
+ await expect(dialog.getByRole('button',{name:'Сохранить метаданные',exact:true})).toBeDisabled();
+ expect((await head()).id).toBe(updated.id);
+ expect(await(await request.get(`${root}/versions/${updated.id}/entries/two`,{headers})).text()).toBe('---\nСцена между разделителями.\n---\nПродолжение.');
 });

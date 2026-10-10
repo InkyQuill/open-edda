@@ -9,7 +9,7 @@ export function usePocketReview(w: ReturnType<typeof useFileWorkspace>) {
   const key = available ? `${version?.id}:${entry?.id}` : '';
   const [state, setState] = useState<{ key: string; review: PocketReview | null; error: string }>({ key: '', review: null, error: '' });
   const [retry, setRetry] = useState(0);
-  const pending = useRef<{ signature: string; action: ReviewAction } | null>(null);
+  const pending = useRef<{ signature: string; action: ReviewAction; recordedVersion?: string } | null>(null);
   useEffect(() => {
     if (!available || !version || !entry) return;
     const abort = new AbortController();
@@ -30,13 +30,18 @@ export function usePocketReview(w: ReturnType<typeof useFileWorkspace>) {
     let saved;
     try { saved = await changeReview(version.projectId, pending.current.action); }
     catch (cause) { if (cause instanceof ApiError && cause.status === 409) pending.current = null; throw cause; }
+    // A confirmed write belongs in history even when refreshing the view fails.
+    // Keep its receipt until refresh succeeds, so retrying cannot duplicate it.
+    if (pending.current.recordedVersion !== saved.id) {
+      pending.current.recordedVersion = saved.id;
+      setHistory(previous => {
+        const old = (Object.hasOwn(previous, review.chapter.id) ? previous[review.chapter.id] : undefined) ?? { undo: [], redo: [] };
+        const next = direction === 'undo' ? { undo: old.undo.slice(0, -1), redo: [...old.redo, saved.id] } : direction === 'redo' ? { undo: [...old.undo, saved.id], redo: old.redo.slice(0, -1) } : { undo: [...old.undo, saved.id].slice(-100), redo: [] };
+        return { ...previous, [review.chapter.id]: next };
+      });
+    }
     await w.refresh();
     pending.current = null;
-    setHistory(previous => {
-      const old = (Object.hasOwn(previous, review.chapter.id) ? previous[review.chapter.id] : undefined) ?? { undo: [], redo: [] };
-      const next = direction === 'undo' ? { undo: old.undo.slice(0, -1), redo: [...old.redo, saved.id] } : direction === 'redo' ? { undo: [...old.undo, saved.id], redo: old.redo.slice(0, -1) } : { undo: [...old.undo, saved.id].slice(-100), redo: [] };
-      return { ...previous, [review.chapter.id]: next };
-    });
     w.setNotice(direction === 'undo' ? 'Действие с рецензией отменено.' : direction === 'redo' ? 'Действие повторено.' : 'Рецензия сохранена.');
   }
   async function start() {

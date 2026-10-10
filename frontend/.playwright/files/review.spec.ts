@@ -168,3 +168,54 @@ test('compose a first review without changing source and undo/redo individual de
   const book = final.entries.find(e => e.path === '.pocket-editor.json')!;
   writeFileSync(info.outputPath('composed-manifest.json'), await (await request.get(`${root}/versions/${final.id}/entries/${book.id}`, { headers })).body());
 });
+
+test('confirmed review decisions survive failed refreshes without duplicate undo entries', async ({ page, request }, info) => {
+  const { token } = await (await loginForTest(request)).json() as { token: string };
+  const headers = { Authorization: `Bearer ${token}` };
+  await page.addInitScript(value => localStorage.setItem('open_edda_token', value), token);
+  const project = await (await request.post('/api/projects', { headers, data: { title: `Refresh failure ${info.project.name}`, storageMode: 'files' } })).json() as { id: string };
+  const root = `/api/projects/${project.id}/files`;
+  const head = async () => await (await request.get(`${root}/versions/current`, { headers })).json() as ProjectVersion;
+  const initial = await head(); const entries: TreeEntry[] = [];
+  for (const [id, path, data] of [['chapter', 'chapter.md', body], ['manifest', '.pocket-editor.json', manifest]] as const) {
+    const sha256 = createHash('sha256').update(data).digest('hex');
+    expect((await request.put(`${root}/objects/${sha256}`, { headers, data })).status()).toBe(204);
+    entries.push({ id, path, kind: 'file', sha256, bytes: data.length });
+  }
+  expect((await request.post(`${root}/versions`, { headers, data: { expectedVersion: initial.id, operationId: 'import', entries } })).status()).toBe(201);
+  await page.addInitScript(id => localStorage.setItem(`edda.resume:${id}`, 'chapter'), project.id);
+  await page.goto(`/projects/${project.id}/files`);
+  const panel = page.getByRole('complementary', { name: 'Рецензия главы' });
+  const dialog = page.getByRole('dialog');
+  const undo = panel.getByRole('button', { name: 'Отменить решение', exact: true });
+  const redo = panel.getByRole('button', { name: 'Повторить решение', exact: true });
+  const failRefresh = () => page.route(`**${root}/versions/current`, route => route.abort(), { times: 1 });
+  const refresh = () => page.getByRole('button', { name: 'Обновить файлы', exact: true }).click();
+  await panel.getByRole('button', { name: 'Изменить заметку о главе' }).click();
+  await dialog.getByRole('textbox', { name: 'Заметка о главе', exact: true }).fill('Сохранённое решение');
+  await failRefresh();
+  await dialog.getByRole('button', { name: 'Сохранить рецензию' }).click();
+  await expect(dialog.getByRole('alert')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Закрыть', exact: true }).click();
+  await refresh();
+  await expect(panel.locator('.review-note')).toContainText('Сохранённое решение');
+  await expect(undo).toBeEnabled();
+  await failRefresh(); await undo.click();
+  await expect(page.getByRole('alert')).toBeVisible(); await refresh();
+  await expect(panel.locator('.review-note')).toHaveCount(0);
+  await expect(undo).toBeDisabled(); await expect(redo).toBeEnabled();
+  await failRefresh(); await redo.click();
+  await expect(page.getByRole('alert')).toBeVisible(); await refresh();
+  await expect(panel.locator('.review-note')).toContainText('Сохранённое решение');
+  await undo.click(); await expect(undo).toBeDisabled();
+  // Retry the same confirmed mutation after refresh fails: one server version,
+  // one history entry, even though the success response is received twice.
+  await panel.getByRole('button', { name: 'Изменить заметку о главе' }).click();
+  await dialog.getByRole('textbox', { name: 'Заметка о главе', exact: true }).fill('Повтор после сбоя');
+  await failRefresh(); await dialog.getByRole('button', { name: 'Сохранить рецензию' }).click();
+  await expect(dialog.getByRole('alert')).toBeVisible(); const saved = await head();
+  await dialog.getByRole('button', { name: 'Сохранить рецензию' }).click();
+  await expect(dialog).toHaveCount(0); expect((await head()).id).toBe(saved.id);
+  await undo.click(); await expect(undo).toBeDisabled();
+  await expect(panel.locator('.review-note')).toHaveCount(0);
+});

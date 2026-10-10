@@ -18,18 +18,8 @@ func replacePocketMetadata(source []byte, d *pocketDocument, input string) ([]by
 			return nil, pocketInvalid("YAML delimiters are not allowed inside metadata")
 		}
 	}
-	var node yaml.Node
-	decoder := yaml.NewDecoder(strings.NewReader(normalized))
-	if err := decoder.Decode(&node); err != nil && err != io.EOF {
-		return nil, pocketInvalid("invalid YAML metadata")
-	}
-	if len(node.Content) > 0 && node.Content[0].Kind != yaml.MappingNode {
-		return nil, pocketInvalid("metadata must be a YAML mapping")
-	}
-	// Decode mappings too, to reject duplicate keys and invalid alias expansions.
-	var value map[string]interface{}
-	if err := yaml.Unmarshal([]byte(normalized), &value); err != nil {
-		return nil, pocketInvalid("invalid YAML metadata mapping")
+	if err := validatePocketMetadata(normalized); err != nil {
+		return nil, err
 	}
 	bom := []byte{}
 	offset := 0
@@ -49,6 +39,9 @@ func replacePocketMetadata(source []byte, d *pocketDocument, input string) ([]by
 		for pos := after; pos < len(source); {
 			line, next := metadataLine(source, pos)
 			if strings.TrimRight(line, " \t") == "---" || strings.TrimRight(line, " \t") == "..." {
+				if err := validatePocketMetadata(string(source[after:pos])); err != nil {
+					return nil, pocketInvalid("existing block is not valid YAML mapping metadata; repair the source first")
+				}
 				end = next
 				break
 			}
@@ -180,4 +173,21 @@ func (s *VersionStore) plainMetadata(ctx context.Context, author, project string
 		}
 	}
 	return s.Publish(ctx, PublishVersionInput{AuthorID: author, ProjectID: project, ExpectedVersion: input.ExpectedVersion, OperationID: input.OperationID, Entries: entries})
+}
+
+func validatePocketMetadata(text string) error {
+	var node yaml.Node
+	decoder := yaml.NewDecoder(strings.NewReader(text))
+	if err := decoder.Decode(&node); err != nil && err != io.EOF {
+		return pocketInvalid("invalid YAML metadata")
+	}
+	if len(node.Content) > 0 && node.Content[0].Kind != yaml.MappingNode {
+		return pocketInvalid("metadata must be a YAML mapping")
+	}
+	// Decode mappings too, to reject duplicate keys and invalid alias expansions.
+	var value map[string]interface{}
+	if err := yaml.Unmarshal([]byte(text), &value); err != nil {
+		return pocketInvalid("invalid YAML metadata mapping")
+	}
+	return nil
 }

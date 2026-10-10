@@ -84,3 +84,36 @@ func TestMetadataRefusesInvalidYAMLAndOverlappingReview(t *testing.T) {
 		t.Fatal("unterminated metadata consumed body")
 	}
 }
+
+func TestMetadataRefusesProseAndMalformedExistingBlocksWithoutPublishing(t *testing.T) {
+	for _, block := range []string{"A scene between two breaks.", "- a\n- b", "title: [", "title: one\ntitle: two", "null"} {
+		t.Run(block, func(t *testing.T) {
+			s, db, _ := newTestVersions(t)
+			source := []byte("---\n" + block + "\n---\nRest of the chapter\n")
+			base := publishTestVersion(t, s, "", "import", []TreeEntry{uploadTestEntry(t, s, "text", "text.md", source)})
+			count := versionCount(t, db)
+			_, err := s.ChangePocketReview(context.Background(), "author-1", "project-1", PocketAction{ExpectedVersion: base.ID, OperationID: "metadata", EntryID: "text", Action: "metadata", Metadata: "title: New"})
+			if err == nil {
+				t.Fatal("replaced prose or malformed existing block")
+			}
+			if versionCount(t, db) != count {
+				t.Fatal("refused metadata published a version")
+			}
+			if !bytes.Equal(readTestFile(t, s, base.ID, "text"), source) {
+				t.Fatal("source changed")
+			}
+		})
+	}
+}
+func TestMetadataAcceptsEmptyAndMappingBlocks(t *testing.T) {
+	for _, block := range []string{"", "# comment only", "title: Old\ncustom: [a, b]"} {
+		source := []byte("---\n" + block + "\n---\nBody 🐦\r\n")
+		next, err := replacePocketMetadata(source, &pocketDocument{raw: pocketJSON{}}, "title: New")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.HasSuffix(next, []byte("Body 🐦\r\n")) {
+			t.Fatal("body bytes changed")
+		}
+	}
+}

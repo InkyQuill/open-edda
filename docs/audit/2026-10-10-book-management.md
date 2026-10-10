@@ -59,3 +59,27 @@ through the file tree and author-defined sections. File relocation/renaming is
 still the generic file workflow and is not an automatic manifest rewrite.
 Removing from the spine is distinct from deleting files. Dedicated Timeline
 inventory and implementation are the next roadmap increment.
+
+## PR #7 review follow-up
+
+All three actionable CodeRabbit findings were reproduced or confirmed against the
+reviewed head and fixed:
+
+- Record a confirmed review decision in session undo/redo before refreshing the
+  workspace. Retain its operation receipt until refresh succeeds and record the
+  resulting version only once, so both manual refresh and mutation retry recover
+  without losing or duplicating history entries.
+- Build each 128-code-point anchor context by bounded UTF-8 scanning instead of
+  allocating rune arrays for the entire surrounding chapter. Unicode/CRLF window
+  and wire-field equivalence tests pass. On a 1,050,000-byte chapter, the local
+  benchmark changed from 2,868,180 B/op and 1.50 ms/op to 896 B/op and 0.414 ms/op;
+  this measures anchor creation, not complete synchronization.
+- Validate the existing delimited block as an empty block or a valid YAML mapping
+  before metadata replacement. Scalars, lists, invalid YAML and duplicate keys
+  are rejected without publishing a version. UI saving is blocked until the
+  original source is repaired, protecting prose between Markdown scene breaks.
+
+Validation: production build, 174 frontend unit tests and all 8 focused desktop/
+mobile book/review scenarios passed. The browser regressions cover confirmed
+write + failed refresh for decisions, undo and redo, plus receipt retry without
+extra history entries and the scene-break metadata guard.

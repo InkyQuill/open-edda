@@ -12,7 +12,7 @@ export function ChapterMetadata({ source, version, entryId, busy, dirty, error, 
  const pending=useRef<{signature:string;action:ReviewAction}|null>(null);
  const fm=frontmatter(source);
  async function save(){
-  if(!draft || dirty)return;
+  if(!draft || dirty || frontmatter(draft.source)?.error)return;
   metadataReplacement(draft.source,draft.yaml);
   const signature=JSON.stringify(draft);
   if(pending.current?.signature!==signature)pending.current={signature,action:{action:'metadata',metadata:draft.yaml,entryId:draft.entryId,expectedVersion:draft.version,operationId:crypto.randomUUID()}};
@@ -24,9 +24,9 @@ export function ChapterMetadata({ source, version, entryId, busy, dirty, error, 
  <Modal open={!!draft} busy={busy} onClose={()=>setDraft(null)} title="Метаданные главы" description="Произвольные свойства текста в YAML. Все поля необязательны; статус и готовность определяете вы." wide>
  {error && <p role="alert" className="form-error">{error}</p>}
  {draft && <form onSubmit={e=>{e.preventDefault();void run(save);}}>
- {frontmatter(draft.source)?.error && <p className="form-error">{frontmatter(draft.source)?.error}</p>}
+ {frontmatter(draft.source)?.error && <p className="form-error">{frontmatter(draft.source)?.error} Исправьте исходный Markdown перед изменением метаданных.</p>}
  <label className="field-label">Свойства YAML<textarea aria-label="Свойства YAML" rows={10} disabled={busy} value={draft.yaml} onChange={e=>setDraft({...draft,yaml:e.target.value})} placeholder={'title: Название главы\nstatus: В работе'} /></label>
- <div className="dialog-actions"><button className="quiet-button" disabled={busy || dirty || !!frontmatter(draft.source)?.error?.includes('закрывающей') || draft.yaml===(frontmatter(draft.source)?.yaml??'')}>Сохранить метаданные</button></div>
+ <div className="dialog-actions"><button className="quiet-button" disabled={busy || dirty || !!frontmatter(draft.source)?.error || draft.yaml===(frontmatter(draft.source)?.yaml??'')}>Сохранить метаданные</button></div>
  </form>}
  </Modal></>;
 }

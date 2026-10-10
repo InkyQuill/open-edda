@@ -77,15 +77,16 @@ func resolvePocket(source []byte, sourceHash string, a PocketAnchor, selected st
 	return PocketResolution{Kind: "ambiguous"}
 }
 func makePocketAnchor(source []byte, r PocketRange) PocketAnchor {
-	prefix := []rune(string(source[:r.From]))
-	suffix := []rune(string(source[r.To:]))
-	if len(prefix) > 128 {
-		prefix = prefix[len(prefix)-128:]
+	prefixStart, suffixEnd := r.From, r.To
+	for n := 0; n < 128 && prefixStart > 0; n++ {
+		_, size := utf8.DecodeLastRune(source[:prefixStart])
+		prefixStart -= size
 	}
-	if len(suffix) > 128 {
-		suffix = suffix[:128]
+	for n := 0; n < 128 && suffixEnd < len(source); n++ {
+		_, size := utf8.DecodeRune(source[suffixEnd:])
+		suffixEnd += size
 	}
-	return PocketAnchor{Source: pocketHash(source), Selection: pocketHash(source[r.From:r.To]), Start: int64(r.From), End: int64(r.To), StartLine: int64(1 + bytes.Count(source[:r.From], []byte{'\n'})), EndLine: int64(1 + bytes.Count(source[:r.To-1], []byte{'\n'})), Prefix: string(prefix), Suffix: string(suffix)}
+	return PocketAnchor{Source: pocketHash(source), Selection: pocketHash(source[r.From:r.To]), Start: int64(r.From), End: int64(r.To), StartLine: int64(1 + bytes.Count(source[:r.From], []byte{'\n'})), EndLine: int64(1 + bytes.Count(source[:r.To-1], []byte{'\n'})), Prefix: string(source[prefixStart:r.From]), Suffix: string(source[r.To:suffixEnd])}
 }
 func validPocketAnchor(a PocketAnchor) bool {
 	return validObjectHash(a.Source) && validObjectHash(a.Selection) && a.Start >= 0 && a.End > a.Start && a.StartLine >= 1 && a.EndLine >= a.StartLine && a.EndLine <= 2147483647 && utf8.RuneCountInString(a.Prefix) <= 128 && utf8.RuneCountInString(a.Suffix) <= 128
