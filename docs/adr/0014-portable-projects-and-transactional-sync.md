@@ -57,3 +57,9 @@ Galley Desk and Timeline Helper files must already survive the first generic fil
 ## Skill parity, later
 
 Adapt storage/tool access while preserving the source skills' workflow, source hierarchy, review gates, outputs, references and helper semantics. For each supported skill maintain a source-version and capability mapping and parity fixtures. Unsupported steps must be explicitly unavailable/deferred, not silently removed while claiming equivalence. Keep existing script approval/isolation boundaries; equivalent mechanics do not require granting arbitrary host-shell access.
+
+## Clarification, 2026-10-10
+
+[ADR 0016](0016-author-controlled-workspace.md) establishes author control over
+folder purposes and readiness. References above to source-skill review gates do
+not authorize mandatory application-wide writing stages or draft prerequisites.

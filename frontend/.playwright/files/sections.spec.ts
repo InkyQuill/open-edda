@@ -1,0 +1,58 @@
+import { createHash } from 'node:crypto';
+import { expect, test } from '@playwright/test';
+import { loginForTest } from './auth';
+import type { ProjectVersion, TreeEntry } from '../../src/features/files/fileApi';
+
+test('author chooses arbitrary folder roles, edits ready text without drafts and keeps roles after folder rename', async ({ page, request, isMobile }, info) => {
+  const { token } = await (await loginForTest(request)).json() as { token: string };
+  const headers = { Authorization: `Bearer ${token}` };
+  await page.addInitScript(value => localStorage.setItem('open_edda_token', value), token);
+  const project = await (await request.post('/api/projects', { headers, data: { title: `Вся книга ${info.project.name}`, storageMode: 'files' } })).json() as { id: string };
+  const root = `/api/projects/${project.id}/files`;
+  const head = async () => await (await request.get(`${root}/versions/current`, { headers })).json() as ProjectVersion;
+  const initial = await head();
+  const entries: TreeEntry[] = [{ id: 'kb', path: 'Справочник', kind: 'directory', bytes: 0 }, { id: 'ready', path: 'Текст', kind: 'directory', bytes: 0 }];
+  for (const [id, path, body] of [['kb-file', 'Справочник/Мир.md', 'База знаний'], ['prose', 'Текст/Глава.md', 'Готовый текст без отдельного черновика']]) {
+    const sha256 = createHash('sha256').update(body).digest('hex');
+    expect((await request.put(`${root}/objects/${sha256}`, { headers, data: body })).status()).toBe(204);
+    entries.push({ id, path, kind: 'file', sha256, bytes: Buffer.byteLength(body) });
+  }
+  expect((await request.post(`${root}/versions`, { headers, data: { expectedVersion: initial.id, operationId: 'import', entries } })).status()).toBe(201);
+  await page.addInitScript(id => localStorage.setItem(`edda.resume:${id}`, 'prose'), project.id);
+  await page.goto(`/projects/${project.id}/files`);
+  if (isMobile) await page.getByRole('button', { name: 'Файлы проекта', exact: true }).click();
+  await page.getByRole('button', { name: 'Настроить разделы книги' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Папка раздела 1', { exact: true }).selectOption('kb');
+  await dialog.getByLabel('Название раздела 4', { exact: true }).fill('Мой готовый текст');
+  await dialog.getByLabel('Папка раздела 4', { exact: true }).selectOption('ready');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  await page.screenshot({ path: info.outputPath('author-sections.png'), fullPage: true });
+  await page.route(`**${root}/versions`, async route => { await route.fetch(); await route.abort(); }, { times: 1 });
+  await dialog.getByRole('button', { name: 'Сохранить разделы' }).click();
+  await expect(dialog.getByRole('alert')).toBeVisible();
+  const lost = await head();
+  await dialog.getByRole('button', { name: 'Сохранить разделы' }).click();
+  await expect(dialog).toHaveCount(0); expect((await head()).id).toBe(lost.id);
+  const settings = lost.entries.find(e => e.path === 'edda.workspace.json')!;
+  const config = await (await request.get(`${root}/versions/${lost.id}/entries/${settings.id}`, { headers })).json() as { sections: { label: string; folderId: string; purpose: string }[] };
+  expect(config.sections.map(s => s.label)).toEqual(['База знаний', 'Мой готовый текст']);
+  expect(config.sections.map(s => s.purpose)).toEqual(['knowledge', 'manuscript']);
+  expect(lost.entries.filter(e => e.kind === 'directory').map(e => e.path)).toEqual(['Справочник', 'Текст']);
+  const sections = page.getByRole('navigation', { name: 'Назначение папок' });
+  await sections.getByRole('button', { name: 'База знаний', exact: true }).click();
+  await expect(page.getByRole('navigation', { name: 'Файлы и папки' }).getByRole('button', { name: 'Мир.md', exact: true })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Файлы и папки' }).getByRole('button', { name: 'Глава.md', exact: true })).toHaveCount(0);
+  await sections.getByRole('button', { name: 'Мой готовый текст', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Файлы и папки' }).getByRole('button', { name: 'Глава.md', exact: true }).click();
+  await page.locator('.file-galley .cm-content').fill('Автор меняет готовый текст когда захочет.');
+  await page.getByRole('button', { name: 'Сохранить файл', exact: true }).click();
+  await expect(page.locator('.save-label')).toHaveText('Сохранено');
+  const saved = await head();
+  const renamed = saved.entries.map(e => e.id === 'ready' ? { ...e, path: 'Рукопись' } : e.id === 'prose' ? { ...e, path: 'Рукопись/Глава.md' } : e);
+  expect((await request.post(`${root}/versions`, { headers, data: { expectedVersion: saved.id, operationId: 'rename-folder', entries: renamed } })).status()).toBe(201);
+  await page.getByRole('button', { name: 'Обновить файлы', exact: true }).click();
+  if (isMobile) await page.getByRole('button', { name: 'Файлы проекта', exact: true }).click();
+  await expect(sections.getByRole('button', { name: 'Мой готовый текст', exact: true })).toHaveAttribute('title', 'Рукопись');
+  await expect(page.getByRole('navigation', { name: 'Файлы и папки' }).getByRole('button', { name: 'Глава.md', exact: true })).toBeVisible();
+});

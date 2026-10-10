@@ -13,7 +13,7 @@ Remaining candidates after measuring real workloads:
 
 ## Writing Tools integrations (requested 2026-10-07)
 
-Status (2026-10-08): INT-01 implemented in Pocket Editor with its recorded P3 round-trip; INT-02–04 delivered locally with [verification](audit/2026-10-08-files-editor-themes.md); INT-05–06 remain planned. Delivery follows roadmap P3–P5; the editor and theme tasks are independently reviewable parts of P4, not a claim of full Galley Desk parity.
+Status (2026-10-10): INT-01 implemented in Pocket Editor with its recorded P3 round-trip; INT-02–04 delivered locally with [verification](audit/2026-10-08-files-editor-themes.md); INT-06 reading/composition/decisions/session undo are implemented locally; INT-05 automatic CWS roles and skill parity remain planned. Manual author-configured folder sections are available independently of CWS. Delivery follows roadmap P3–P5; the editor and theme tasks are independently reviewable parts of P4, not a claim of full Galley Desk parity.
 
 Shared requirement: Open Edda, CWS, Hieronymus, Galley Desk, Timeline Helper and Pocket Editor are optional peers in the author's toolset. No tool, skill pack or integration is a prerequisite for using another. Enable integrations according to what the author has installed/configured; absent tools must not block ordinary project work or trigger their integration skills. Preserve unknown tool files and arbitrary folder layouts.
 
@@ -56,11 +56,19 @@ Shared requirement: Open Edda, CWS, Hieronymus, Galley Desk, Timeline Helper and
 
 ### INT-06 — Understand Pocket Editor sidecars in Edda
 
-- Phase: P4, as part of reproducing Galley Desk review functionality in Edda. P3 must already preserve and synchronize these files losslessly; semantic review support is a future deliverable.
+- Phase: P4, as part of reproducing Galley Desk review functionality in Edda. Existing-review reading and author decisions delivered 2026-10-10; see [implementation/checks](audit/2026-10-10-pocket-review.md). Fresh physical Android/packaged Galley qualification remains pending. Annotation creation/editing and per-chapter session undo/redo are delivered locally; book/chapter titles, ordering, existing-file addition/removal and YAML metadata editing are now delivered locally ([checks and remaining boundaries](audit/2026-10-10-book-management.md)). Atomic chapter creation and verified sidecar adoption are also delivered. Packaged-client qualification remains in P4.
 - Related repositories: `/home/inky/Development/WritingTools/galley-desk/` and `/home/inky/Development/WritingTools/pocket-editor/`.
 - Scope: Edda must interpret Pocket Editor review sidecars, not only store/transfer them. Inventory the current sidecar contract and Galley Desk behavior before implementation; reproduce compatible reading, display, review decisions and application of proposed edits in the Edda workspace.
 - Acceptance: use real compatible fixtures produced by Pocket Editor and consumed by Galley Desk. Verify chapter/source identity, comments, signals, proposed edits, source/selection hashes, anchors and review state. Stale or unresolved anchors remain visible for adjudication; they must not silently apply edits to changed text. Preserve unapplied entries and unrelated metadata when recording review decisions.
 - Cross-client verification: review a book folder from an Edda series project in Pocket Editor, synchronize it, inspect and process its sidecars in Edda, then reopen in Galley Desk/Pocket Editor. Confirm compatible state without lost annotations, duplicate application or leakage into another book folder. Passive synchronization never applies proposed edits to canonical Markdown; applying an edit in Edda is an explicit review action with normal version/conflict safeguards. Galley Desk is the implementation reference, not a required installed app for authors using Edda review.
+
+## Author-controlled organization (2026-10-10)
+
+Implemented manual configurable folder sections independently of CWS: arbitrary
+names, optional roles, stable folder identity and scoped navigation. [ADR 0016](adr/0016-author-controlled-workspace.md)
+is the governing requirement: no draft-before-ready prerequisite, no compulsory
+writing stages, and no inferred readiness. The author may keep everything WIP or
+edit “ready” text at any time. Future CWS integration must respect these choices.
 
 ## Deferred Items
 
