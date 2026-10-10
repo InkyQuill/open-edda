@@ -184,6 +184,12 @@ func validatePocketMetadata(text string) error {
 	if len(node.Content) > 0 && node.Content[0].Kind != yaml.MappingNode {
 		return pocketInvalid("metadata must be a YAML mapping")
 	}
+	// Decode/Unmarshal accept the first document of a YAML stream. Metadata
+	// must consume the entire block, including commented document separators.
+	var trailing yaml.Node
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return pocketInvalid("metadata must contain a single YAML document")
+	}
 	// Decode mappings too, to reject duplicate keys and invalid alias expansions.
 	var value map[string]interface{}
 	if err := yaml.Unmarshal([]byte(text), &value); err != nil {

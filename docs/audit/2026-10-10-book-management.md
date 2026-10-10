@@ -83,3 +83,9 @@ Validation: production build, 174 frontend unit tests and all 8 focused desktop/
 mobile book/review scenarios passed. The browser regressions cover confirmed
 write + failed refresh for decisions, undo and redo, plus receipt retry without
 extra history entries and the scene-break metadata guard.
+
+A subsequent review caught YAML streams hidden behind commented separators such
+as `--- # scene`. Validation now requires decoder EOF after the first document
+for both existing and submitted metadata. Regressions reject a following scalar,
+mapping or empty document without publishing, while permitting literal separator
+text inside a valid block scalar. Project race tests and vet pass.

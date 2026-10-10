@@ -70,7 +70,7 @@ func TestPlainMetadataKeepsBOMMixedBodyAndNoWorkflowFiles(t *testing.T) {
 	}
 }
 func TestMetadataRefusesInvalidYAMLAndOverlappingReview(t *testing.T) {
-	for _, input := range []string{"title: a\ntitle: b", "[one, two]", "title: a\n---\nBody", "title: ["} {
+	for _, input := range []string{"title: a\ntitle: b", "[one, two]", "title: a\n---\nBody", "title: [", "title: Draft\n--- # scene\nProse", "title: Draft\n--- # second\nother: value", "title: Draft\n--- # empty"} {
 		if _, err := replacePocketMetadata([]byte("Body"), &pocketDocument{raw: pocketJSON{}}, input); err == nil {
 			t.Fatalf("accepted %q", input)
 		}
@@ -86,7 +86,7 @@ func TestMetadataRefusesInvalidYAMLAndOverlappingReview(t *testing.T) {
 }
 
 func TestMetadataRefusesProseAndMalformedExistingBlocksWithoutPublishing(t *testing.T) {
-	for _, block := range []string{"A scene between two breaks.", "- a\n- b", "title: [", "title: one\ntitle: two", "null"} {
+	for _, block := range []string{"A scene between two breaks.", "- a\n- b", "title: [", "title: one\ntitle: two", "null", "title: Draft\n--- # scene\nProse before the closing delimiter", "title: Draft\n--- # second\nother: value", "title: Draft\n--- # empty"} {
 		t.Run(block, func(t *testing.T) {
 			s, db, _ := newTestVersions(t)
 			source := []byte("---\n" + block + "\n---\nRest of the chapter\n")
@@ -106,7 +106,7 @@ func TestMetadataRefusesProseAndMalformedExistingBlocksWithoutPublishing(t *test
 	}
 }
 func TestMetadataAcceptsEmptyAndMappingBlocks(t *testing.T) {
-	for _, block := range []string{"", "# comment only", "title: Old\ncustom: [a, b]"} {
+	for _, block := range []string{"", "# comment only", "title: Old\ncustom: [a, b]", "description: |\n  --- # literal text\n  Narrative"} {
 		source := []byte("---\n" + block + "\n---\nBody 🐦\r\n")
 		next, err := replacePocketMetadata(source, &pocketDocument{raw: pocketJSON{}}, "title: New")
 		if err != nil {
